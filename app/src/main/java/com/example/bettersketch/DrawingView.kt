@@ -98,8 +98,7 @@ class DrawingView @JvmOverloads constructor(
         lastY = y
         startX = x
         startY = y
-
-        updateLoupes()
+        updateLoupesForCurrentStroke()
     }
 
     private fun touchMove(x: Float, y: Float) {
@@ -110,7 +109,7 @@ class DrawingView @JvmOverloads constructor(
             currentPath.quadTo(lastX, lastY, (x + lastX) / 2f, (y + lastY) / 2f)
             lastX = x
             lastY = y
-            updateLoupes()
+            updateLoupesForCurrentStroke()
         }
     }
 
@@ -119,22 +118,34 @@ class DrawingView @JvmOverloads constructor(
         backingCanvas?.drawPath(currentPath, currentPaint)
 
         // Add it to the history
-        strokes.add(Stroke(Path(currentPath), Paint(currentPaint)))
+        strokes.add(Stroke(Path(currentPath), Paint(currentPaint), startX, startY, lastX, lastY))
 
         // Reset for the next one
         currentPath.reset()
-        loupeListener?.onStartLoupeUpdate(null)
-        loupeListener?.onEndLoupeUpdate(null)
+
+        // Update loupes to show the stroke we just finished
+        updateLoupesFromLastStroke()
     }
 
-    private fun updateLoupes() {
+    private fun updateLoupesForCurrentStroke() {
         loupeListener?.onStartLoupeUpdate(createLoupeBitmap(startX, startY))
         loupeListener?.onEndLoupeUpdate(createLoupeBitmap(lastX, lastY))
     }
 
+    private fun updateLoupesFromLastStroke() {
+        if (strokes.isNotEmpty()) {
+            val lastStroke = strokes.last()
+            loupeListener?.onStartLoupeUpdate(createLoupeBitmap(lastStroke.startX, lastStroke.startY))
+            loupeListener?.onEndLoupeUpdate(createLoupeBitmap(lastStroke.endX, lastStroke.endY))
+        } else {
+            loupeListener?.onStartLoupeUpdate(null)
+            loupeListener?.onEndLoupeUpdate(null)
+        }
+    }
+
     private fun createLoupeBitmap(px: Float, py: Float): Bitmap? {
         val loupeSize = 200 // The dimensions of the loupe bitmap in pixels
-        val zoomFactor = 2f
+        val zoomFactor = 1f
 
         backingBitmap?.let {
             val loupeBitmap = Bitmap.createBitmap(loupeSize, loupeSize, Bitmap.Config.ARGB_8888)
@@ -176,6 +187,7 @@ class DrawingView @JvmOverloads constructor(
         if (strokes.isNotEmpty()) {
             undone.addLast(strokes.removeAt(strokes.lastIndex))
             redrawHistory()
+            updateLoupesFromLastStroke()
         }
     }
 
@@ -183,6 +195,7 @@ class DrawingView @JvmOverloads constructor(
         if (undone.isNotEmpty()) {
             strokes.add(undone.removeLast())
             redrawHistory()
+            updateLoupesFromLastStroke()
         }
     }
 
@@ -191,6 +204,7 @@ class DrawingView @JvmOverloads constructor(
         undone.clear()
         currentPath.reset()
         redrawHistory()
+        updateLoupesFromLastStroke()
     }
 
     private fun redrawHistory() {
