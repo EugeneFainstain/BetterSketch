@@ -15,7 +15,7 @@ import android.widget.Toast
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 
-class MainActivity : AppCompatActivity(), LoupeListener {
+class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFragment.Listener {
 
     private lateinit var drawingView: DrawingView
     private lateinit var startView: ImageView
@@ -86,6 +86,14 @@ class MainActivity : AppCompatActivity(), LoupeListener {
 
     override fun onEndLoupeUpdate(bitmap: Bitmap?) {
         endView.setImageBitmap(bitmap)
+    }
+
+    override fun onRedoHistoryWillBeCleared() {
+        ConfirmActionDialogFragment().show(supportFragmentManager, "confirm_dialog")
+    }
+
+    override fun onConfirm() {
+        drawingView.clearRedoHistory()
     }
 
     private fun wireColorSwatch(viewId: Int, color: Int) {

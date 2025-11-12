@@ -12,6 +12,7 @@ import kotlin.math.sqrt
 interface LoupeListener {
     fun onStartLoupeUpdate(bitmap: Bitmap?)
     fun onEndLoupeUpdate(bitmap: Bitmap?)
+    fun onRedoHistoryWillBeCleared()
 }
 
 class DrawingView @JvmOverloads constructor(
@@ -80,7 +81,18 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchStart(x: Float, y: Float) {
+        if (undone.isNotEmpty()) {
+            loupeListener?.onRedoHistoryWillBeCleared()
+            return // Don't start drawing yet, wait for confirmation.
+        }
+        proceedWithTouchStart(x, y)
+    }
+
+    fun clearRedoHistory() {
         undone.clear()
+    }
+
+    private fun proceedWithTouchStart(x: Float, y: Float) {
         currentPoints.clear()
         currentDistance = 0f
         currentPoints.add(PathPoint(PointF(x, y), 0f))
@@ -88,6 +100,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchMove(x: Float, y: Float) {
+        if (currentPoints.isEmpty()) return // Don't draw if we're waiting for confirmation
         val lastPoint = currentPoints.last().point
         val dx = x - lastPoint.x
         val dy = y - lastPoint.y
