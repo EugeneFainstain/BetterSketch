@@ -1,11 +1,13 @@
 package com.example.bettersketch
 
+import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.view.MotionEvent
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.SeekBar
@@ -19,6 +21,10 @@ class MainActivity : AppCompatActivity(), LoupeListener {
     private lateinit var startView: ImageView
     private lateinit var endView: ImageView
 
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
+
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -28,6 +34,9 @@ class MainActivity : AppCompatActivity(), LoupeListener {
 
         startView = findViewById(R.id.startView)
         endView = findViewById(R.id.endView)
+
+        startView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = true) }
+        endView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = false) }
 
         findViewById<Button>(R.id.btnUndo).setOnClickListener { drawingView.undo() }
         findViewById<Button>(R.id.btnRedo).setOnClickListener { drawingView.redo() }
@@ -48,6 +57,27 @@ class MainActivity : AppCompatActivity(), LoupeListener {
         wireColorSwatch(R.id.colorRed,   0xFFF44336.toInt())
         wireColorSwatch(R.id.colorBlue,  0xFF2196F3.toInt())
         wireColorSwatch(R.id.colorGreen, 0xFF4CAF50.toInt())
+    }
+
+    private fun handleLoupeTouch(event: MotionEvent, isStart: Boolean): Boolean {
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                lastTouchX = event.x
+                lastTouchY = event.y
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.x - lastTouchX
+                val dy = event.y - lastTouchY
+                if (isStart) {
+                    drawingView.moveStartPoint(dx, dy)
+                } else {
+                    drawingView.moveEndPoint(dx, dy)
+                }
+                lastTouchX = event.x
+                lastTouchY = event.y
+            }
+        }
+        return true
     }
 
     override fun onStartLoupeUpdate(bitmap: Bitmap?) {

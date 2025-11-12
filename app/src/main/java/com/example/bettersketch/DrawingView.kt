@@ -24,19 +24,12 @@ class DrawingView @JvmOverloads constructor(
     private var backingCanvas: Canvas? = null
 
     // Current tools
-    private var currentPath = Path()
+    private val currentPoints = mutableListOf<PointF>()
     private var currentPaint = defaultPaint(Color.BLACK, 12f)
 
     // History for undo/redo
     private val strokes = mutableListOf<Stroke>()
     private val undone = ArrayDeque<Stroke>()
-
-    // Touch smoothing
-    private var startX = 0f
-    private var startY = 0f
-    private var lastX = 0f
-    private var lastY = 0f
-    private val touchTolerance = 3f
 
     // Export bitmap helper
     fun exportBitmap(): Bitmap {
@@ -60,14 +53,8 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-
-        // Draw the history from the bitmap
-        backingBitmap?.let {
-            canvas.drawBitmap(it, 0f, 0f, null)
-        }
-
-        // Draw the current stroke-in-progress on top
-        canvas.drawPath(currentPath, currentPaint)
+        backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
+        drawPoints(canvas, currentPoints, currentPaint)
     }
 
     override fun onTouchEvent(ev: MotionEvent): Boolean {
@@ -92,51 +79,62 @@ class DrawingView @JvmOverloads constructor(
 
     private fun touchStart(x: Float, y: Float) {
         undone.clear()
-        currentPath.reset()
-        currentPath.moveTo(x, y)
-        lastX = x
-        lastY = y
-        startX = x
-        startY = y
+        currentPoints.clear()
+        currentPoints.add(PointF(x, y))
         updateLoupesForCurrentStroke()
     }
 
     private fun touchMove(x: Float, y: Float) {
-        val dx = kotlin.math.abs(x - lastX)
-        val dy = kotlin.math.abs(y - lastY)
-        if (dx >= touchTolerance || dy >= touchTolerance) {
-            // Quadratic smoothing
-            currentPath.quadTo(lastX, lastY, (x + lastX) / 2f, (y + lastY) / 2f)
-            lastX = x
-            lastY = y
-            updateLoupesForCurrentStroke()
-        }
+        currentPoints.add(PointF(x, y))
+        updateLoupesForCurrentStroke()
     }
 
     private fun touchUp() {
-        // Draw the just-finished stroke to the backing canvas
-        backingCanvas?.drawPath(currentPath, currentPaint)
+        if (currentPoints.isNotEmpty()) {
+            val newStroke = Stroke(currentPoints.toMutableList(), Paint(currentPaint))
+            strokes.add(newStroke)
+            drawPoints(backingCanvas, newStroke.points, newStroke.paint)
+            currentPoints.clear()
+            updateLoupesFromLastStroke()
+        }
+    }
 
-        // Add it to the history
-        strokes.add(Stroke(Path(currentPath), Paint(currentPaint), startX, startY, lastX, lastY))
+    fun moveStartPoint(dx: Float, dy: Float) {
+        if (strokes.isNotEmpty()) {
+            val lastStroke = strokes.last()
+            val firstPoint = lastStroke.points.first()
+            firstPoint.offset(dx, dy)
+            redrawHistory()
+            updateLoupesFromLastStroke()
+        }
+    }
 
-        // Reset for the next one
-        currentPath.reset()
-
-        // Update loupes to show the stroke we just finished
-        updateLoupesFromLastStroke()
+    fun moveEndPoint(dx: Float, dy: Float) {
+        if (strokes.isNotEmpty()) {
+            val lastStroke = strokes.last()
+            val lastPoint = lastStroke.points.last()
+            lastPoint.offset(dx, dy)
+            redrawHistory()
+            updateLoupesFromLastStroke()
+        }
     }
 
     private fun updateLoupesForCurrentStroke() {
-        loupeListener?.onStartLoupeUpdate(createLoupeBitmap(startX, startY))
-        loupeListener?.onEndLoupeUpdate(createLoupeBitmap(lastX, lastY))
+        if (currentPoints.isNotEmpty()) {
+            val start = currentPoints.first()
+            val end = currentPoints.last()
+            loupeListener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y))
+            loupeListener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y))
+        }
     }
 
     private fun updateLoupesFromLastStroke() {
         if (strokes.isNotEmpty()) {
             val lastStroke = strokes.last()
-            loupeListener?.onStartLoupeUpdate(createLoupeBitmap(lastStroke.startX, lastStroke.startY))
-            loupeListener?.onEndLoupeUpdate(createLoupeBitmap(lastStroke.endX, lastStroke.endY))
+            val start = lastStroke.points.first()
+            val end = lastStroke.points.last()
+            loupeListener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y))
+            loupeListener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y))
         } else {
             loupeListener?.onStartLoupeUpdate(null)
             loupeListener?.onEndLoupeUpdate(null)
@@ -144,31 +142,23 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun createLoupeBitmap(px: Float, py: Float): Bitmap? {
-        val loupeSize = 200 // The dimensions of the loupe bitmap in pixels
+        val loupeSize = 200
         val zoomFactor = 1f
-
         backingBitmap?.let {
             val loupeBitmap = Bitmap.createBitmap(loupeSize, loupeSize, Bitmap.Config.ARGB_8888)
             val loupeCanvas = Canvas(loupeBitmap)
-
             loupeCanvas.save()
             loupeCanvas.scale(zoomFactor, zoomFactor)
             loupeCanvas.translate(-px + loupeSize / (2 * zoomFactor), -py + loupeSize / (2 * zoomFactor))
-
-            // Draw the history and current stroke
             loupeCanvas.drawBitmap(it, 0f, 0f, null)
-            loupeCanvas.drawPath(currentPath, currentPaint)
-
+            drawPoints(loupeCanvas, currentPoints, currentPaint)
             loupeCanvas.restore()
-
-            // Draw a border
             val borderPaint = Paint().apply {
                 color = Color.GRAY
                 style = Paint.Style.STROKE
                 strokeWidth = 4f
             }
             loupeCanvas.drawRect(0f, 0f, loupeSize.toFloat(), loupeSize.toFloat(), borderPaint)
-
             return loupeBitmap
         }
         return null
@@ -202,20 +192,27 @@ class DrawingView @JvmOverloads constructor(
     fun clearAll() {
         strokes.clear()
         undone.clear()
-        currentPath.reset()
+        currentPoints.clear()
         redrawHistory()
         updateLoupesFromLastStroke()
     }
 
     private fun redrawHistory() {
-        // Clear the backing canvas and redraw all the strokes
-        backingCanvas?.let {
-            it.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
-            for (s in strokes) {
-                it.drawPath(s.path, s.paint)
-            }
+        backingCanvas?.let { it.drawColor(Color.WHITE, PorterDuff.Mode.SRC) }
+        for (s in strokes) {
+            drawPoints(backingCanvas, s.points, s.paint)
         }
         invalidate()
+    }
+
+    private fun drawPoints(canvas: Canvas?, points: List<PointF>, paint: Paint) {
+        if (canvas == null || points.size < 2) return
+        val path = Path()
+        path.moveTo(points.first().x, points.first().y)
+        for (i in 1 until points.size) {
+            path.lineTo(points[i].x, points[i].y)
+        }
+        canvas.drawPath(path, paint)
     }
 
     private fun defaultPaint(_color: Int, _widthPx: Float) = Paint().apply {
