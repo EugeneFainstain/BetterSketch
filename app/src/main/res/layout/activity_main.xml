@@ -20,11 +20,6 @@
             <Button android:id="@+id/btnClear" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Clear" android:layout_marginStart="8dp"/>
             <Button android:id="@+id/btnSave" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Save" android:layout_marginStart="8dp"/>
 
-            <!-- Simple color swatches -->
-            <View android:id="@+id/colorBlack" android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="16dp" android:background="#000000"/>
-            <View android:id="@+id/colorRed"   android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="8dp"  android:background="#F44336"/>
-            <View android:id="@+id/colorBlue"  android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="8dp"  android:background="#2196F3"/>
-            <View android:id="@+id/colorGreen" android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="8dp"  android:background="#4CAF50"/>
         </LinearLayout>
     </HorizontalScrollView>
 
@@ -35,6 +30,15 @@
         android:layout_height="wrap_content"
         android:max="60"
         android:progress="12"
+        android:padding="8dp"/>
+
+    <!-- Color slider -->
+    <SeekBar
+        android:id="@+id/seekColor"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="11"
+        android:progress="0"
         android:padding="8dp"/>
 
     <!-- Drawing surface -->

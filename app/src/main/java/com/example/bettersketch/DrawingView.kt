@@ -14,6 +14,7 @@ interface LoupeListener {
     fun onEndLoupeUpdate(bitmap: Bitmap?)
     fun onRedoHistoryDecisionRequired()
     fun onCurrentStrokeWidthChanged(width: Float)
+    fun onCurrentColorChanged(color: Int)
 }
 
 class DrawingView @JvmOverloads constructor(
@@ -176,10 +177,12 @@ class DrawingView @JvmOverloads constructor(
             loupeListener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y))
             loupeListener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y))
             loupeListener?.onCurrentStrokeWidthChanged(lastStroke.paint.strokeWidth)
+            loupeListener?.onCurrentColorChanged(lastStroke.paint.color)
         } else {
             loupeListener?.onStartLoupeUpdate(null)
             loupeListener?.onEndLoupeUpdate(null)
             loupeListener?.onCurrentStrokeWidthChanged(currentPaint.strokeWidth)
+            loupeListener?.onCurrentColorChanged(currentPaint.color)
         }
     }
 
@@ -207,7 +210,12 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun setColor(color: Int) {
-        currentPaint = defaultPaint(color, currentPaint.strokeWidth)
+        currentPaint.color = color
+        if (strokes.isNotEmpty()) {
+            strokes.last().paint.color = color
+            redrawHistory()
+            updateUiFromLastStroke()
+        }
     }
 
     fun setStrokeWidth(px: Float) {

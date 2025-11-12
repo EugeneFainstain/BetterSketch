@@ -21,6 +21,22 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     private lateinit var startView: ImageView
     private lateinit var endView: ImageView
     private lateinit var strokeWidthSeekBar: SeekBar
+    private lateinit var colorSeekBar: SeekBar
+
+    private val colors = intArrayOf(
+        Color.parseColor("#FF0000"), // Red
+        Color.parseColor("#FF8000"), // Orange
+        Color.parseColor("#FFFF00"), // Yellow
+        Color.parseColor("#80FF00"), // Chartreuse
+        Color.parseColor("#00FF00"), // Green
+        Color.parseColor("#00FF80"), // Spring Green
+        Color.parseColor("#00FFFF"), // Cyan
+        Color.parseColor("#0080FF"), // Azure
+        Color.parseColor("#0000FF"), // Blue
+        Color.parseColor("#8000FF"), // Violet
+        Color.parseColor("#FF00FF"), // Magenta
+        Color.parseColor("#FF0080")  // Rose
+    )
 
     private var lastTouchX = 0f
     private var lastTouchY = 0f
@@ -36,6 +52,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         startView = findViewById(R.id.startView)
         endView = findViewById(R.id.endView)
         strokeWidthSeekBar = findViewById(R.id.seekWidth)
+        colorSeekBar = findViewById(R.id.seekColor)
 
         startView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = true) }
         endView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = false) }
@@ -57,10 +74,17 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
             }
         )
 
-        wireColorSwatch(R.id.colorBlack, Color.BLACK)
-        wireColorSwatch(R.id.colorRed,   0xFFF44336.toInt())
-        wireColorSwatch(R.id.colorBlue,  0xFF2196F3.toInt())
-        wireColorSwatch(R.id.colorGreen, 0xFF4CAF50.toInt())
+        colorSeekBar.setOnSeekBarChangeListener(
+            object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        drawingView.setColor(colors[progress])
+                    }
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            }
+        )
     }
 
     private fun handleLoupeTouch(event: MotionEvent, isStart: Boolean): Boolean {
@@ -100,6 +124,13 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         strokeWidthSeekBar.progress = width.toInt()
     }
 
+    override fun onCurrentColorChanged(color: Int) {
+        val index = colors.indexOf(color)
+        if (index != -1) {
+            colorSeekBar.progress = index
+        }
+    }
+
     override fun onConfirmDiscardRedo() {
         drawingView.clearRedoHistory()
         Toast.makeText(this, "Redo history cleared. You can now draw a new stroke.", Toast.LENGTH_SHORT).show()
@@ -112,11 +143,6 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
 
     override fun onCancel() {
         // No-op
-    }
-
-    private fun wireColorSwatch(viewId: Int, color: Int) {
-        val v = findViewById<View>(viewId)
-        v.setOnClickListener { drawingView.setColor(color) }
     }
 
     private fun saveToGallery() {
