@@ -13,6 +13,7 @@ interface LoupeListener {
     fun onStartLoupeUpdate(bitmap: Bitmap?)
     fun onEndLoupeUpdate(bitmap: Bitmap?)
     fun onRedoHistoryDecisionRequired()
+    fun onCurrentStrokeWidthChanged(width: Float)
 }
 
 class DrawingView @JvmOverloads constructor(
@@ -116,7 +117,7 @@ class DrawingView @JvmOverloads constructor(
                 undone.clear()
             }
             insertMode = false // Always reset after a stroke is complete
-            updateLoupesFromLastStroke()
+            updateUiFromLastStroke()
         }
     }
 
@@ -139,7 +140,7 @@ class DrawingView @JvmOverloads constructor(
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
             redrawHistory()
-            updateLoupesFromLastStroke()
+            updateUiFromLastStroke()
         }
     }
 
@@ -154,7 +155,7 @@ class DrawingView @JvmOverloads constructor(
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
             redrawHistory()
-            updateLoupesFromLastStroke()
+            updateUiFromLastStroke()
         }
     }
 
@@ -167,16 +168,18 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun updateLoupesFromLastStroke() {
+    private fun updateUiFromLastStroke() {
         if (strokes.isNotEmpty()) {
             val lastStroke = strokes.last()
             val start = lastStroke.points.first().point
             val end = lastStroke.points.last().point
             loupeListener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y))
             loupeListener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y))
+            loupeListener?.onCurrentStrokeWidthChanged(lastStroke.paint.strokeWidth)
         } else {
             loupeListener?.onStartLoupeUpdate(null)
             loupeListener?.onEndLoupeUpdate(null)
+            loupeListener?.onCurrentStrokeWidthChanged(currentPaint.strokeWidth)
         }
     }
 
@@ -213,7 +216,7 @@ class DrawingView @JvmOverloads constructor(
         if (strokes.isNotEmpty()) {
             strokes.last().paint.strokeWidth = w
             redrawHistory()
-            updateLoupesFromLastStroke()
+            updateUiFromLastStroke()
         }
     }
 
@@ -221,7 +224,7 @@ class DrawingView @JvmOverloads constructor(
         if (strokes.isNotEmpty()) {
             undone.addLast(strokes.removeAt(strokes.lastIndex))
             redrawHistory()
-            updateLoupesFromLastStroke()
+            updateUiFromLastStroke()
         }
     }
 
@@ -229,7 +232,7 @@ class DrawingView @JvmOverloads constructor(
         if (undone.isNotEmpty()) {
             strokes.add(undone.removeLast())
             redrawHistory()
-            updateLoupesFromLastStroke()
+            updateUiFromLastStroke()
         }
     }
 
@@ -238,7 +241,7 @@ class DrawingView @JvmOverloads constructor(
         undone.clear()
         currentPoints.clear()
         redrawHistory()
-        updateLoupesFromLastStroke()
+        updateUiFromLastStroke()
     }
 
     private fun redrawHistory() {

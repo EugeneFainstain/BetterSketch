@@ -20,6 +20,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     private lateinit var drawingView: DrawingView
     private lateinit var startView: ImageView
     private lateinit var endView: ImageView
+    private lateinit var strokeWidthSeekBar: SeekBar
 
     private var lastTouchX = 0f
     private var lastTouchY = 0f
@@ -34,6 +35,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
 
         startView = findViewById(R.id.startView)
         endView = findViewById(R.id.endView)
+        strokeWidthSeekBar = findViewById(R.id.seekWidth)
 
         startView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = true) }
         endView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = false) }
@@ -43,10 +45,12 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.clearAll() }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
 
-        findViewById<SeekBar>(R.id.seekWidth).setOnSeekBarChangeListener(
+        strokeWidthSeekBar.setOnSeekBarChangeListener(
             object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    drawingView.setStrokeWidth(progress.toFloat().coerceAtLeast(1f))
+                    if (fromUser) {
+                        drawingView.setStrokeWidth(progress.toFloat().coerceAtLeast(1f))
+                    }
                 }
                 override fun onStartTrackingTouch(sb: SeekBar?) {}
                 override fun onStopTrackingTouch(sb: SeekBar?) {}
@@ -90,6 +94,10 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
 
     override fun onRedoHistoryDecisionRequired() {
         ConfirmActionDialogFragment().show(supportFragmentManager, "confirm_dialog")
+    }
+
+    override fun onCurrentStrokeWidthChanged(width: Float) {
+        strokeWidthSeekBar.progress = width.toInt()
     }
 
     override fun onConfirmDiscardRedo() {
