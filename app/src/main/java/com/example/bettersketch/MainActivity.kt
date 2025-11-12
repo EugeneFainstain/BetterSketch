@@ -7,20 +7,27 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.Toast
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), LoupeListener {
 
     private lateinit var drawingView: DrawingView
+    private lateinit var startView: ImageView
+    private lateinit var endView: ImageView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         drawingView = findViewById(R.id.drawingView)
+        drawingView.loupeListener = this
+
+        startView = findViewById(R.id.startView)
+        endView = findViewById(R.id.endView)
 
         findViewById<Button>(R.id.btnUndo).setOnClickListener { drawingView.undo() }
         findViewById<Button>(R.id.btnRedo).setOnClickListener { drawingView.redo() }
@@ -41,6 +48,14 @@ class MainActivity : AppCompatActivity() {
         wireColorSwatch(R.id.colorRed,   0xFFF44336.toInt())
         wireColorSwatch(R.id.colorBlue,  0xFF2196F3.toInt())
         wireColorSwatch(R.id.colorGreen, 0xFF4CAF50.toInt())
+    }
+
+    override fun onStartLoupeUpdate(bitmap: Bitmap?) {
+        startView.setImageBitmap(bitmap)
+    }
+
+    override fun onEndLoupeUpdate(bitmap: Bitmap?) {
+        endView.setImageBitmap(bitmap)
     }
 
     private fun wireColorSwatch(viewId: Int, color: Int) {

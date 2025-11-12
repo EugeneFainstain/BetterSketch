@@ -8,9 +8,16 @@ import android.view.View
 import kotlin.math.max
 import kotlin.math.min
 
+interface LoupeListener {
+    fun onStartLoupeUpdate(bitmap: Bitmap?)
+    fun onEndLoupeUpdate(bitmap: Bitmap?)
+}
+
 class DrawingView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
+
+    var loupeListener: LoupeListener? = null
 
     // Drawing state
     private var backingBitmap: Bitmap? = null
@@ -25,6 +32,8 @@ class DrawingView @JvmOverloads constructor(
     private val undone = ArrayDeque<Stroke>()
 
     // Touch smoothing
+    private var startX = 0f
+    private var startY = 0f
     private var lastX = 0f
     private var lastY = 0f
     private val touchTolerance = 3f
@@ -39,7 +48,6 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        // Initialize the backing bitmaps
         if (w > 0 && h > 0) {
             backingBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             backingCanvas = Canvas(backingBitmap!!)
@@ -88,6 +96,10 @@ class DrawingView @JvmOverloads constructor(
         currentPath.moveTo(x, y)
         lastX = x
         lastY = y
+        startX = x
+        startY = y
+
+        updateLoupes()
     }
 
     private fun touchMove(x: Float, y: Float) {
@@ -98,6 +110,7 @@ class DrawingView @JvmOverloads constructor(
             currentPath.quadTo(lastX, lastY, (x + lastX) / 2f, (y + lastY) / 2f)
             lastX = x
             lastY = y
+            updateLoupes()
         }
     }
 
@@ -110,6 +123,44 @@ class DrawingView @JvmOverloads constructor(
 
         // Reset for the next one
         currentPath.reset()
+        loupeListener?.onStartLoupeUpdate(null)
+        loupeListener?.onEndLoupeUpdate(null)
+    }
+
+    private fun updateLoupes() {
+        loupeListener?.onStartLoupeUpdate(createLoupeBitmap(startX, startY))
+        loupeListener?.onEndLoupeUpdate(createLoupeBitmap(lastX, lastY))
+    }
+
+    private fun createLoupeBitmap(px: Float, py: Float): Bitmap? {
+        val loupeSize = 200 // The dimensions of the loupe bitmap in pixels
+        val zoomFactor = 2f
+
+        backingBitmap?.let {
+            val loupeBitmap = Bitmap.createBitmap(loupeSize, loupeSize, Bitmap.Config.ARGB_8888)
+            val loupeCanvas = Canvas(loupeBitmap)
+
+            loupeCanvas.save()
+            loupeCanvas.scale(zoomFactor, zoomFactor)
+            loupeCanvas.translate(-px + loupeSize / (2 * zoomFactor), -py + loupeSize / (2 * zoomFactor))
+
+            // Draw the history and current stroke
+            loupeCanvas.drawBitmap(it, 0f, 0f, null)
+            loupeCanvas.drawPath(currentPath, currentPaint)
+
+            loupeCanvas.restore()
+
+            // Draw a border
+            val borderPaint = Paint().apply {
+                color = Color.GRAY
+                style = Paint.Style.STROKE
+                strokeWidth = 4f
+            }
+            loupeCanvas.drawRect(0f, 0f, loupeSize.toFloat(), loupeSize.toFloat(), borderPaint)
+
+            return loupeBitmap
+        }
+        return null
     }
 
     fun setColor(color: Int) {
