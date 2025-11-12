@@ -189,6 +189,11 @@ class DrawingView @JvmOverloads constructor(
     fun setStrokeWidth(px: Float) {
         val w = max(1f, min(120f, px))
         currentPaint.strokeWidth = w
+        if (strokes.isNotEmpty()) {
+            strokes.last().paint.strokeWidth = w
+            redrawHistory()
+            updateLoupesFromLastStroke()
+        }
     }
 
     fun undo() {
