@@ -10,7 +10,6 @@ import android.provider.MediaStore
 import android.view.MotionEvent
 import android.widget.Button
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Toast
 import android.view.View
@@ -23,7 +22,6 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     private lateinit var endView: ImageView
     private lateinit var strokeWidthSeekBar: SeekBar
     private lateinit var colorSeekBar: SeekBar
-    private lateinit var colorBlocksContainer: LinearLayout
 
     private val colors = intArrayOf(
         Color.parseColor("#FF0000"), // Red
@@ -55,9 +53,8 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         endView = findViewById(R.id.endView)
         strokeWidthSeekBar = findViewById(R.id.seekWidth)
         colorSeekBar = findViewById(R.id.seekColor)
-        colorBlocksContainer = findViewById(R.id.colorBlocksContainer)
 
-        setupColorSlider()
+        colorSeekBar.progressDrawable = DiscreteColorDrawable(colors)
 
         startView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = true) }
         endView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = false) }
@@ -90,15 +87,6 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
                 override fun onStopTrackingTouch(sb: SeekBar?) {}
             }
         )
-    }
-
-    private fun setupColorSlider() {
-        for (color in colors) {
-            val view = View(this)
-            view.setBackgroundColor(color)
-            val params = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
-            colorBlocksContainer.addView(view, params)
-        }
     }
 
     private fun handleLoupeTouch(event: MotionEvent, isStart: Boolean): Boolean {
