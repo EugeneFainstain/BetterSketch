@@ -1,19 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:orientation="vertical">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <!-- Top controls -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="8dp">
+
+            <Button android:id="@+id/btnUndo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Undo"/>
+            <Button android:id="@+id/btnRedo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Redo" android:layout_marginStart="8dp"/>
+            <Button android:id="@+id/btnClear" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Clear" android:layout_marginStart="8dp"/>
+            <Button android:id="@+id/btnSave" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Save" android:layout_marginStart="8dp"/>
+
+            <!-- Simple color swatches -->
+            <View android:id="@+id/colorBlack" android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="16dp" android:background="#000000"/>
+            <View android:id="@+id/colorRed"   android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="8dp"  android:background="#F44336"/>
+            <View android:id="@+id/colorBlue"  android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="8dp"  android:background="#2196F3"/>
+            <View android:id="@+id/colorGreen" android:layout_width="24dp" android:layout_height="24dp" android:layout_marginStart="8dp"  android:background="#4CAF50"/>
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <!-- Stroke width -->
+    <SeekBar
+        android:id="@+id/seekWidth"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Hello World!"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:max="60"
+        android:progress="12"
+        android:padding="8dp"/>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <!-- Drawing surface -->
+    <com.example.bettersketch.DrawingView
+        android:id="@+id/drawingView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#FFFFFF"/>
+</LinearLayout>
