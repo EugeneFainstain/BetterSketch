@@ -102,8 +102,14 @@ class DrawingView @JvmOverloads constructor(
     fun moveStartPoint(dx: Float, dy: Float) {
         if (strokes.isNotEmpty()) {
             val lastStroke = strokes.last()
-            val firstPoint = lastStroke.points.first()
-            firstPoint.offset(dx, dy)
+            val points = lastStroke.points
+            val numPoints = points.size
+            if (numPoints < 2) return
+
+            for (i in 0 until numPoints) {
+                val weight = 1.0f - (i.toFloat() / (numPoints - 1).toFloat())
+                points[i].offset(dx * weight, dy * weight)
+            }
             redrawHistory()
             updateLoupesFromLastStroke()
         }
@@ -112,8 +118,14 @@ class DrawingView @JvmOverloads constructor(
     fun moveEndPoint(dx: Float, dy: Float) {
         if (strokes.isNotEmpty()) {
             val lastStroke = strokes.last()
-            val lastPoint = lastStroke.points.last()
-            lastPoint.offset(dx, dy)
+            val points = lastStroke.points
+            val numPoints = points.size
+            if (numPoints < 2) return
+
+            for (i in 0 until numPoints) {
+                val weight = i.toFloat() / (numPoints - 1).toFloat()
+                points[i].offset(dx * weight, dy * weight)
+            }
             redrawHistory()
             updateLoupesFromLastStroke()
         }
