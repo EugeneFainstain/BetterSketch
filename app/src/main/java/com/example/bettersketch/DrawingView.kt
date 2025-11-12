@@ -12,6 +12,10 @@ class DrawingView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
+    // Drawing state
+    private var backingBitmap: Bitmap? = null
+    private var backingCanvas: Canvas? = null
+
     // Current tools
     private var currentPath = Path()
     private var currentPaint = defaultPaint(Color.BLACK, 12f)
@@ -33,13 +37,28 @@ class DrawingView @JvmOverloads constructor(
         return bmp
     }
 
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        // Initialize the backing bitmaps
+        if (w > 0 && h > 0) {
+            backingBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            backingCanvas = Canvas(backingBitmap!!)
+            redrawHistory()
+        } else {
+            backingBitmap = null
+            backingCanvas = null
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        // draw history
-        for (s in strokes) {
-            canvas.drawPath(s.path, s.paint)
+
+        // Draw the history from the bitmap
+        backingBitmap?.let {
+            canvas.drawBitmap(it, 0f, 0f, null)
         }
-        // draw current stroke-in-progress
+
+        // Draw the current stroke-in-progress on top
         canvas.drawPath(currentPath, currentPaint)
     }
 
@@ -64,12 +83,11 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchStart(x: Float, y: Float) {
-        // starting a brand-new path
+        undone.clear()
         currentPath.reset()
         currentPath.moveTo(x, y)
         lastX = x
         lastY = y
-        // new stroke will be added on ACTION_UP
     }
 
     private fun touchMove(x: Float, y: Float) {
@@ -84,36 +102,36 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchUp() {
-        // complete the current stroke
-        val finalPath = Path(currentPath) // copy
-        val finalPaint = Paint(currentPaint) // copy
-        strokes.add(Stroke(finalPath, finalPaint))
+        // Draw the just-finished stroke to the backing canvas
+        backingCanvas?.drawPath(currentPath, currentPaint)
+
+        // Add it to the history
+        strokes.add(Stroke(Path(currentPath), Paint(currentPaint)))
+
+        // Reset for the next one
         currentPath.reset()
-        undone.clear()
     }
 
     fun setColor(color: Int) {
         currentPaint = defaultPaint(color, currentPaint.strokeWidth)
-        invalidate()
     }
 
     fun setStrokeWidth(px: Float) {
         val w = max(1f, min(120f, px))
         currentPaint.strokeWidth = w
-        invalidate()
     }
 
     fun undo() {
         if (strokes.isNotEmpty()) {
             undone.addLast(strokes.removeAt(strokes.lastIndex))
-            invalidate()
+            redrawHistory()
         }
     }
 
     fun redo() {
         if (undone.isNotEmpty()) {
             strokes.add(undone.removeLast())
-            invalidate()
+            redrawHistory()
         }
     }
 
@@ -121,6 +139,17 @@ class DrawingView @JvmOverloads constructor(
         strokes.clear()
         undone.clear()
         currentPath.reset()
+        redrawHistory()
+    }
+
+    private fun redrawHistory() {
+        // Clear the backing canvas and redraw all the strokes
+        backingCanvas?.let {
+            it.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
+            for (s in strokes) {
+                it.drawPath(s.path, s.paint)
+            }
+        }
         invalidate()
     }
 
