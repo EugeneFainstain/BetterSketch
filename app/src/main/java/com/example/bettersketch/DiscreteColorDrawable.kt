@@ -1,6 +1,7 @@
 package com.example.bettersketch
 
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.Paint
 import android.graphics.PixelFormat
@@ -9,6 +10,11 @@ import android.graphics.drawable.Drawable
 class DiscreteColorDrawable(private val colors: IntArray) : Drawable() {
 
     private val paint = Paint()
+    private val separatorPaint = Paint().apply {
+        color = Color.BLACK
+        strokeWidth = 2f
+        style = Paint.Style.STROKE
+    }
 
     override fun draw(canvas: Canvas) {
         val bounds = bounds
@@ -29,18 +35,25 @@ class DiscreteColorDrawable(private val colors: IntArray) : Drawable() {
             val adjustedRight = right - segmentWidth / 2f
 
             canvas.drawRect(adjustedLeft, bounds.top.toFloat(), adjustedRight, bounds.bottom.toFloat(), paint)
+
+            // Draw separator line after each color block (except the last one)
+            if (i < numColors - 1) {
+                canvas.drawLine(adjustedRight, bounds.top.toFloat(), adjustedRight, bounds.bottom.toFloat(), separatorPaint)
+            }
         }
     }
 
     override fun setAlpha(alpha: Int) {
         paint.alpha = alpha
+        separatorPaint.alpha = alpha
     }
 
     override fun setColorFilter(colorFilter: ColorFilter?) {
         paint.colorFilter = colorFilter
+        separatorPaint.colorFilter = colorFilter
     }
 
     override fun getOpacity(): Int {
-        return if (paint.alpha == 255) PixelFormat.OPAQUE else PixelFormat.TRANSLUCENT
+        return PixelFormat.TRANSLUCENT
     }
 }
