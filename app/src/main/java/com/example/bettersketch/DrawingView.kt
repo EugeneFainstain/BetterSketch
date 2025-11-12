@@ -12,7 +12,7 @@ import kotlin.math.sqrt
 interface LoupeListener {
     fun onStartLoupeUpdate(bitmap: Bitmap?)
     fun onEndLoupeUpdate(bitmap: Bitmap?)
-    fun onRedoHistoryWillBeCleared()
+    fun onRedoHistoryDecisionRequired()
 }
 
 class DrawingView @JvmOverloads constructor(
@@ -24,6 +24,7 @@ class DrawingView @JvmOverloads constructor(
     // Drawing state
     private var backingBitmap: Bitmap? = null
     private var backingCanvas: Canvas? = null
+    private var insertMode = false
 
     // Current tools
     private val currentPoints = mutableListOf<PathPoint>()
@@ -81,18 +82,11 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchStart(x: Float, y: Float) {
-        if (undone.isNotEmpty()) {
-            loupeListener?.onRedoHistoryWillBeCleared()
-            return // Don't start drawing yet, wait for confirmation.
+        if (undone.isNotEmpty() && !insertMode) {
+            loupeListener?.onRedoHistoryDecisionRequired()
+            return // Absorb the touch; wait for the user's decision.
         }
-        proceedWithTouchStart(x, y)
-    }
 
-    fun clearRedoHistory() {
-        undone.clear()
-    }
-
-    private fun proceedWithTouchStart(x: Float, y: Float) {
         currentPoints.clear()
         currentDistance = 0f
         currentPoints.add(PathPoint(PointF(x, y), 0f))
@@ -100,7 +94,8 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchMove(x: Float, y: Float) {
-        if (currentPoints.isEmpty()) return // Don't draw if we're waiting for confirmation
+        if (currentPoints.isEmpty()) return // Don't draw if we're waiting for a decision
+
         val lastPoint = currentPoints.last().point
         val dx = x - lastPoint.x
         val dy = y - lastPoint.y
@@ -116,8 +111,21 @@ class DrawingView @JvmOverloads constructor(
             strokes.add(newStroke)
             drawPoints(backingCanvas, newStroke.points, newStroke.paint)
             currentPoints.clear()
+
+            if (!insertMode) {
+                undone.clear()
+            }
+            insertMode = false // Always reset after a stroke is complete
             updateLoupesFromLastStroke()
         }
+    }
+
+    fun clearRedoHistory() {
+        undone.clear()
+    }
+
+    fun prepareToInsertStroke() {
+        insertMode = true
     }
 
     fun moveStartPoint(dx: Float, dy: Float) {

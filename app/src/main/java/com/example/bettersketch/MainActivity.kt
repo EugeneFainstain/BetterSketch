@@ -88,12 +88,22 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         endView.setImageBitmap(bitmap)
     }
 
-    override fun onRedoHistoryWillBeCleared() {
+    override fun onRedoHistoryDecisionRequired() {
         ConfirmActionDialogFragment().show(supportFragmentManager, "confirm_dialog")
     }
 
-    override fun onConfirm() {
+    override fun onConfirmDiscardRedo() {
         drawingView.clearRedoHistory()
+        Toast.makeText(this, "Redo history cleared. You can now draw a new stroke.", Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onConfirmInsertStroke() {
+        drawingView.prepareToInsertStroke()
+        Toast.makeText(this, "You can now draw. The next stroke will be inserted.", Toast.LENGTH_LONG).show()
+    }
+
+    override fun onCancel() {
+        // No-op
     }
 
     private fun wireColorSwatch(viewId: Int, color: Int) {
