@@ -38,8 +38,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:max="11"
-        android:progress="0"
-        android:padding="8dp"/>
+        android:progress="0"/>
 
     <!-- Drawing surface -->
     <com.example.bettersketch.DrawingView

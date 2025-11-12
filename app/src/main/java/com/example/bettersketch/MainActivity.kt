@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -53,6 +54,9 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         endView = findViewById(R.id.endView)
         strokeWidthSeekBar = findViewById(R.id.seekWidth)
         colorSeekBar = findViewById(R.id.seekColor)
+
+        val colorGradient = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colors)
+        colorSeekBar.progressDrawable = colorGradient
 
         startView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = true) }
         endView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = false) }
