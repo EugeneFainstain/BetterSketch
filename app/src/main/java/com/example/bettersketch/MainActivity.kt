@@ -14,8 +14,7 @@ import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import kotlin.math.max
-import kotlin.math.min
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity(), DrawingViewListener {
 
@@ -100,7 +99,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         // --- Color Slider ---
         colorSlider.colors = colors
         colorSlider.onValueChanged = { value ->
-            val colorIndex = (value * (colors.size - 1)).toInt()
+            val colorIndex = (value * (colors.size - 1)).roundToInt()
             drawingView.setColor(colors[colorIndex])
         }
 

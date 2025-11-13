@@ -20,11 +20,11 @@ abstract class MySlider @JvmOverloads constructor(
             field = value.coerceIn(0f, 1f)
             invalidate()
         }
+    var steps: Int = 0
 
     private val selectorPaint = Paint().apply {
-        color = Color.BLACK
-        style = Paint.Style.STROKE
-        strokeWidth = 4f
+        color = Color.GRAY
+        style = Paint.Style.FILL
     }
     protected val isVertical: Boolean
         get() = height > width
@@ -46,12 +46,14 @@ abstract class MySlider @JvmOverloads constructor(
     private fun drawSelector(canvas: Canvas) {
         val selectorRadius: Float
         if (isVertical) {
-            val y = (1f - value) * height
-            selectorRadius = (width / 2f) - selectorPaint.strokeWidth
+            val segmentHeight = if (steps > 1) height.toFloat() / steps else 0f
+            val y = (1f - value) * (height - segmentHeight) + (segmentHeight / 2f)
+            selectorRadius = (width.toFloat() / 2f) * (2f / 3f)
             canvas.drawCircle(width / 2f, y, selectorRadius, selectorPaint)
         } else {
-            val x = value * width
-            selectorRadius = (height / 2f) - selectorPaint.strokeWidth
+            val segmentWidth = if (steps > 1) width.toFloat() / steps else 0f
+            val x = value * (width - segmentWidth) + (segmentWidth / 2f)
+            selectorRadius = (height.toFloat() / 2f) * (2f / 3f)
             canvas.drawCircle(x, height / 2f, selectorRadius, selectorPaint)
         }
     }
@@ -59,11 +61,17 @@ abstract class MySlider @JvmOverloads constructor(
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
-            val newValue = if (isVertical) {
+            var newValue = if (isVertical) {
                 1f - (event.y / height).coerceIn(0f, 1f)
             } else {
                 (event.x / width).coerceIn(0f, 1f)
             }
+
+            if (steps > 1) {
+                val stepIndex = (newValue * (steps - 1)).roundToInt()
+                newValue = stepIndex.toFloat() / (steps - 1)
+            }
+
             if (newValue != value) {
                 value = newValue
                 onValueChanged?.invoke(value)
@@ -73,6 +81,6 @@ abstract class MySlider @JvmOverloads constructor(
     }
 
     companion object {
-        private const val DEFAULT_SIZE_DP = 48
+        private const val DEFAULT_SIZE_DP = 32
     }
 }

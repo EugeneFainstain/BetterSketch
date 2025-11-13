@@ -14,6 +14,10 @@ class WidthSlider @JvmOverloads constructor(
 
     private val paint = Paint()
 
+    init {
+        steps = 20
+    }
+
     override fun drawBackground(canvas: Canvas) {
         val shader = if (isVertical) {
             LinearGradient(0f, 0f, 0f, height.toFloat(), Color.LTGRAY, Color.BLACK, Shader.TileMode.CLAMP)

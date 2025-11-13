@@ -13,6 +13,7 @@ class ColorSlider @JvmOverloads constructor(
     var colors: IntArray = intArrayOf()
         set(value) {
             field = value
+            steps = value.size
             invalidate()
         }
 
