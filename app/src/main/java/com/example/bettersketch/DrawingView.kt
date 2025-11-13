@@ -9,20 +9,18 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-interface LoupeListener {
+interface DrawingViewListener {
+    fun onStateChanged()
+    fun onRedoHistoryDecisionRequired()
     fun onStartLoupeUpdate(bitmap: Bitmap?)
     fun onEndLoupeUpdate(bitmap: Bitmap?)
-    fun onRedoHistoryDecisionRequired()
-    fun onCurrentStrokeWidthChanged(width: Float)
-    fun onCurrentColorChanged(color: Int)
-    fun onHistoryChanged(size: Int)
 }
 
 class DrawingView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    var loupeListener: LoupeListener? = null
+    var listener: DrawingViewListener? = null
 
     // Drawing state
     private var backingBitmap: Bitmap? = null
@@ -32,11 +30,18 @@ class DrawingView @JvmOverloads constructor(
     // Current tools
     private val currentPoints = mutableListOf<PathPoint>()
     private var currentDistance = 0f
-    private var currentPaint = defaultPaint(Color.BLACK, 12f)
+    var currentPaint = defaultPaint(Color.BLACK, 12f)
 
     // History for undo/redo
     private val strokes = mutableListOf<Stroke>()
     private val undone = ArrayDeque<Stroke>()
+
+    // Public properties for history state
+    val canRewind: Boolean get() = strokes.isNotEmpty()
+    val canFF: Boolean get() = undone.isNotEmpty()
+    val historySize: Int get() = strokes.size + undone.size
+    val currentHistoryPosition: Int get() = strokes.size
+    val lastStroke: Stroke? get() = strokes.lastOrNull()
 
     // Export bitmap helper
     fun exportBitmap(): Bitmap {
@@ -86,14 +91,14 @@ class DrawingView @JvmOverloads constructor(
 
     private fun touchStart(x: Float, y: Float) {
         if (undone.isNotEmpty() && !insertMode) {
-            loupeListener?.onRedoHistoryDecisionRequired()
+            listener?.onRedoHistoryDecisionRequired()
             return // Absorb the touch; wait for the user's decision.
         }
 
         currentPoints.clear()
         currentDistance = 0f
         currentPoints.add(PathPoint(PointF(x, y), 0f))
-        updateLoupesForCurrentStroke()
+        updateLoupes()
     }
 
     private fun touchMove(x: Float, y: Float) {
@@ -105,7 +110,8 @@ class DrawingView @JvmOverloads constructor(
         val segmentLength = sqrt(dx * dx + dy * dy)
         currentDistance += segmentLength
         currentPoints.add(PathPoint(PointF(x, y), currentDistance))
-        updateLoupesForCurrentStroke()
+        updateLoupes()
+        invalidate() // Redraw to show the stroke in progress
     }
 
     private fun touchUp() {
@@ -120,8 +126,8 @@ class DrawingView @JvmOverloads constructor(
             insertMode = false // Always reset after a stroke is complete
 
             redrawHistory()
-            updateUiFromLastStroke()
-            loupeListener?.onHistoryChanged(strokes.size + undone.size)
+            updateLoupes()
+            listener?.onStateChanged()
         }
     }
 
@@ -137,11 +143,11 @@ class DrawingView @JvmOverloads constructor(
             }
         }
         redrawHistory()
-        updateUiFromLastStroke()
+        updateLoupes()
+        listener?.onStateChanged()
     }
 
     fun getStrokeColors(): IntArray {
-        // We need to return the colors of the past and future strokes for the tick marks
         val pastColors = strokes.map { it.paint.color }
         val futureColors = undone.reversed().map { it.paint.color }
         return (pastColors + futureColors).toIntArray()
@@ -149,7 +155,7 @@ class DrawingView @JvmOverloads constructor(
 
     fun clearRedoHistory() {
         undone.clear()
-        loupeListener?.onHistoryChanged(strokes.size)
+        listener?.onStateChanged()
     }
 
     fun prepareToInsertStroke() {
@@ -167,7 +173,8 @@ class DrawingView @JvmOverloads constructor(
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
             redrawHistory()
-            updateUiFromLastStroke()
+            updateLoupes()
+            listener?.onStateChanged()
         }
     }
 
@@ -182,33 +189,29 @@ class DrawingView @JvmOverloads constructor(
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
             redrawHistory()
-            updateUiFromLastStroke()
+            updateLoupes()
+            listener?.onStateChanged()
         }
     }
 
-    private fun updateLoupesForCurrentStroke() {
+    private fun updateLoupes() {
         if (currentPoints.isNotEmpty()) {
+            // Stroke in progress
             val start = currentPoints.first().point
             val end = currentPoints.last().point
-            loupeListener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y))
-            loupeListener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y))
-        }
-    }
-
-    private fun updateUiFromLastStroke() {
-        if (strokes.isNotEmpty()) {
+            listener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y))
+            listener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y))
+        } else if (strokes.isNotEmpty()) {
+            // Show last completed stroke
             val lastStroke = strokes.last()
             val start = lastStroke.points.first().point
             val end = lastStroke.points.last().point
-            loupeListener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y))
-            loupeListener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y))
-            loupeListener?.onCurrentStrokeWidthChanged(lastStroke.paint.strokeWidth)
-            loupeListener?.onCurrentColorChanged(lastStroke.paint.color)
+            listener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y))
+            listener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y))
         } else {
-            loupeListener?.onStartLoupeUpdate(null)
-            loupeListener?.onEndLoupeUpdate(null)
-            loupeListener?.onCurrentStrokeWidthChanged(currentPaint.strokeWidth)
-            loupeListener?.onCurrentColorChanged(currentPaint.color)
+            // Nothing to show
+            listener?.onStartLoupeUpdate(null)
+            listener?.onEndLoupeUpdate(null)
         }
     }
 
@@ -249,7 +252,8 @@ class DrawingView @JvmOverloads constructor(
         if (applyToLast && strokes.isNotEmpty()) {
             strokes.last().paint.color = color
             redrawHistory()
-            updateUiFromLastStroke()
+            updateLoupes()
+            listener?.onStateChanged()
         }
     }
 
@@ -259,25 +263,20 @@ class DrawingView @JvmOverloads constructor(
         if (applyToLast && strokes.isNotEmpty()) {
             strokes.last().paint.strokeWidth = w
             redrawHistory()
-            updateUiFromLastStroke()
+            updateLoupes()
+            listener?.onStateChanged()
         }
     }
 
     fun undo() {
-        if (strokes.isNotEmpty()) {
-            undone.addLast(strokes.removeAt(strokes.lastIndex))
-            redrawHistory()
-            updateUiFromLastStroke()
-            loupeListener?.onHistoryChanged(strokes.size + undone.size)
+        if (canRewind) {
+            navigateToHistoryState(currentHistoryPosition - 1)
         }
     }
 
     fun redo() {
-        if (undone.isNotEmpty()) {
-            strokes.add(undone.removeLast())
-            redrawHistory()
-            updateUiFromLastStroke()
-            loupeListener?.onHistoryChanged(strokes.size + undone.size)
+        if (canFF) {
+            navigateToHistoryState(currentHistoryPosition + 1)
         }
     }
 
@@ -286,8 +285,8 @@ class DrawingView @JvmOverloads constructor(
         undone.clear()
         currentPoints.clear()
         redrawHistory()
-        updateUiFromLastStroke()
-        loupeListener?.onHistoryChanged(0)
+        updateLoupes()
+        listener?.onStateChanged()
     }
 
     private fun redrawHistory() {

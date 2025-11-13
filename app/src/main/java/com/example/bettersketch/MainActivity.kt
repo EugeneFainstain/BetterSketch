@@ -18,7 +18,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GestureDetectorCompat
 
-class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFragment.Listener {
+class MainActivity : AppCompatActivity(), DrawingViewListener, ConfirmActionDialogFragment.Listener {
 
     private lateinit var drawingView: DrawingView
     private lateinit var startView: ImageView
@@ -27,6 +27,8 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     private lateinit var colorSeekBar: SeekBar
     private lateinit var progressSeekBar: SeekBar
     private lateinit var historyIndicator: HistoryIndicatorDrawable
+    private lateinit var rewButton: Button
+    private lateinit var ffButton: Button
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -45,9 +47,6 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         Color.WHITE
     )
 
-    private var lastTouchX = 0f
-    private var lastTouchY = 0f
-
     // Flags to track double-tap state
     private var isWidthInDoubleTap = false
     private var isColorInDoubleTap = false
@@ -58,13 +57,15 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         setContentView(R.layout.activity_main)
 
         drawingView = findViewById(R.id.drawingView)
-        drawingView.loupeListener = this
+        drawingView.listener = this
 
         startView = findViewById(R.id.startView)
         endView = findViewById(R.id.endView)
         strokeWidthSeekBar = findViewById(R.id.seekWidth)
         colorSeekBar = findViewById(R.id.seekColor)
         progressSeekBar = findViewById(R.id.seekProgress)
+        rewButton = findViewById(R.id.btnUndo)
+        ffButton = findViewById(R.id.btnRedo)
 
         strokeWidthSeekBar.progressDrawable = WidthIndicatorDrawable()
         colorSeekBar.progressDrawable = DiscreteColorDrawable(colors)
@@ -81,13 +82,13 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
 
         setupSeekBarListeners()
 
-        startView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = true) }
-        endView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = false) }
+        rewButton.setOnClickListener { drawingView.undo() }
+        ffButton.setOnClickListener { drawingView.redo() }
 
-        findViewById<Button>(R.id.btnUndo).setOnClickListener { drawingView.undo() }
-        findViewById<Button>(R.id.btnRedo).setOnClickListener { drawingView.redo() }
         findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.clearAll() }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
+
+        updateUi()
     }
 
     private fun setupSeekBarListeners() {
@@ -171,27 +172,15 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         })
     }
 
-    private fun handleLoupeTouch(event: MotionEvent, isStart: Boolean): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                lastTouchX = event.x
-                lastTouchY = event.y
-            }
-            MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - lastTouchX
-                val dy = event.y - lastTouchY
-                if (isStart) {
-                    drawingView.moveStartPoint(dx, dy)
-                } else {
-                    drawingView.moveEndPoint(dx, dy)
-                }
-                lastTouchX = event.x
-                lastTouchY = event.y
-            }
-        }
-        return true
+    override fun onStateChanged() {
+        updateUi()
     }
 
+    override fun onRedoHistoryDecisionRequired() {
+        if (drawingView.canFF) {
+            ConfirmActionDialogFragment().show(supportFragmentManager, "confirm_dialog")
+        }
+    }
     override fun onStartLoupeUpdate(bitmap: Bitmap?) {
         startView.setImageBitmap(bitmap)
     }
@@ -200,24 +189,27 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         endView.setImageBitmap(bitmap)
     }
 
-    override fun onRedoHistoryDecisionRequired() {
-        ConfirmActionDialogFragment().show(supportFragmentManager, "confirm_dialog")
-    }
+    private fun updateUi() {
+        rewButton.isEnabled = drawingView.canRewind
+        ffButton.isEnabled = drawingView.canFF
 
-    override fun onHistoryChanged(size: Int) {
-        progressSeekBar.max = size
-        progressSeekBar.progress = size
+        progressSeekBar.max = drawingView.historySize
+        progressSeekBar.progress = drawingView.currentHistoryPosition
         historyIndicator.strokeColors = drawingView.getStrokeColors()
-    }
 
-    override fun onCurrentStrokeWidthChanged(width: Float) {
-        strokeWidthSeekBar.progress = width.toInt()
-    }
-
-    override fun onCurrentColorChanged(color: Int) {
-        val index = colors.indexOf(color)
-        if (index != -1) {
-            colorSeekBar.progress = index
+        val currentStroke = drawingView.lastStroke
+        if (currentStroke != null) {
+            strokeWidthSeekBar.progress = currentStroke.paint.strokeWidth.toInt()
+            val colorIndex = colors.indexOf(currentStroke.paint.color)
+            if (colorIndex != -1) {
+                colorSeekBar.progress = colorIndex
+            }
+        } else {
+            strokeWidthSeekBar.progress = drawingView.currentPaint.strokeWidth.toInt()
+            val colorIndex = colors.indexOf(drawingView.currentPaint.color)
+            if (colorIndex != -1) {
+                colorSeekBar.progress = colorIndex
+            }
         }
     }
 

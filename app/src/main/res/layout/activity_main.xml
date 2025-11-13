@@ -15,8 +15,8 @@
             android:orientation="horizontal"
             android:padding="8dp">
 
-            <Button android:id="@+id/btnUndo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Undo"/>
-            <Button android:id="@+id/btnRedo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Redo" android:layout_marginStart="8dp"/>
+            <Button android:id="@+id/btnUndo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="REW"/>
+            <Button android:id="@+id/btnRedo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="FF" android:layout_marginStart="8dp"/>
             <Button android:id="@+id/btnClear" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Clear" android:layout_marginStart="8dp"/>
             <Button android:id="@+id/btnSave" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Save" android:layout_marginStart="8dp"/>
 
