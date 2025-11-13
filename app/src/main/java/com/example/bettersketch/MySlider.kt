@@ -47,7 +47,7 @@ abstract class MySlider @JvmOverloads constructor(
         val selectorRadius: Float
         if (isVertical) {
             val segmentHeight = if (steps > 1) height.toFloat() / steps else 0f
-            val y = (1f - value) * (height - segmentHeight) + (segmentHeight / 2f)
+            val y = value * (height - segmentHeight) + (segmentHeight / 2f)
             selectorRadius = (width.toFloat() / 2f) * (2f / 3f)
             canvas.drawCircle(width / 2f, y, selectorRadius, selectorPaint)
         } else {
@@ -62,7 +62,7 @@ abstract class MySlider @JvmOverloads constructor(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
             var newValue = if (isVertical) {
-                1f - (event.y / height).coerceIn(0f, 1f)
+                (event.y / height).coerceIn(0f, 1f)
             } else {
                 (event.x / width).coerceIn(0f, 1f)
             }

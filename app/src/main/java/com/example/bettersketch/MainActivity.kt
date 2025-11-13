@@ -91,8 +91,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private fun setupSliderListeners() {
         // --- Width Slider ---
         widthSlider.onValueChanged = { value ->
-            // Assuming the slider value (0-1) maps to a stroke width range (e.g., 1-120px)
-            val strokeWidth = 1f + value * 119f
+            val strokeWidth = 2f + value * 30f // 2...32
             drawingView.setStrokeWidth(strokeWidth)
         }
 
@@ -100,7 +99,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         colorSlider.colors = colors
         colorSlider.onValueChanged = { value ->
             val colorIndex = (value * (colors.size - 1)).roundToInt()
-            drawingView.setColor(colors[colorIndex])
+            val color = colors[colorIndex]
+            drawingView.setColor(color)
+            widthSlider.color = color
         }
 
         // --- Progress SeekBar ---
@@ -136,24 +137,16 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         progressSeekBar.progress = drawingView.currentHistoryPosition
         historyIndicator.strokeColors = drawingView.getStrokeColors()
 
-        val currentStroke = drawingView.lastStroke
-        if (currentStroke != null) {
-            val widthValue = (currentStroke.paint.strokeWidth - 1f) / 119f
-            widthSlider.value = widthValue
+        val currentPaint = drawingView.lastStroke?.paint ?: drawingView.currentPaint
+        val widthValue = (currentPaint.strokeWidth - 2f) / 30f
+        widthSlider.value = widthValue
 
-            val colorIndex = colors.indexOf(currentStroke.paint.color)
-            if (colorIndex != -1) {
-                colorSlider.value = colorIndex.toFloat() / (colors.size - 1)
-            }
-        } else {
-            val widthValue = (drawingView.currentPaint.strokeWidth - 1f) / 119f
-            widthSlider.value = widthValue
-
-            val colorIndex = colors.indexOf(drawingView.currentPaint.color)
-            if (colorIndex != -1) {
-                colorSlider.value = colorIndex.toFloat() / (colors.size - 1)
-            }
+        val colorIndex = colors.indexOf(currentPaint.color)
+        if (colorIndex != -1) {
+            colorSlider.value = colorIndex.toFloat() / (colors.size - 1)
         }
+
+        widthSlider.color = currentPaint.color
     }
 
     private fun handleLoupeTouch(event: MotionEvent, isStart: Boolean): Boolean {
