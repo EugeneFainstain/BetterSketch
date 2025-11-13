@@ -43,23 +43,27 @@
         android:padding="8dp"
         android:splitTrack="false"/>
 
-    <!-- Color slider -->
-    <SeekBar
-        android:id="@+id/seekColor"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="13"
-        android:progress="0"
-        android:padding="8dp"
-        android:splitTrack="false"/>
-
-    <!-- Drawing surface -->
-    <com.example.bettersketch.DrawingView
-        android:id="@+id/drawingView"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="#FFFFFF"/>
+        android:orientation="horizontal">
+
+        <!-- Drawing surface -->
+        <com.example.bettersketch.DrawingView
+            android:id="@+id/drawingView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="#FFFFFF" />
+
+        <!-- Color slider -->
+        <com.example.bettersketch.ColorSlider
+            android:id="@+id/colorSlider"
+            android:layout_width="32dp"
+            android:layout_height="match_parent"
+            android:padding="8dp" />
+    </LinearLayout>
 
     <!-- Loupe views -->
     <LinearLayout

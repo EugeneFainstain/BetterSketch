@@ -10,7 +10,6 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.view.GestureDetector
 import android.view.MotionEvent
-import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.SeekBar
@@ -24,7 +23,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var startView: ImageView
     private lateinit var endView: ImageView
     private lateinit var strokeWidthSeekBar: SeekBar
-    private lateinit var colorSeekBar: SeekBar
+    private lateinit var colorSlider: ColorSlider
     private lateinit var progressSeekBar: SeekBar
     private lateinit var historyIndicator: HistoryIndicatorDrawable
     private lateinit var rewButton: Button
@@ -64,13 +63,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         startView = findViewById(R.id.startView)
         endView = findViewById(R.id.endView)
         strokeWidthSeekBar = findViewById(R.id.seekWidth)
-        colorSeekBar = findViewById(R.id.seekColor)
+        colorSlider = findViewById(R.id.colorSlider)
         progressSeekBar = findViewById(R.id.seekProgress)
         rewButton = findViewById(R.id.btnUndo)
         ffButton = findViewById(R.id.btnRedo)
 
         strokeWidthSeekBar.progressDrawable = WidthIndicatorDrawable()
-        colorSeekBar.progressDrawable = DiscreteColorDrawable(colors)
 
         // Setup history slider with tick marks over the default rail
         historyIndicator = HistoryIndicatorDrawable()
@@ -97,7 +95,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     }
 
     private fun setupSeekBarListeners() {
-        // --- Width SeekBar ---_class
+        // --- Width SeekBar ---
         val widthGestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 isWidthInDoubleTap = true
@@ -130,40 +128,13 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             }
         })
 
-        // --- Color SeekBar ---_class
-        val colorGestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                isColorInDoubleTap = true
-                drawingView.setColor(colors[colorSeekBar.progress], applyToLast = true)
-                return true
-            }
-        })
-
-        colorSeekBar.setOnTouchListener { _, event ->
-            colorGestureDetector.onTouchEvent(event)
-            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-                colorSeekBar.post { isColorInDoubleTap = false }
-            }
-            false
+        // --- Color Slider ---
+        colorSlider.colors = colors
+        colorSlider.onColorSelected = { color ->
+            drawingView.setColor(color)
         }
 
-        colorSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser && isColorInDoubleTap) {
-                    drawingView.setColor(colors[progress], applyToLast = true)
-                }
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar) {}
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                if (!isColorInDoubleTap) {
-                    drawingView.setColor(colors[seekBar.progress], applyToLast = false)
-                }
-            }
-        })
-
-        // --- Progress SeekBar ---_class
+        // --- Progress SeekBar ---
         progressSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
@@ -200,16 +171,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         val currentStroke = drawingView.lastStroke
         if (currentStroke != null) {
             strokeWidthSeekBar.progress = currentStroke.paint.strokeWidth.toInt()
-            val colorIndex = colors.indexOf(currentStroke.paint.color)
-            if (colorIndex != -1) {
-                colorSeekBar.progress = colorIndex
-            }
+            colorSlider.selectedColor = currentStroke.paint.color
         } else {
             strokeWidthSeekBar.progress = drawingView.currentPaint.strokeWidth.toInt()
-            val colorIndex = colors.indexOf(drawingView.currentPaint.color)
-            if (colorIndex != -1) {
-                colorSeekBar.progress = colorIndex
-            }
+            colorSlider.selectedColor = drawingView.currentPaint.color
         }
     }
 
