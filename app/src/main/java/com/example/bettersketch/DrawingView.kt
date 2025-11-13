@@ -112,15 +112,16 @@ class DrawingView @JvmOverloads constructor(
         if (currentPoints.isNotEmpty()) {
             val newStroke = Stroke(currentPoints.toMutableList(), Paint(currentPaint), currentDistance)
             strokes.add(newStroke)
-            drawPoints(backingCanvas, newStroke.points, newStroke.paint)
             currentPoints.clear()
 
             if (!insertMode) {
                 undone.clear()
             }
             insertMode = false // Always reset after a stroke is complete
+
+            redrawHistory()
             updateUiFromLastStroke()
-            loupeListener?.onHistoryChanged(strokes.size)
+            loupeListener?.onHistoryChanged(strokes.size + undone.size)
         }
     }
 
@@ -140,11 +141,15 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun getStrokeColors(): IntArray {
-        return strokes.map { it.paint.color }.toIntArray()
+        // We need to return the colors of the past and future strokes for the tick marks
+        val pastColors = strokes.map { it.paint.color }
+        val futureColors = undone.reversed().map { it.paint.color }
+        return (pastColors + futureColors).toIntArray()
     }
 
     fun clearRedoHistory() {
         undone.clear()
+        loupeListener?.onHistoryChanged(strokes.size)
     }
 
     fun prepareToInsertStroke() {
@@ -210,21 +215,30 @@ class DrawingView @JvmOverloads constructor(
     private fun createLoupeBitmap(px: Float, py: Float): Bitmap? {
         val loupeSize = 200
         val zoomFactor = 1f
+
         backingBitmap?.let {
             val loupeBitmap = Bitmap.createBitmap(loupeSize, loupeSize, Bitmap.Config.ARGB_8888)
             val loupeCanvas = Canvas(loupeBitmap)
+
             loupeCanvas.save()
             loupeCanvas.scale(zoomFactor, zoomFactor)
             loupeCanvas.translate(-px + loupeSize / (2 * zoomFactor), -py + loupeSize / (2 * zoomFactor))
+
+            // Draw the backing bitmap (which has the ghosted strokes)
             loupeCanvas.drawBitmap(it, 0f, 0f, null)
+            // And then draw the current stroke on top
             drawPoints(loupeCanvas, currentPoints, currentPaint)
+
             loupeCanvas.restore()
+
+            // Draw a border
             val borderPaint = Paint().apply {
                 color = Color.GRAY
                 style = Paint.Style.STROKE
                 strokeWidth = 4f
             }
             loupeCanvas.drawRect(0f, 0f, loupeSize.toFloat(), loupeSize.toFloat(), borderPaint)
+
             return loupeBitmap
         }
         return null
@@ -254,7 +268,7 @@ class DrawingView @JvmOverloads constructor(
             undone.addLast(strokes.removeAt(strokes.lastIndex))
             redrawHistory()
             updateUiFromLastStroke()
-            loupeListener?.onHistoryChanged(strokes.size)
+            loupeListener?.onHistoryChanged(strokes.size + undone.size)
         }
     }
 
@@ -263,7 +277,7 @@ class DrawingView @JvmOverloads constructor(
             strokes.add(undone.removeLast())
             redrawHistory()
             updateUiFromLastStroke()
-            loupeListener?.onHistoryChanged(strokes.size)
+            loupeListener?.onHistoryChanged(strokes.size + undone.size)
         }
     }
 
@@ -273,14 +287,27 @@ class DrawingView @JvmOverloads constructor(
         currentPoints.clear()
         redrawHistory()
         updateUiFromLastStroke()
-        loupeListener?.onHistoryChanged(strokes.size)
+        loupeListener?.onHistoryChanged(0)
     }
 
     private fun redrawHistory() {
-        backingCanvas?.let { it.drawColor(Color.WHITE, PorterDuff.Mode.SRC) }
-        for (s in strokes) {
-            drawPoints(backingCanvas, s.points, s.paint)
+        val c = backingCanvas ?: return
+        c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
+        val tempPaint = Paint()
+
+        // Draw future strokes with 25% alpha
+        for (s in undone.reversed()) {
+            tempPaint.set(s.paint)
+            val originalAlpha = tempPaint.alpha
+            tempPaint.alpha = (originalAlpha * 0.25f).toInt()
+            drawPoints(c, s.points, tempPaint)
         }
+
+        // Draw past strokes at full opacity
+        for (s in strokes) {
+            drawPoints(c, s.points, s.paint)
+        }
+
         invalidate()
     }
 

@@ -32,7 +32,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         Color.BLACK,
         Color.parseColor("#FF0000"), // Red
         Color.parseColor("#FF8000"), // Orange
-        Color.parseColor("#EEEE00"), // Darker Yellow
+        Color.parseColor("#FAFA00"), // Darker Yellow
         Color.parseColor("#80FF00"), // Chartreuse
         Color.parseColor("#00FF00"), // Green
         Color.parseColor("#00FF80"), // Spring Green
