@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     private lateinit var endView: ImageView
     private lateinit var strokeWidthSeekBar: SeekBar
     private lateinit var colorSeekBar: SeekBar
+    private lateinit var progressSeekBar: SeekBar
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -61,6 +62,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         endView = findViewById(R.id.endView)
         strokeWidthSeekBar = findViewById(R.id.seekWidth)
         colorSeekBar = findViewById(R.id.seekColor)
+        progressSeekBar = findViewById(R.id.seekProgress)
 
         strokeWidthSeekBar.progressDrawable = WidthIndicatorDrawable()
         colorSeekBar.progressDrawable = DiscreteColorDrawable(colors)
@@ -88,13 +90,10 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
 
         strokeWidthSeekBar.setOnTouchListener { _, event ->
             widthGestureDetector.onTouchEvent(event)
-            // Reset the flag when the gesture ends
             if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-                // We need to post this to the end of the queue to ensure it's processed
-                // after onStopTrackingTouch has been called.
                 strokeWidthSeekBar.post { isWidthInDoubleTap = false }
             }
-            false // Let the SeekBar handle the event for thumb movement
+            false
         }
 
         strokeWidthSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -145,6 +144,19 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
                 }
             }
         })
+
+        // --- Progress SeekBar ---_class
+        progressSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    drawingView.navigateToHistoryState(progress)
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
     }
 
     private fun handleLoupeTouch(event: MotionEvent, isStart: Boolean): Boolean {
@@ -178,6 +190,11 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
 
     override fun onRedoHistoryDecisionRequired() {
         ConfirmActionDialogFragment().show(supportFragmentManager, "confirm_dialog")
+    }
+
+    override fun onHistoryChanged(size: Int) {
+        progressSeekBar.max = size
+        progressSeekBar.progress = size
     }
 
     override fun onCurrentStrokeWidthChanged(width: Float) {

@@ -15,6 +15,7 @@ interface LoupeListener {
     fun onRedoHistoryDecisionRequired()
     fun onCurrentStrokeWidthChanged(width: Float)
     fun onCurrentColorChanged(color: Int)
+    fun onHistoryChanged(size: Int)
 }
 
 class DrawingView @JvmOverloads constructor(
@@ -119,7 +120,23 @@ class DrawingView @JvmOverloads constructor(
             }
             insertMode = false // Always reset after a stroke is complete
             updateUiFromLastStroke()
+            loupeListener?.onHistoryChanged(strokes.size)
         }
+    }
+
+    fun navigateToHistoryState(index: Int) {
+        while (strokes.size > index) {
+            undone.addLast(strokes.removeAt(strokes.lastIndex))
+        }
+        while (strokes.size < index) {
+            if (undone.isNotEmpty()) {
+                strokes.add(undone.removeLast())
+            } else {
+                break
+            }
+        }
+        redrawHistory()
+        updateUiFromLastStroke()
     }
 
     fun clearRedoHistory() {
@@ -233,6 +250,7 @@ class DrawingView @JvmOverloads constructor(
             undone.addLast(strokes.removeAt(strokes.lastIndex))
             redrawHistory()
             updateUiFromLastStroke()
+            loupeListener?.onHistoryChanged(strokes.size)
         }
     }
 
@@ -241,6 +259,7 @@ class DrawingView @JvmOverloads constructor(
             strokes.add(undone.removeLast())
             redrawHistory()
             updateUiFromLastStroke()
+            loupeListener?.onHistoryChanged(strokes.size)
         }
     }
 
@@ -250,6 +269,7 @@ class DrawingView @JvmOverloads constructor(
         currentPoints.clear()
         redrawHistory()
         updateUiFromLastStroke()
+        loupeListener?.onHistoryChanged(strokes.size)
     }
 
     private fun redrawHistory() {

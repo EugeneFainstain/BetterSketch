@@ -23,6 +23,15 @@
         </LinearLayout>
     </HorizontalScrollView>
 
+    <!-- History Slider -->
+    <SeekBar
+        android:id="@+id/seekProgress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="0"
+        android:progress="0"
+        android:padding="8dp"/>
+
     <!-- Stroke width -->
     <SeekBar
         android:id="@+id/seekWidth"
