@@ -8,21 +8,21 @@ import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
-import android.view.GestureDetector
 import android.view.MotionEvent
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.GestureDetectorCompat
+import kotlin.math.max
+import kotlin.math.min
 
 class MainActivity : AppCompatActivity(), DrawingViewListener {
 
     private lateinit var drawingView: DrawingView
     private lateinit var startView: ImageView
     private lateinit var endView: ImageView
-    private lateinit var strokeWidthSeekBar: SeekBar
+    private lateinit var widthSlider: WidthSlider
     private lateinit var colorSlider: ColorSlider
     private lateinit var progressSeekBar: SeekBar
     private lateinit var historyIndicator: HistoryIndicatorDrawable
@@ -46,9 +46,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         Color.WHITE
     )
 
-    // Flags to track double-tap state
-    private var isWidthInDoubleTap = false
-    private var isColorInDoubleTap = false
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
@@ -62,13 +59,11 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         startView = findViewById(R.id.startView)
         endView = findViewById(R.id.endView)
-        strokeWidthSeekBar = findViewById(R.id.seekWidth)
+        widthSlider = findViewById(R.id.widthSlider)
         colorSlider = findViewById(R.id.colorSlider)
         progressSeekBar = findViewById(R.id.seekProgress)
         rewButton = findViewById(R.id.btnUndo)
         ffButton = findViewById(R.id.btnRedo)
-
-        strokeWidthSeekBar.progressDrawable = WidthIndicatorDrawable()
 
         // Setup history slider with tick marks over the default rail
         historyIndicator = HistoryIndicatorDrawable()
@@ -80,7 +75,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             progressSeekBar.progressDrawable = historyIndicator
         }
 
-        setupSeekBarListeners()
+        setupSliderListeners()
 
         rewButton.setOnClickListener { drawingView.undo() }
         ffButton.setOnClickListener { drawingView.redo() }
@@ -94,44 +89,19 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         updateUi()
     }
 
-    private fun setupSeekBarListeners() {
-        // --- Width SeekBar ---
-        val widthGestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                isWidthInDoubleTap = true
-                drawingView.setStrokeWidth(strokeWidthSeekBar.progress.toFloat(), applyToLast = true)
-                return true
-            }
-        })
-
-        strokeWidthSeekBar.setOnTouchListener { _, event ->
-            widthGestureDetector.onTouchEvent(event)
-            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-                strokeWidthSeekBar.post { isWidthInDoubleTap = false }
-            }
-            false
+    private fun setupSliderListeners() {
+        // --- Width Slider ---
+        widthSlider.onValueChanged = { value ->
+            // Assuming the slider value (0-1) maps to a stroke width range (e.g., 1-120px)
+            val strokeWidth = 1f + value * 119f
+            drawingView.setStrokeWidth(strokeWidth)
         }
-
-        strokeWidthSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser && isWidthInDoubleTap) {
-                    drawingView.setStrokeWidth(progress.toFloat(), applyToLast = true)
-                }
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar) {}
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                if (!isWidthInDoubleTap) {
-                    drawingView.setStrokeWidth(seekBar.progress.toFloat(), applyToLast = false)
-                }
-            }
-        })
 
         // --- Color Slider ---
         colorSlider.colors = colors
-        colorSlider.onColorSelected = { color ->
-            drawingView.setColor(color)
+        colorSlider.onValueChanged = { value ->
+            val colorIndex = (value * (colors.size - 1)).toInt()
+            drawingView.setColor(colors[colorIndex])
         }
 
         // --- Progress SeekBar ---
@@ -143,7 +113,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
     }
@@ -170,11 +139,21 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         val currentStroke = drawingView.lastStroke
         if (currentStroke != null) {
-            strokeWidthSeekBar.progress = currentStroke.paint.strokeWidth.toInt()
-            colorSlider.selectedColor = currentStroke.paint.color
+            val widthValue = (currentStroke.paint.strokeWidth - 1f) / 119f
+            widthSlider.value = widthValue
+
+            val colorIndex = colors.indexOf(currentStroke.paint.color)
+            if (colorIndex != -1) {
+                colorSlider.value = colorIndex.toFloat() / (colors.size - 1)
+            }
         } else {
-            strokeWidthSeekBar.progress = drawingView.currentPaint.strokeWidth.toInt()
-            colorSlider.selectedColor = drawingView.currentPaint.color
+            val widthValue = (drawingView.currentPaint.strokeWidth - 1f) / 119f
+            widthSlider.value = widthValue
+
+            val colorIndex = colors.indexOf(drawingView.currentPaint.color)
+            if (colorIndex != -1) {
+                colorSlider.value = colorIndex.toFloat() / (colors.size - 1)
+            }
         }
     }
 
