@@ -24,9 +24,10 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     private lateinit var colorSeekBar: SeekBar
 
     private val colors = intArrayOf(
+        Color.BLACK,
         Color.parseColor("#FF0000"), // Red
         Color.parseColor("#FF8000"), // Orange
-        Color.parseColor("#FFFF00"), // Yellow
+        Color.parseColor("#EEEE00"), // Darker Yellow
         Color.parseColor("#80FF00"), // Chartreuse
         Color.parseColor("#00FF00"), // Green
         Color.parseColor("#00FF80"), // Spring Green
@@ -35,7 +36,8 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         Color.parseColor("#0000FF"), // Blue
         Color.parseColor("#8000FF"), // Violet
         Color.parseColor("#FF00FF"), // Magenta
-        Color.parseColor("#FF0080")  // Rose
+        Color.parseColor("#FF0080"),  // Rose
+        Color.WHITE
     )
 
     private var lastTouchX = 0f

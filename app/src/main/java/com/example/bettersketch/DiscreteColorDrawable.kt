@@ -15,6 +15,11 @@ class DiscreteColorDrawable(private val colors: IntArray) : Drawable() {
         strokeWidth = 2f
         style = Paint.Style.STROKE
     }
+    private val borderPaint = Paint().apply {
+        color = Color.GRAY
+        strokeWidth = 1f
+        style = Paint.Style.STROKE
+    }
 
     override fun draw(canvas: Canvas) {
         val bounds = bounds
@@ -36,6 +41,11 @@ class DiscreteColorDrawable(private val colors: IntArray) : Drawable() {
 
             canvas.drawRect(adjustedLeft, bounds.top.toFloat(), adjustedRight, bounds.bottom.toFloat(), paint)
 
+            // Draw a border around the white swatch to make it visible
+            if (colors[i] == Color.WHITE) {
+                canvas.drawRect(adjustedLeft, bounds.top.toFloat(), adjustedRight, bounds.bottom.toFloat(), borderPaint)
+            }
+
             // Draw separator line after each color block (except the last one)
             if (i < numColors - 1) {
                 canvas.drawLine(adjustedRight, bounds.top.toFloat(), adjustedRight, bounds.bottom.toFloat(), separatorPaint)
@@ -46,11 +56,13 @@ class DiscreteColorDrawable(private val colors: IntArray) : Drawable() {
     override fun setAlpha(alpha: Int) {
         paint.alpha = alpha
         separatorPaint.alpha = alpha
+        borderPaint.alpha = alpha
     }
 
     override fun setColorFilter(colorFilter: ColorFilter?) {
         paint.colorFilter = colorFilter
         separatorPaint.colorFilter = colorFilter
+        borderPaint.colorFilter = colorFilter
     }
 
     override fun getOpacity(): Int {
