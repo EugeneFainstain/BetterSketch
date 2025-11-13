@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -25,9 +26,10 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     private lateinit var strokeWidthSeekBar: SeekBar
     private lateinit var colorSeekBar: SeekBar
     private lateinit var progressSeekBar: SeekBar
+    private lateinit var historyIndicator: HistoryIndicatorDrawable
 
     private val colors = intArrayOf(
-        Color.BLACK,
+        Color.parseColor("#000000"), // Black
         Color.parseColor("#FF0000"), // Red
         Color.parseColor("#FF8000"), // Orange
         Color.parseColor("#EEEE00"), // Darker Yellow
@@ -40,7 +42,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         Color.parseColor("#8000FF"), // Violet
         Color.parseColor("#FF00FF"), // Magenta
         Color.parseColor("#FF0080"),  // Rose
-        Color.WHITE
+        Color.parseColor("#FFFFFF"),  // White
     )
 
     private var lastTouchX = 0f
@@ -66,6 +68,16 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
 
         strokeWidthSeekBar.progressDrawable = WidthIndicatorDrawable()
         colorSeekBar.progressDrawable = DiscreteColorDrawable(colors)
+
+        // Setup history slider with tick marks over the default rail
+        historyIndicator = HistoryIndicatorDrawable()
+        val originalProgressDrawable = progressSeekBar.progressDrawable.constantState?.newDrawable()?.mutate()
+        if (originalProgressDrawable != null) {
+            val layers = arrayOf(originalProgressDrawable, historyIndicator)
+            progressSeekBar.progressDrawable = LayerDrawable(layers)
+        } else {
+            progressSeekBar.progressDrawable = historyIndicator
+        }
 
         setupSeekBarListeners()
 
@@ -195,6 +207,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     override fun onHistoryChanged(size: Int) {
         progressSeekBar.max = size
         progressSeekBar.progress = size
+        historyIndicator.numMarkers = size + 1
     }
 
     override fun onCurrentStrokeWidthChanged(width: Float) {
