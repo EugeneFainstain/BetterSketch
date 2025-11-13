@@ -112,7 +112,7 @@ class DrawingView @JvmOverloads constructor(
             val newStroke = Stroke(currentPoints.toMutableList(), Paint(currentPaint), currentDistance)
             strokes.add(newStroke)
             currentPoints.clear()
-
+            undone.clear()
             redrawHistory()
             updateLoupes()
             listener?.onStateChanged()
@@ -133,6 +133,15 @@ class DrawingView @JvmOverloads constructor(
         redrawHistory()
         updateLoupes()
         listener?.onStateChanged()
+    }
+
+    fun deleteCurrentStroke() {
+        if (strokes.isNotEmpty()) {
+            strokes.removeAt(strokes.lastIndex)
+            redrawHistory()
+            updateLoupes()
+            listener?.onStateChanged()
+        }
     }
 
     fun getStrokeColors(): IntArray {

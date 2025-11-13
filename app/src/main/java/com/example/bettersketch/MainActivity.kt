@@ -85,7 +85,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         rewButton.setOnClickListener { drawingView.undo() }
         ffButton.setOnClickListener { drawingView.redo() }
 
-        findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.clearAll() }
+        findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.deleteCurrentStroke() }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
 
         updateUi()
