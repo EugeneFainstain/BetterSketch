@@ -18,7 +18,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GestureDetectorCompat
 
-class MainActivity : AppCompatActivity(), DrawingViewListener, ConfirmActionDialogFragment.Listener {
+class MainActivity : AppCompatActivity(), DrawingViewListener {
 
     private lateinit var drawingView: DrawingView
     private lateinit var startView: ImageView
@@ -34,7 +34,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ConfirmActionDial
         Color.BLACK,
         Color.parseColor("#FF0000"), // Red
         Color.parseColor("#FF8000"), // Orange
-        Color.parseColor("#FAFA00"), // Darker Yellow
+        Color.parseColor("#FAFA00"), // Yellow
         Color.parseColor("#80FF00"), // Chartreuse
         Color.parseColor("#00FF00"), // Green
         Color.parseColor("#00FF80"), // Spring Green
@@ -176,11 +176,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ConfirmActionDial
         updateUi()
     }
 
-    override fun onRedoHistoryDecisionRequired() {
-        if (drawingView.canFF) {
-            ConfirmActionDialogFragment().show(supportFragmentManager, "confirm_dialog")
-        }
-    }
     override fun onStartLoupeUpdate(bitmap: Bitmap?) {
         startView.setImageBitmap(bitmap)
     }
@@ -211,20 +206,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ConfirmActionDial
                 colorSeekBar.progress = colorIndex
             }
         }
-    }
-
-    override fun onConfirmDiscardRedo() {
-        drawingView.clearRedoHistory()
-        Toast.makeText(this, "Redo history cleared. You can now draw a new stroke.", Toast.LENGTH_SHORT).show()
-    }
-
-    override fun onConfirmInsertStroke() {
-        drawingView.prepareToInsertStroke()
-        Toast.makeText(this, "You can now draw. The next stroke will be inserted.", Toast.LENGTH_LONG).show()
-    }
-
-    override fun onCancel() {
-        // No-op
     }
 
     private fun saveToGallery() {

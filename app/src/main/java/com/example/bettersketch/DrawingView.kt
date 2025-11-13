@@ -11,7 +11,6 @@ import kotlin.math.sqrt
 
 interface DrawingViewListener {
     fun onStateChanged()
-    fun onRedoHistoryDecisionRequired()
     fun onStartLoupeUpdate(bitmap: Bitmap?)
     fun onEndLoupeUpdate(bitmap: Bitmap?)
 }
@@ -25,7 +24,6 @@ class DrawingView @JvmOverloads constructor(
     // Drawing state
     private var backingBitmap: Bitmap? = null
     private var backingCanvas: Canvas? = null
-    private var insertMode = false
 
     // Current tools
     private val currentPoints = mutableListOf<PathPoint>()
@@ -90,11 +88,6 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchStart(x: Float, y: Float) {
-        if (undone.isNotEmpty() && !insertMode) {
-            listener?.onRedoHistoryDecisionRequired()
-            return // Absorb the touch; wait for the user's decision.
-        }
-
         currentPoints.clear()
         currentDistance = 0f
         currentPoints.add(PathPoint(PointF(x, y), 0f))
@@ -102,7 +95,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchMove(x: Float, y: Float) {
-        if (currentPoints.isEmpty()) return // Don't draw if we're waiting for a decision
+        if (currentPoints.isEmpty()) return
 
         val lastPoint = currentPoints.last().point
         val dx = x - lastPoint.x
@@ -111,7 +104,7 @@ class DrawingView @JvmOverloads constructor(
         currentDistance += segmentLength
         currentPoints.add(PathPoint(PointF(x, y), currentDistance))
         updateLoupes()
-        invalidate() // Redraw to show the stroke in progress
+        invalidate()
     }
 
     private fun touchUp() {
@@ -119,11 +112,6 @@ class DrawingView @JvmOverloads constructor(
             val newStroke = Stroke(currentPoints.toMutableList(), Paint(currentPaint), currentDistance)
             strokes.add(newStroke)
             currentPoints.clear()
-
-            if (!insertMode) {
-                undone.clear()
-            }
-            insertMode = false // Always reset after a stroke is complete
 
             redrawHistory()
             updateLoupes()
@@ -151,15 +139,6 @@ class DrawingView @JvmOverloads constructor(
         val pastColors = strokes.map { it.paint.color }
         val futureColors = undone.reversed().map { it.paint.color }
         return (pastColors + futureColors).toIntArray()
-    }
-
-    fun clearRedoHistory() {
-        undone.clear()
-        listener?.onStateChanged()
-    }
-
-    fun prepareToInsertStroke() {
-        insertMode = true
     }
 
     fun moveStartPoint(dx: Float, dy: Float) {
