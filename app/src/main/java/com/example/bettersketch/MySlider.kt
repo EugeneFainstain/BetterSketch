@@ -6,21 +6,39 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
+import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
+import androidx.core.view.GestureDetectorCompat
 import kotlin.math.roundToInt
 
 abstract class MySlider @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    var onValueChanged: ((Float) -> Unit)? = null
+    interface OnSliderValueChangedListener {
+        fun onValueChanged(value: Float)
+        fun onValueEdit(value: Float)
+        fun onValueEditEnd()
+    }
+
+    var listener: OnSliderValueChangedListener? = null
     var value: Float = 0f
         set(value) {
             field = value.coerceIn(0f, 1f)
             invalidate()
         }
     var steps: Int = 0
+
+    private var isEditing = false
+    private val gestureDetector = GestureDetectorCompat(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            isEditing = true
+            // We don't need to handle the value here,
+            // onTouchEvent will do it.
+            return true
+        }
+    })
 
     private val selectorPaint = Paint().apply {
         color = Color.GRAY
@@ -60,24 +78,38 @@ abstract class MySlider @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_DOWN || event.action == MotionEvent.ACTION_MOVE) {
-            var newValue = if (isVertical) {
-                (event.y / height).coerceIn(0f, 1f)
-            } else {
-                (event.x / width).coerceIn(0f, 1f)
-            }
-
-            if (steps > 1) {
-                val stepIndex = (newValue * (steps - 1)).roundToInt()
-                newValue = stepIndex.toFloat() / (steps - 1)
-            }
-
-            if (newValue != value) {
-                value = newValue
-                onValueChanged?.invoke(value)
+        gestureDetector.onTouchEvent(event)
+        when (event.action) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> handleValueChange(event)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (isEditing) {
+                    listener?.onValueEditEnd()
+                }
+                isEditing = false
             }
         }
         return true
+    }
+
+    private fun handleValueChange(event: MotionEvent) {
+        var newValue = if (isVertical) {
+            (event.y / height).coerceIn(0f, 1f)
+        } else {
+            (event.x / width).coerceIn(0f, 1f)
+        }
+
+        if (steps > 1) {
+            val stepIndex = (newValue * (steps - 1)).roundToInt()
+            newValue = stepIndex.toFloat() / (steps - 1)
+        }
+
+        if (isEditing) {
+            value = newValue
+            listener?.onValueEdit(value)
+        } else if (newValue != value) {
+            value = newValue
+            listener?.onValueChanged(value)
+        }
     }
 
     companion object {

@@ -90,18 +90,42 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
     private fun setupSliderListeners() {
         // --- Width Slider ---
-        widthSlider.onValueChanged = { value ->
-            val strokeWidth = 2f + value * 30f // 2...32
-            drawingView.setStrokeWidth(strokeWidth)
+        widthSlider.listener = object : MySlider.OnSliderValueChangedListener {
+            override fun onValueChanged(value: Float) {
+                val strokeWidth = 2f + value * 30f // 2...32
+                drawingView.setStrokeWidth(strokeWidth, applyToLast = false)
+            }
+
+            override fun onValueEdit(value: Float) {
+                val strokeWidth = 2f + value * 30f // 2...32
+                drawingView.setStrokeWidth(strokeWidth, applyToLast = true)
+            }
+
+            override fun onValueEditEnd() {
+                // No action needed
+            }
         }
 
         // --- Color Slider ---
         colorSlider.colors = colors
-        colorSlider.onValueChanged = { value ->
-            val colorIndex = (value * (colors.size - 1)).roundToInt()
-            val color = colors[colorIndex]
-            drawingView.setColor(color)
-            widthSlider.color = color
+        colorSlider.listener = object : MySlider.OnSliderValueChangedListener {
+            override fun onValueChanged(value: Float) {
+                val colorIndex = (value * (colors.size - 1)).roundToInt()
+                val color = colors[colorIndex]
+                drawingView.setColor(color, applyToLast = false)
+                widthSlider.color = color
+            }
+
+            override fun onValueEdit(value: Float) {
+                val colorIndex = (value * (colors.size - 1)).roundToInt()
+                val color = colors[colorIndex]
+                drawingView.setColor(color, applyToLast = true)
+                widthSlider.color = color
+            }
+
+            override fun onValueEditEnd() {
+                // No action needed
+            }
         }
 
         // --- Progress SeekBar ---
@@ -144,6 +168,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         val colorIndex = colors.indexOf(currentPaint.color)
         if (colorIndex != -1) {
             colorSlider.value = colorIndex.toFloat() / (colors.size - 1)
+.toFloat()
         }
 
         widthSlider.color = currentPaint.color
