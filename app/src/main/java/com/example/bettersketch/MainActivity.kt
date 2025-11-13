@@ -7,13 +7,15 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.Toast
-import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.GestureDetectorCompat
 
 class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFragment.Listener {
 
@@ -43,6 +45,10 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
+    // Flags to track double-tap state
+    private var isWidthInDoubleTap = false
+    private var isColorInDoubleTap = false
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,6 +64,8 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
 
         colorSeekBar.progressDrawable = DiscreteColorDrawable(colors)
 
+        setupSeekBarListeners()
+
         startView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = true) }
         endView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = false) }
 
@@ -65,30 +73,77 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         findViewById<Button>(R.id.btnRedo).setOnClickListener { drawingView.redo() }
         findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.clearAll() }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
+    }
 
-        strokeWidthSeekBar.setOnSeekBarChangeListener(
-            object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    if (fromUser) {
-                        drawingView.setStrokeWidth(progress.toFloat().coerceAtLeast(1f))
-                    }
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
+    private fun setupSeekBarListeners() {
+        // --- Width SeekBar ---_class
+        val widthGestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                isWidthInDoubleTap = true
+                drawingView.setStrokeWidth(strokeWidthSeekBar.progress.toFloat(), applyToLast = true)
+                return true
             }
-        )
+        })
 
-        colorSeekBar.setOnSeekBarChangeListener(
-            object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    if (fromUser) {
-                        drawingView.setColor(colors[progress])
-                    }
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
+        strokeWidthSeekBar.setOnTouchListener { _, event ->
+            widthGestureDetector.onTouchEvent(event)
+            // Reset the flag when the gesture ends
+            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                // We need to post this to the end of the queue to ensure it's processed
+                // after onStopTrackingTouch has been called.
+                strokeWidthSeekBar.post { isWidthInDoubleTap = false }
             }
-        )
+            false // Let the SeekBar handle the event for thumb movement
+        }
+
+        strokeWidthSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                if (fromUser && isWidthInDoubleTap) {
+                    drawingView.setStrokeWidth(progress.toFloat(), applyToLast = true)
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                if (!isWidthInDoubleTap) {
+                    drawingView.setStrokeWidth(seekBar.progress.toFloat(), applyToLast = false)
+                }
+            }
+        })
+
+        // --- Color SeekBar ---_class
+        val colorGestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                isColorInDoubleTap = true
+                drawingView.setColor(colors[colorSeekBar.progress], applyToLast = true)
+                return true
+            }
+        })
+
+        colorSeekBar.setOnTouchListener { _, event ->
+            colorGestureDetector.onTouchEvent(event)
+            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
+                colorSeekBar.post { isColorInDoubleTap = false }
+            }
+            false
+        }
+
+        colorSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                if (fromUser && isColorInDoubleTap) {
+                    drawingView.setColor(colors[progress], applyToLast = true)
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                if (!isColorInDoubleTap) {
+                    drawingView.setColor(colors[seekBar.progress], applyToLast = false)
+                }
+            }
+        })
     }
 
     private fun handleLoupeTouch(event: MotionEvent, isStart: Boolean): Boolean {

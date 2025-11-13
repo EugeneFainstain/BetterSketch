@@ -209,19 +209,19 @@ class DrawingView @JvmOverloads constructor(
         return null
     }
 
-    fun setColor(color: Int) {
+    fun setColor(color: Int, applyToLast: Boolean = false) {
         currentPaint.color = color
-        if (strokes.isNotEmpty()) {
+        if (applyToLast && strokes.isNotEmpty()) {
             strokes.last().paint.color = color
             redrawHistory()
             updateUiFromLastStroke()
         }
     }
 
-    fun setStrokeWidth(px: Float) {
+    fun setStrokeWidth(px: Float, applyToLast: Boolean = false) {
         val w = max(1f, min(120f, px))
         currentPaint.strokeWidth = w
-        if (strokes.isNotEmpty()) {
+        if (applyToLast && strokes.isNotEmpty()) {
             strokes.last().paint.strokeWidth = w
             redrawHistory()
             updateUiFromLastStroke()
