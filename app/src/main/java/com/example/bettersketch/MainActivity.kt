@@ -50,6 +50,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     // Flags to track double-tap state
     private var isWidthInDoubleTap = false
     private var isColorInDoubleTap = false
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,6 +89,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.deleteCurrentStroke() }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
+
+        startView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = true) }
+        endView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = false) }
 
         updateUi()
     }
@@ -206,6 +211,27 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                 colorSeekBar.progress = colorIndex
             }
         }
+    }
+
+    private fun handleLoupeTouch(event: MotionEvent, isStart: Boolean): Boolean {
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                lastTouchX = event.x
+                lastTouchY = event.y
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.x - lastTouchX
+                val dy = event.y - lastTouchY
+                if (isStart) {
+                    drawingView.moveStartPoint(dx, dy)
+                } else {
+                    drawingView.moveEndPoint(dx, dy)
+                }
+                lastTouchX = event.x
+                lastTouchY = event.y
+            }
+        }
+        return true
     }
 
     private fun saveToGallery() {

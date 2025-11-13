@@ -63,8 +63,17 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        // 1. Draw the cached history
         backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
-        drawPoints(canvas, currentPoints, currentPaint)
+
+        // 2. Draw the selected stroke's halo or the in-progress stroke's halo
+        if (currentPoints.isNotEmpty()) {
+            drawStrokeWithHalo(canvas, currentPoints, currentPaint)
+        } else {
+            strokes.lastOrNull()?.let {
+                drawStrokeWithHalo(canvas, it.points, it.paint)
+            }
+        }
     }
 
     override fun onTouchEvent(ev: MotionEvent): Boolean {
@@ -73,21 +82,21 @@ class DrawingView @JvmOverloads constructor(
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 touchStart(x, y)
-                invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
                 touchMove(x, y)
-                invalidate()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 touchUp()
-                invalidate()
             }
         }
+        invalidate()
         return true
     }
 
     private fun touchStart(x: Float, y: Float) {
+        redrawHistory() // Redraw to remove halo from previous last stroke
+
         currentPoints.clear()
         currentDistance = 0f
         currentPoints.add(PathPoint(PointF(x, y), 0f))
@@ -104,7 +113,6 @@ class DrawingView @JvmOverloads constructor(
         currentDistance += segmentLength
         currentPoints.add(PathPoint(PointF(x, y), currentDistance))
         updateLoupes()
-        invalidate()
     }
 
     private fun touchUp() {
@@ -112,7 +120,7 @@ class DrawingView @JvmOverloads constructor(
             val newStroke = Stroke(currentPoints.toMutableList(), Paint(currentPaint), currentDistance)
             strokes.add(newStroke)
             currentPoints.clear()
-            undone.clear()
+
             redrawHistory()
             updateLoupes()
             listener?.onStateChanged()
@@ -207,6 +215,10 @@ class DrawingView @JvmOverloads constructor(
         val loupeSize = 200
         val zoomFactor = 1f
 
+        val tempBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val tempCanvas = Canvas(tempBitmap)
+        onDraw(tempCanvas)
+
         backingBitmap?.let {
             val loupeBitmap = Bitmap.createBitmap(loupeSize, loupeSize, Bitmap.Config.ARGB_8888)
             val loupeCanvas = Canvas(loupeBitmap)
@@ -215,14 +227,10 @@ class DrawingView @JvmOverloads constructor(
             loupeCanvas.scale(zoomFactor, zoomFactor)
             loupeCanvas.translate(-px + loupeSize / (2 * zoomFactor), -py + loupeSize / (2 * zoomFactor))
 
-            // Draw the backing bitmap (which has the ghosted strokes)
-            loupeCanvas.drawBitmap(it, 0f, 0f, null)
-            // And then draw the current stroke on top
-            drawPoints(loupeCanvas, currentPoints, currentPaint)
+            loupeCanvas.drawBitmap(tempBitmap, 0f, 0f, null)
 
             loupeCanvas.restore()
 
-            // Draw a border
             val borderPaint = Paint().apply {
                 color = Color.GRAY
                 style = Paint.Style.STROKE
@@ -233,6 +241,18 @@ class DrawingView @JvmOverloads constructor(
             return loupeBitmap
         }
         return null
+    }
+
+    private fun drawStrokeWithHalo(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
+        // 1. Draw the halo
+        val haloPaint = Paint(paint).apply {
+            color = Color.LTGRAY
+            strokeWidth = paint.strokeWidth + 32f
+        }
+        drawPoints(canvas, points, haloPaint)
+
+        // 2. Draw the actual stroke on top
+        drawPoints(canvas, points, paint)
     }
 
     fun setColor(color: Int, applyToLast: Boolean = false) {
