@@ -139,6 +139,10 @@ class DrawingView @JvmOverloads constructor(
         updateUiFromLastStroke()
     }
 
+    fun getStrokeColors(): IntArray {
+        return strokes.map { it.paint.color }.toIntArray()
+    }
+
     fun clearRedoHistory() {
         undone.clear()
     }

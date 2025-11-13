@@ -29,7 +29,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     private lateinit var historyIndicator: HistoryIndicatorDrawable
 
     private val colors = intArrayOf(
-        Color.parseColor("#000000"), // Black
+        Color.BLACK,
         Color.parseColor("#FF0000"), // Red
         Color.parseColor("#FF8000"), // Orange
         Color.parseColor("#EEEE00"), // Darker Yellow
@@ -42,7 +42,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         Color.parseColor("#8000FF"), // Violet
         Color.parseColor("#FF00FF"), // Magenta
         Color.parseColor("#FF0080"),  // Rose
-        Color.parseColor("#FFFFFF"),  // White
+        Color.WHITE
     )
 
     private var lastTouchX = 0f
@@ -207,7 +207,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
     override fun onHistoryChanged(size: Int) {
         progressSeekBar.max = size
         progressSeekBar.progress = size
-        historyIndicator.numMarkers = size + 1
+        historyIndicator.strokeColors = drawingView.getStrokeColors()
     }
 
     override fun onCurrentStrokeWidthChanged(width: Float) {

@@ -10,11 +10,10 @@ import android.graphics.drawable.Drawable
 class HistoryIndicatorDrawable : Drawable() {
 
     private val paint = Paint().apply {
-        color = Color.LTGRAY
         strokeWidth = 2f
     }
 
-    var numMarkers = 0
+    var strokeColors: IntArray = intArrayOf()
         set(value) {
             field = value
             invalidateSelf()
@@ -22,13 +21,30 @@ class HistoryIndicatorDrawable : Drawable() {
 
     override fun draw(canvas: Canvas) {
         val bounds = bounds
-        if (numMarkers <= 1) return
+        val numStrokes = strokeColors.size
+        val numMarkers = numStrokes + 1 // Add one for the initial empty state
+        val tickWidth = 16f
 
-        val segmentWidth = bounds.width().toFloat() / (numMarkers - 1)
+        if (numMarkers <= 1) {
+            // If there are no strokes, just draw a single grey marker at the start
+            paint.color = Color.LTGRAY
+            val x = bounds.left.toFloat()
+            canvas.drawRect(x - tickWidth / 2, bounds.top.toFloat(), x + tickWidth / 2, bounds.bottom.toFloat(), paint)
+            return
+        }
 
-        for (i in 0 until numMarkers) {
-            val x = bounds.left + i * segmentWidth
-            canvas.drawLine(x, bounds.top.toFloat(), x, bounds.bottom.toFloat(), paint)
+        val segmentWidth = bounds.width().toFloat() / numStrokes
+
+        // Draw the first marker as gray for the initial empty state
+        paint.color = Color.LTGRAY
+        val startX = bounds.left.toFloat()
+        canvas.drawRect(startX - tickWidth / 2, bounds.top.toFloat(), startX + tickWidth / 2, bounds.bottom.toFloat(), paint)
+
+        // Draw a marker for each stroke with its color
+        for (i in strokeColors.indices) {
+            paint.color = strokeColors[i]
+            val x = bounds.left + (i + 1) * segmentWidth
+            canvas.drawRect(x - tickWidth / 2, bounds.top.toFloat(), x + tickWidth / 2, bounds.bottom.toFloat(), paint)
         }
     }
 
