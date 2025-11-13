@@ -30,7 +30,8 @@
         android:layout_height="wrap_content"
         android:max="60"
         android:progress="12"
-        android:padding="8dp"/>
+        android:padding="8dp"
+        android:splitTrack="false"/>
 
     <!-- Color slider -->
     <SeekBar

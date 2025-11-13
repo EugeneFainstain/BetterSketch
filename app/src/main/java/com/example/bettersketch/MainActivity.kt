@@ -62,6 +62,7 @@ class MainActivity : AppCompatActivity(), LoupeListener, ConfirmActionDialogFrag
         strokeWidthSeekBar = findViewById(R.id.seekWidth)
         colorSeekBar = findViewById(R.id.seekColor)
 
+        strokeWidthSeekBar.progressDrawable = WidthIndicatorDrawable()
         colorSeekBar.progressDrawable = DiscreteColorDrawable(colors)
 
         setupSeekBarListeners()
