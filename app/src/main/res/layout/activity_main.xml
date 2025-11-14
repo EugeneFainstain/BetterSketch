@@ -77,46 +77,39 @@
             android:layout_marginTop="-2dp"
             android:layout_marginLeft="32dp"
             android:text="DEL"/>
-    </FrameLayout>
-
-    <!-- Loupe views -->
-    <LinearLayout
-        android:id="@+id/loupeContainer"
-        android:layout_width="match_parent"
-        android:layout_height="100dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <Button
-            android:id="@+id/btnUndo"
-            android:layout_width="90dp"
-            android:layout_height="90dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:padding="0dp"
-            android:textSize="12sp"
-            android:layout_marginStart="0dp"
-            android:text="REW"/>
 
         <ImageView
             android:id="@+id/loupeView"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
+            android:layout_width="150dp"
+            android:layout_height="100dp"
+            android:layout_gravity="bottom|center_horizontal"
             android:background="#E0E0E0"
             android:contentDescription="Selected endpoint"
             android:scaleType="centerInside" />
 
         <Button
+            android:id="@+id/btnUndo"
+            android:layout_width="90dp"
+            android:layout_height="90dp"
+            android:layout_gravity="bottom|start"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:padding="0dp"
+            android:layout_marginLeft="32dp"
+            android:textSize="12sp"
+            android:text="REW"/>
+
+        <Button
             android:id="@+id/btnRedo"
             android:layout_width="90dp"
             android:layout_height="90dp"
+            android:layout_gravity="bottom|end"
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:padding="0dp"
             android:textSize="12sp"
-            android:layout_marginEnd="0dp"
+            android:layout_marginRight="32dp"
             android:text="FF"/>
-    </LinearLayout>
+    </FrameLayout>
 
 </LinearLayout>

@@ -35,7 +35,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var historyIndicator: HistoryIndicatorDrawable
     private lateinit var rewButton: Button
     private lateinit var ffButton: Button
-    private lateinit var loupeContainer: LinearLayout
     private lateinit var toggleModeButton: Button
 
     private val colors = intArrayOf(
@@ -94,7 +93,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         progressSeekBar = findViewById(R.id.seekProgress)
         rewButton = findViewById(R.id.btnUndo)
         ffButton = findViewById(R.id.btnRedo)
-        loupeContainer = findViewById(R.id.loupeContainer)
         toggleModeButton = findViewById(R.id.btnToggleMode)
 
         // Setup history slider with tick marks over the default rail
@@ -122,7 +120,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             updateUi()
         }
 
-        loupeContainer.setOnTouchListener(::handleLoupeTouch)
+        loupeView.setOnTouchListener(::handleLoupeTouch)
 
         // Trigger an initial update to draw the loupes
         drawingView.post { updateUi() }
@@ -133,9 +131,19 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         if (isEditingMode) {
             toggleModeButton.text = "EDITING"
             toggleModeButton.setBackgroundColor(Color.parseColor("#BB0000")) // Darker Red
+            loupeView.visibility = View.VISIBLE
+            rewButton.visibility = View.VISIBLE
+            ffButton.visibility = View.VISIBLE
+            drawingView.setOnTouchListener(null)
+            loupeView.setOnTouchListener(::handleLoupeTouch)
         } else {
             toggleModeButton.text = "DRAWING"
             toggleModeButton.setBackgroundColor(Color.parseColor("#008800")) // Darker Green
+            loupeView.visibility = View.GONE
+            rewButton.visibility = View.GONE
+            ffButton.visibility = View.GONE
+            drawingView.setOnTouchListener { _, event -> drawingView.onTouchEvent(event) }
+            loupeView.setOnTouchListener(null)
         }
     }
 
@@ -206,9 +214,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                 drawingView.setStrokeWidth(strokeWidth, applyToLast = true)
             }
 
-            override fun onValueEditEnd() {
-                // No action needed
-            }
+            override fun onValueEditEnd() {} // No action needed
         }
 
         // --- Color Slider ---
@@ -228,9 +234,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                 widthSlider.color = color
             }
 
-            override fun onValueEditEnd() {
-                // No action needed
-            }
+            override fun onValueEditEnd() {} // No action needed
         }
 
         // --- Progress SeekBar ---
@@ -284,6 +288,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     }
 
     private fun handleLoupeTouch(v: View, event: MotionEvent): Boolean {
+        if (!isEditingMode) return true 
+
         val action = event.actionMasked
 
         // Handle multi-finger gestures for transform
