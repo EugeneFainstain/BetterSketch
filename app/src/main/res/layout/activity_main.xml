@@ -63,6 +63,7 @@
 
     <!-- Loupe views -->
     <LinearLayout
+        android:id="@+id/loupeContainer"
         android:layout_width="match_parent"
         android:layout_height="100dp"
         android:gravity="center_vertical"

@@ -4,17 +4,22 @@ import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.MotionEvent
+import android.view.View
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import kotlin.math.atan2
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 class MainActivity : AppCompatActivity(), DrawingViewListener {
 
@@ -27,6 +32,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var historyIndicator: HistoryIndicatorDrawable
     private lateinit var rewButton: Button
     private lateinit var ffButton: Button
+    private lateinit var loupeContainer: LinearLayout
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -45,10 +51,17 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         Color.WHITE
     )
 
-    private var lastStartX = 0f
-    private var lastStartY = 0f
-    private var lastEndX = 0f
-    private var lastEndY = 0f
+    // Multi-touch tracking
+    private var lastMidpointX = 0f
+    private var lastMidpointY = 0f
+    private var lastAngle = 0f
+    private var lastDistance = 0f
+
+    // Single-touch tracking
+    private var isDraggingStart = false
+    private var isDraggingEnd = false
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,6 +78,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         progressSeekBar = findViewById(R.id.seekProgress)
         rewButton = findViewById(R.id.btnUndo)
         ffButton = findViewById(R.id.btnRedo)
+        loupeContainer = findViewById(R.id.loupeContainer)
 
         // Setup history slider with tick marks over the default rail
         historyIndicator = HistoryIndicatorDrawable()
@@ -84,8 +98,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.deleteCurrentStroke() }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
 
-        startView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = true) }
-        endView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = false) }
+        loupeContainer.setOnTouchListener(::handleLoupeTouch)
 
         // Trigger an initial update to draw the loupes
         drawingView.post { drawingView.updateLoupes(startView.width, startView.height, endView.width, endView.height) }
@@ -177,35 +190,93 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         drawingView.updateLoupes(startView.width, startView.height, endView.width, endView.height)
     }
 
-    private fun handleLoupeTouch(event: MotionEvent, isStart: Boolean): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
-                if (isStart) {
-                    lastStartX = event.x
-                    lastStartY = event.y
-                } else {
-                    lastEndX = event.x
-                    lastEndY = event.y
-                }
+    private fun handleLoupeTouch(v: View, event: MotionEvent): Boolean {
+        val action = event.actionMasked
+
+        // Handle multi-finger gestures for transform
+        if (event.pointerCount >= 2) {
+            isDraggingStart = false
+            isDraggingEnd = false
+            if (action == MotionEvent.ACTION_POINTER_DOWN || (action == MotionEvent.ACTION_DOWN && event.pointerCount > 1)) {
+                lastDistance = distance(event)
+                lastAngle = angle(event)
+                val midpoint = midpoint(event)
+                lastMidpointX = midpoint.x
+                lastMidpointY = midpoint.y
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                val newDist = distance(event)
+                val newAngle = angle(event)
+                val midpoint = midpoint(event)
+
+                val scale = if (lastDistance > 0) newDist / lastDistance else 1f
+                val rotate = newAngle - lastAngle
+                val translateX = midpoint.x - lastMidpointX
+                val translateY = midpoint.y - lastMidpointY
+
+                drawingView.transformLastStroke(translateX, translateY, scale, rotate)
+
+                lastDistance = newDist
+                lastAngle = newAngle
+                lastMidpointX = midpoint.x
+                lastMidpointY = midpoint.y
             }
-            MotionEvent.ACTION_MOVE -> {
-                if (isStart) {
-                    val dx = event.x - lastStartX
-                    val dy = event.y - lastStartY
-                    drawingView.moveStartPoint(dx, dy)
-                    lastStartX = event.x
-                    lastStartY = event.y
-                } else {
-                    val dx = event.x - lastEndX
-                    val dy = event.y - lastEndY
-                    drawingView.moveEndPoint(dx, dy)
-                    lastEndX = event.x
-                    lastEndY = event.y
+        }
+        // Handle single-finger gestures for moving start/end points
+        else if (event.pointerCount == 1) {
+            when (action) {
+                MotionEvent.ACTION_DOWN -> {
+                    lastTouchX = event.x
+                    lastTouchY = event.y
+
+                    val startRect = Rect()
+                    startView.getHitRect(startRect)
+                    isDraggingStart = startRect.contains(event.x.toInt(), event.y.toInt())
+
+                    val endRect = Rect()
+                    endView.getHitRect(endRect)
+                    isDraggingEnd = !isDraggingStart && endRect.contains(event.x.toInt(), event.y.toInt())
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.x - lastTouchX
+                    val dy = event.y - lastTouchY
+
+                    if (isDraggingStart) {
+                        drawingView.moveStartPoint(dx, dy)
+                    } else if (isDraggingEnd) {
+                        drawingView.moveEndPoint(dx, dy)
+                    }
+
+                    lastTouchX = event.x
+                    lastTouchY = event.y
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    isDraggingStart = false
+                    isDraggingEnd = false
                 }
             }
         }
         return true
     }
+
+
+    private fun distance(event: MotionEvent): Float {
+        val dx = event.getX(0) - event.getX(1)
+        val dy = event.getY(0) - event.getY(1)
+        return sqrt(dx * dx + dy * dy)
+    }
+
+    private fun angle(event: MotionEvent): Float {
+        val dx = event.getX(0) - event.getX(1)
+        val dy = event.getY(0) - event.getY(1)
+        return atan2(dy, dx) * (180f / Math.PI.toFloat())
+    }
+
+    private fun midpoint(event: MotionEvent): android.graphics.PointF {
+        val x = (event.getX(0) + event.getX(1)) / 2f
+        val y = (event.getY(0) + event.getY(1)) / 2f
+        return android.graphics.PointF(x, y)
+    }
+
 
     private fun saveToGallery() {
         val bmp: Bitmap = drawingView.exportBitmap()

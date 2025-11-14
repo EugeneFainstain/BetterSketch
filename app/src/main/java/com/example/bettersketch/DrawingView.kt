@@ -155,6 +155,30 @@ class DrawingView @JvmOverloads constructor(
         return (pastColors + futureColors).toIntArray()
     }
 
+    fun transformLastStroke(translateX: Float, translateY: Float, scale: Float, rotate: Float) {
+        lastStroke?.let {
+            val bounds = it.getBounds()
+            val centerX = bounds.centerX()
+            val centerY = bounds.centerY()
+
+            val matrix = Matrix()
+            matrix.postTranslate(translateX, translateY)
+            matrix.postScale(scale, scale, centerX + translateX, centerY + translateY)
+            matrix.postRotate(rotate, centerX + translateX, centerY + translateY)
+
+            val pts = it.points.flatMap { listOf(it.point.x, it.point.y) }.toFloatArray()
+            matrix.mapPoints(pts)
+
+            for ((index, pathPoint) in it.points.withIndex()) {
+                pathPoint.point.x = pts[index * 2]
+                pathPoint.point.y = pts[index * 2 + 1]
+            }
+
+            redrawHistory()
+            listener?.onStateChanged()
+        }
+    }
+
     fun moveStartPoint(dx: Float, dy: Float) {
         if (strokes.isNotEmpty()) {
             val lastStroke = strokes.last()
