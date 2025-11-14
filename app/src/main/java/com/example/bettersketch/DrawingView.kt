@@ -11,8 +11,11 @@ import kotlin.math.sqrt
 
 interface DrawingViewListener {
     fun onStateChanged()
-    fun onStartLoupeUpdate(bitmap: Bitmap?)
-    fun onEndLoupeUpdate(bitmap: Bitmap?)
+    fun onLoupeUpdate(bitmap: Bitmap?)
+}
+
+enum class SelectedEnd {
+    START, END, NONE
 }
 
 class DrawingView @JvmOverloads constructor(
@@ -209,28 +212,23 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    fun updateLoupes(startWidth: Int, startHeight: Int, endWidth: Int, endHeight: Int) {
+    fun updateLoupes(loupeWidth: Int, loupeHeight: Int, selectedEnd: SelectedEnd) {
+        var point: PointF? = null
         if (currentPoints.isNotEmpty()) {
-            // Stroke in progress
-            val start = currentPoints.first().point
-            val end = currentPoints.last().point
-            listener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y, startWidth, startHeight))
-            listener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y, endWidth, endHeight))
+            point = if (selectedEnd == SelectedEnd.START) currentPoints.first().point else currentPoints.last().point
         } else if (strokes.isNotEmpty()) {
-            // Show last completed stroke
             val lastStroke = strokes.last()
-            val start = lastStroke.points.first().point
-            val end = lastStroke.points.last().point
-            listener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y, startWidth, startHeight))
-            listener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y, endWidth, endHeight))
+            point = if (selectedEnd == SelectedEnd.START) lastStroke.points.first().point else lastStroke.points.last().point
+        }
+        
+        if (point != null) {
+            listener?.onLoupeUpdate(createLoupeBitmap(point.x, point.y, loupeWidth, loupeHeight, true))
         } else {
-            // Nothing to show
-            listener?.onStartLoupeUpdate(null)
-            listener?.onEndLoupeUpdate(null)
+            listener?.onLoupeUpdate(null)
         }
     }
 
-    private fun createLoupeBitmap(px: Float, py: Float, loupeWidth: Int, loupeHeight: Int): Bitmap? {
+    private fun createLoupeBitmap(px: Float, py: Float, loupeWidth: Int, loupeHeight: Int, isSelected: Boolean): Bitmap? {
         if (loupeWidth <= 0 || loupeHeight <= 0) return null
 
         val zoomFactor = 1f
@@ -252,9 +250,9 @@ class DrawingView @JvmOverloads constructor(
             loupeCanvas.restore()
 
             val borderPaint = Paint().apply {
-                color = Color.GRAY
+                color = if (isSelected) Color.BLUE else Color.GRAY
                 style = Paint.Style.STROKE
-                strokeWidth = 4f
+                strokeWidth = if (isSelected) 8f else 4f
             }
             loupeCanvas.drawRect(0f, 0f, loupeWidth.toFloat(), loupeHeight.toFloat(), borderPaint)
 

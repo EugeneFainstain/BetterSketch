@@ -26,8 +26,7 @@ import kotlin.math.sqrt
 class MainActivity : AppCompatActivity(), DrawingViewListener {
 
     private lateinit var drawingView: DrawingView
-    private lateinit var startView: ImageView
-    private lateinit var endView: ImageView
+    private lateinit var loupeView: ImageView
     private lateinit var widthSlider: WidthSlider
     private lateinit var colorSlider: ColorSlider
     private lateinit var progressSeekBar: SeekBar
@@ -60,14 +59,17 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private var lastDistance = 0f
 
     // Single-touch tracking
-    private var isDraggingStart = false
-    private var isDraggingEnd = false
+    private var isDraggingLoupe = false
     private var lastTouchX = 0f
     private var lastTouchY = 0f
-
+    
     // Auto-repeat for buttons
     private val handler = Handler(Looper.getMainLooper())
     private var autoRepeatRunnable: Runnable? = null
+
+    // Endpoint selection
+    private var selectedEnd: SelectedEnd = SelectedEnd.START
+
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,8 +79,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         drawingView = findViewById(R.id.drawingView)
         drawingView.listener = this
 
-        startView = findViewById(R.id.startView)
-        endView = findViewById(R.id.endView)
+        loupeView = findViewById(R.id.loupeView)
         widthSlider = findViewById(R.id.widthSlider)
         colorSlider = findViewById(R.id.colorSlider)
         progressSeekBar = findViewById(R.id.seekProgress)
@@ -99,13 +100,14 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         setupSliderListeners()
         setupAutoRepeatListeners()
 
+
         findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.deleteCurrentStroke() }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
 
         loupeContainer.setOnTouchListener(::handleLoupeTouch)
 
         // Trigger an initial update to draw the loupes
-        drawingView.post { drawingView.updateLoupes(startView.width, startView.height, endView.width, endView.height) }
+        drawingView.post { updateUi() }
     }
 
     private fun setupAutoRepeatListeners() {
@@ -134,8 +136,32 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             }
         }
 
-        rewButton.setOnTouchListener(repeatListener(drawingView::undo))
-        ffButton.setOnTouchListener(repeatListener(drawingView::redo))
+        rewButton.setOnTouchListener(repeatListener(::doRew))
+        ffButton.setOnTouchListener(repeatListener(::doFf))
+    }
+
+    private fun doFf() {
+        if (selectedEnd == SelectedEnd.START) {
+            selectedEnd = SelectedEnd.END
+            updateUi()
+        } else {
+            if (drawingView.canFF) {
+                selectedEnd = SelectedEnd.START
+                drawingView.redo()
+            }
+        }
+    }
+
+    private fun doRew() {
+        if (selectedEnd == SelectedEnd.END) {
+            selectedEnd = SelectedEnd.START
+            updateUi()
+        } else {
+            if (drawingView.canRewind) {
+                selectedEnd = SelectedEnd.END
+                drawingView.undo()
+            }
+        }
     }
 
     private fun setupSliderListeners() {
@@ -195,17 +221,13 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         updateUi()
     }
 
-    override fun onStartLoupeUpdate(bitmap: Bitmap?) {
-        startView.setImageBitmap(bitmap)
-    }
-
-    override fun onEndLoupeUpdate(bitmap: Bitmap?) {
-        endView.setImageBitmap(bitmap)
+    override fun onLoupeUpdate(bitmap: Bitmap?) {
+        loupeView.setImageBitmap(bitmap)
     }
 
     private fun updateUi() {
-        rewButton.isEnabled = drawingView.canRewind
-        ffButton.isEnabled = drawingView.canFF
+        rewButton.isEnabled = drawingView.canRewind || selectedEnd == SelectedEnd.END
+        ffButton.isEnabled = drawingView.canFF || selectedEnd == SelectedEnd.START
 
         progressSeekBar.max = drawingView.historySize
         progressSeekBar.progress = drawingView.currentHistoryPosition
@@ -221,7 +243,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         }
 
         widthSlider.color = currentPaint.color
-        drawingView.updateLoupes(startView.width, startView.height, endView.width, endView.height)
+        drawingView.updateLoupes(loupeView.width, loupeView.height, selectedEnd)
     }
 
     private fun handleLoupeTouch(v: View, event: MotionEvent): Boolean {
@@ -229,8 +251,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         // Handle multi-finger gestures for transform
         if (event.pointerCount >= 2) {
-            isDraggingStart = false
-            isDraggingEnd = false
+            isDraggingLoupe = false
             if (action == MotionEvent.ACTION_POINTER_DOWN || (action == MotionEvent.ACTION_DOWN && event.pointerCount > 1)) {
                 lastDistance = distance(event)
                 lastAngle = angle(event)
@@ -255,37 +276,33 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                 lastMidpointY = midpoint.y
             }
         }
-        // Handle single-finger gestures for moving start/end points
+        // Handle single-finger gestures for moving the selected endpoint
         else if (event.pointerCount == 1) {
             when (action) {
                 MotionEvent.ACTION_DOWN -> {
-                    lastTouchX = event.x
-                    lastTouchY = event.y
-
-                    val startRect = Rect()
-                    startView.getHitRect(startRect)
-                    isDraggingStart = startRect.contains(event.x.toInt(), event.y.toInt())
-
-                    val endRect = Rect()
-                    endView.getHitRect(endRect)
-                    isDraggingEnd = !isDraggingStart && endRect.contains(event.x.toInt(), event.y.toInt())
+                    val loupeRect = Rect()
+                    loupeView.getHitRect(loupeRect)
+                    if (loupeRect.contains(event.x.toInt(), event.y.toInt())) {
+                        isDraggingLoupe = true
+                        lastTouchX = event.x
+                        lastTouchY = event.y
+                    }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = event.x - lastTouchX
-                    val dy = event.y - lastTouchY
-
-                    if (isDraggingStart) {
-                        drawingView.moveStartPoint(dx, dy)
-                    } else if (isDraggingEnd) {
-                        drawingView.moveEndPoint(dx, dy)
+                    if (isDraggingLoupe) {
+                        val dx = event.x - lastTouchX
+                        val dy = event.y - lastTouchY
+                        if (selectedEnd == SelectedEnd.START) {
+                            drawingView.moveStartPoint(dx, dy)
+                        } else if (selectedEnd == SelectedEnd.END) {
+                            drawingView.moveEndPoint(dx, dy)
+                        }
+                        lastTouchX = event.x
+                        lastTouchY = event.y
                     }
-
-                    lastTouchX = event.x
-                    lastTouchY = event.y
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    isDraggingStart = false
-                    isDraggingEnd = false
+                    isDraggingLoupe = false
                 }
             }
         }

@@ -81,12 +81,12 @@
             android:text="REW"/>
 
         <ImageView
-            android:id="@+id/startView"
+            android:id="@+id/loupeView"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="#E0E0E0"
-            android:contentDescription="Start of stroke"
+            android:contentDescription="Selected endpoint"
             android:scaleType="centerInside" />
 
         <Button
@@ -98,15 +98,6 @@
             android:padding="0dp"
             android:textSize="12sp"
             android:text="DEL"/>
-
-        <ImageView
-            android:id="@+id/endView"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="#E0E0E0"
-            android:contentDescription="End of stroke"
-            android:scaleType="centerInside" />
 
         <Button
             android:id="@+id/btnRedo"
