@@ -100,7 +100,7 @@ class DrawingView @JvmOverloads constructor(
         currentPoints.clear()
         currentDistance = 0f
         currentPoints.add(PathPoint(PointF(x, y), 0f))
-        updateLoupes()
+        listener?.onStateChanged()
     }
 
     private fun touchMove(x: Float, y: Float) {
@@ -112,7 +112,7 @@ class DrawingView @JvmOverloads constructor(
         val segmentLength = sqrt(dx * dx + dy * dy)
         currentDistance += segmentLength
         currentPoints.add(PathPoint(PointF(x, y), currentDistance))
-        updateLoupes()
+        listener?.onStateChanged()
     }
 
     private fun touchUp() {
@@ -122,7 +122,6 @@ class DrawingView @JvmOverloads constructor(
             currentPoints.clear()
 
             redrawHistory()
-            updateLoupes()
             listener?.onStateChanged()
         }
     }
@@ -139,7 +138,6 @@ class DrawingView @JvmOverloads constructor(
             }
         }
         redrawHistory()
-        updateLoupes()
         listener?.onStateChanged()
     }
 
@@ -147,7 +145,6 @@ class DrawingView @JvmOverloads constructor(
         if (strokes.isNotEmpty()) {
             strokes.removeAt(strokes.lastIndex)
             redrawHistory()
-            updateLoupes()
             listener?.onStateChanged()
         }
     }
@@ -169,7 +166,6 @@ class DrawingView @JvmOverloads constructor(
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
             redrawHistory()
-            updateLoupes()
             listener?.onStateChanged()
         }
     }
@@ -185,25 +181,24 @@ class DrawingView @JvmOverloads constructor(
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
             redrawHistory()
-            updateLoupes()
             listener?.onStateChanged()
         }
     }
 
-    private fun updateLoupes() {
+    fun updateLoupes(startWidth: Int, startHeight: Int, endWidth: Int, endHeight: Int) {
         if (currentPoints.isNotEmpty()) {
             // Stroke in progress
             val start = currentPoints.first().point
             val end = currentPoints.last().point
-            listener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y))
-            listener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y))
+            listener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y, startWidth, startHeight))
+            listener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y, endWidth, endHeight))
         } else if (strokes.isNotEmpty()) {
             // Show last completed stroke
             val lastStroke = strokes.last()
             val start = lastStroke.points.first().point
             val end = lastStroke.points.last().point
-            listener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y))
-            listener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y))
+            listener?.onStartLoupeUpdate(createLoupeBitmap(start.x, start.y, startWidth, startHeight))
+            listener?.onEndLoupeUpdate(createLoupeBitmap(end.x, end.y, endWidth, endHeight))
         } else {
             // Nothing to show
             listener?.onStartLoupeUpdate(null)
@@ -211,21 +206,22 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun createLoupeBitmap(px: Float, py: Float): Bitmap? {
-        val loupeSize = 200
+    private fun createLoupeBitmap(px: Float, py: Float, loupeWidth: Int, loupeHeight: Int): Bitmap? {
+        if (loupeWidth <= 0 || loupeHeight <= 0) return null
+
         val zoomFactor = 1f
 
         val tempBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val tempCanvas = Canvas(tempBitmap)
-        onDraw(tempCanvas)
+        draw(tempCanvas)
 
         backingBitmap?.let {
-            val loupeBitmap = Bitmap.createBitmap(loupeSize, loupeSize, Bitmap.Config.ARGB_8888)
+            val loupeBitmap = Bitmap.createBitmap(loupeWidth, loupeHeight, Bitmap.Config.ARGB_8888)
             val loupeCanvas = Canvas(loupeBitmap)
 
             loupeCanvas.save()
             loupeCanvas.scale(zoomFactor, zoomFactor)
-            loupeCanvas.translate(-px + loupeSize / (2 * zoomFactor), -py + loupeSize / (2 * zoomFactor))
+            loupeCanvas.translate(-px + loupeWidth / (2 * zoomFactor), -py + loupeHeight / (2 * zoomFactor))
 
             loupeCanvas.drawBitmap(tempBitmap, 0f, 0f, null)
 
@@ -236,7 +232,7 @@ class DrawingView @JvmOverloads constructor(
                 style = Paint.Style.STROKE
                 strokeWidth = 4f
             }
-            loupeCanvas.drawRect(0f, 0f, loupeSize.toFloat(), loupeSize.toFloat(), borderPaint)
+            loupeCanvas.drawRect(0f, 0f, loupeWidth.toFloat(), loupeHeight.toFloat(), borderPaint)
 
             return loupeBitmap
         }
@@ -260,7 +256,6 @@ class DrawingView @JvmOverloads constructor(
         if (applyToLast && strokes.isNotEmpty()) {
             strokes.last().paint.color = color
             redrawHistory()
-            updateLoupes()
             listener?.onStateChanged()
         }
     }
@@ -271,7 +266,6 @@ class DrawingView @JvmOverloads constructor(
         if (applyToLast && strokes.isNotEmpty()) {
             strokes.last().paint.strokeWidth = w
             redrawHistory()
-            updateLoupes()
             listener?.onStateChanged()
         }
     }
@@ -293,7 +287,6 @@ class DrawingView @JvmOverloads constructor(
         undone.clear()
         currentPoints.clear()
         redrawHistory()
-        updateLoupes()
         listener?.onStateChanged()
     }
 

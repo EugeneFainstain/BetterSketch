@@ -45,8 +45,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         Color.WHITE
     )
 
-    private var lastTouchX = 0f
-    private var lastTouchY = 0f
+    private var lastStartX = 0f
+    private var lastStartY = 0f
+    private var lastEndX = 0f
+    private var lastEndY = 0f
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,7 +87,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         startView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = true) }
         endView.setOnTouchListener { _, event -> handleLoupeTouch(event, isStart = false) }
 
-        updateUi()
+        // Trigger an initial update to draw the loupes
+        drawingView.post { drawingView.updateLoupes(startView.width, startView.height, endView.width, endView.height) }
     }
 
     private fun setupSliderListeners() {
@@ -168,28 +171,37 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         val colorIndex = colors.indexOf(currentPaint.color)
         if (colorIndex != -1) {
             colorSlider.value = colorIndex.toFloat() / (colors.size - 1)
-.toFloat()
         }
 
         widthSlider.color = currentPaint.color
+        drawingView.updateLoupes(startView.width, startView.height, endView.width, endView.height)
     }
 
     private fun handleLoupeTouch(event: MotionEvent, isStart: Boolean): Boolean {
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
-                lastTouchX = event.x
-                lastTouchY = event.y
+                if (isStart) {
+                    lastStartX = event.x
+                    lastStartY = event.y
+                } else {
+                    lastEndX = event.x
+                    lastEndY = event.y
+                }
             }
             MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - lastTouchX
-                val dy = event.y - lastTouchY
                 if (isStart) {
+                    val dx = event.x - lastStartX
+                    val dy = event.y - lastStartY
                     drawingView.moveStartPoint(dx, dy)
+                    lastStartX = event.x
+                    lastStartY = event.y
                 } else {
+                    val dx = event.x - lastEndX
+                    val dy = event.y - lastEndY
                     drawingView.moveEndPoint(dx, dy)
+                    lastEndX = event.x
+                    lastEndY = event.y
                 }
-                lastTouchX = event.x
-                lastTouchY = event.y
             }
         }
         return true

@@ -6,10 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
-import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
-import androidx.core.view.GestureDetectorCompat
 import kotlin.math.roundToInt
 
 abstract class MySlider @JvmOverloads constructor(
@@ -31,14 +29,7 @@ abstract class MySlider @JvmOverloads constructor(
     var steps: Int = 0
 
     private var isEditing = false
-    private val gestureDetector = GestureDetectorCompat(context, object : GestureDetector.SimpleOnGestureListener() {
-        override fun onDoubleTap(e: MotionEvent): Boolean {
-            isEditing = true
-            // We don't need to handle the value here,
-            // onTouchEvent will do it.
-            return true
-        }
-    })
+    private var lastTapTime = 0L
 
     private val selectorPaint = Paint().apply {
         color = Color.GRAY
@@ -78,14 +69,21 @@ abstract class MySlider @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        gestureDetector.onTouchEvent(event)
         when (event.action) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> handleValueChange(event)
+            MotionEvent.ACTION_DOWN -> {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastTapTime < 500) {
+                    isEditing = true
+                }
+                lastTapTime = currentTime
+                handleValueChange(event)
+            }
+            MotionEvent.ACTION_MOVE -> handleValueChange(event)
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (isEditing) {
                     listener?.onValueEditEnd()
+                    isEditing = false
                 }
-                isEditing = false
             }
         }
         return true
