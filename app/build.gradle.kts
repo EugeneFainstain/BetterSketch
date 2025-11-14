@@ -10,7 +10,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.bettersketch2" // APP_NAME - change name here!
+        applicationId = "com.example.bettersketch3" // APP_NAME - change name here!
         minSdk = 24
         targetSdk = 36
         versionCode = 1
