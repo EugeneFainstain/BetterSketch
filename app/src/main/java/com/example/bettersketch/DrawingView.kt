@@ -5,6 +5,7 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import kotlin.math.atan2
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -50,6 +51,12 @@ class DrawingView @JvmOverloads constructor(
     // History for undo/redo
     private val strokes = mutableListOf<Stroke>()
     private val undone = ArrayDeque<Stroke>()
+
+    // Transformation state
+    private var lastMidpoint = PointF()
+    private var lastDistance = 0f
+    private var lastAngle = 0f
+    private var isTransforming = false
 
     // Public properties for history state
     val canRewind: Boolean get() = strokes.isNotEmpty()
@@ -99,22 +106,94 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    override fun onTouchEvent(ev: MotionEvent): Boolean {
-        val x = ev.x
-        val y = ev.y
-        when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                touchStart(x, y)
-            }
-            MotionEvent.ACTION_MOVE -> {
-                touchMove(x, y)
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                touchUp()
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (isEditingMode) return super.onTouchEvent(event)
+
+        val action = event.actionMasked
+        val pointerCount = event.pointerCount
+
+        if (pointerCount >= 2) {
+            handleMultiTouch(event)
+        } else if (pointerCount == 1 && !isTransforming) {
+            handleSingleTouch(event)
+        }
+        
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL || (action == MotionEvent.ACTION_POINTER_UP && pointerCount == 2)) {
+            if(isTransforming) {
+                isTransforming = false
             }
         }
+
         invalidate()
         return true
+    }
+
+    private fun handleMultiTouch(event: MotionEvent) {
+        val action = event.actionMasked
+        val midpoint = midpoint(event)
+        isTransforming = true
+
+        if (action == MotionEvent.ACTION_POINTER_DOWN) {
+            if (currentPoints.isNotEmpty()) {
+                if (currentPoints.size > 5) {
+                    commitCurrentStroke()
+                } else {
+                    currentPoints.clear()
+                }
+            }
+            lastDistance = distance(event)
+            lastAngle = angle(event)
+            lastMidpoint.set(midpoint)
+        } else if (action == MotionEvent.ACTION_MOVE) {
+            val newDist = distance(event)
+            val newAngle = angle(event)
+
+            val scale = if (lastDistance > 0) newDist / lastDistance else 1f
+            val rotate = newAngle - lastAngle
+            val dx = midpoint.x - lastMidpoint.x
+            val dy = midpoint.y - lastMidpoint.y
+
+            val deltaMatrix = Matrix()
+            deltaMatrix.postTranslate(dx, dy)
+            deltaMatrix.postScale(scale, scale, midpoint.x, midpoint.y)
+            deltaMatrix.postRotate(rotate, midpoint.x, midpoint.y)
+
+            transformAllStrokes(deltaMatrix)
+
+            lastDistance = newDist
+            lastAngle = newAngle
+            lastMidpoint.set(midpoint)
+        }
+    }
+    
+    private fun handleSingleTouch(event: MotionEvent) {
+         val x = event.x
+         val y = event.y
+
+         when (event.actionMasked) {
+             MotionEvent.ACTION_DOWN -> touchStart(x, y)
+             MotionEvent.ACTION_MOVE -> touchMove(x, y)
+             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touchUp()
+         }
+    }
+    
+    private fun transformAllStrokes(matrix: Matrix) {
+        val scale = getScaleFromMatrix(matrix)
+        (strokes + undone).forEach { stroke ->
+            stroke.paint.strokeWidth = max(1f, stroke.paint.strokeWidth * scale)
+            stroke.points.forEach { pathPoint ->
+                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                matrix.mapPoints(point)
+                pathPoint.point.set(point[0], point[1])
+            }
+        }
+        redrawHistory()
+    }
+
+    private fun getScaleFromMatrix(matrix: Matrix): Float {
+        val values = FloatArray(9)
+        matrix.getValues(values)
+        return values[Matrix.MSCALE_X]
     }
 
     private fun touchStart(x: Float, y: Float) {
@@ -129,26 +208,45 @@ class DrawingView @JvmOverloads constructor(
 
     private fun touchMove(x: Float, y: Float) {
         if (currentPoints.isEmpty()) return
-
         val lastPoint = currentPoints.last().point
         val dx = x - lastPoint.x
         val dy = y - lastPoint.y
-        val segmentLength = sqrt(dx * dx + dy * dy)
-        currentDistance += segmentLength
+        currentDistance += sqrt(dx * dx + dy * dy)
         currentPoints.add(PathPoint(PointF(x, y), currentDistance))
         listener?.onStateChanged()
     }
 
     private fun touchUp() {
         if (currentPoints.isNotEmpty()) {
-            selectedEnd = SelectedEnd.END
-            val newStroke = Stroke(currentPoints.toMutableList(), Paint(currentPaint), currentDistance)
-            strokes.add(newStroke)
-            currentPoints.clear()
-
-            redrawHistory()
-            listener?.onStateChanged()
+            commitCurrentStroke()
         }
+    }
+
+    private fun commitCurrentStroke() {
+        selectedEnd = SelectedEnd.END
+        val newStroke = Stroke(currentPoints.toMutableList(), Paint(currentPaint), currentDistance)
+        strokes.add(newStroke)
+        currentPoints.clear()
+        redrawHistory()
+        listener?.onStateChanged()
+    }
+
+    private fun distance(event: MotionEvent): Float {
+        val dx = event.getX(0) - event.getX(1)
+        val dy = event.getY(0) - event.getY(1)
+        return sqrt(dx * dx + dy * dy)
+    }
+
+    private fun angle(event: MotionEvent): Float {
+        val dx = event.getX(0) - event.getX(1)
+        val dy = event.getY(0) - event.getY(1)
+        return Math.toDegrees(atan2(dy.toDouble(), dx.toDouble()).toDouble()).toFloat()
+    }
+
+    private fun midpoint(event: MotionEvent): PointF {
+        val x = (event.getX(0) + event.getX(1)) / 2f
+        val y = (event.getY(0) + event.getY(1)) / 2f
+        return PointF(x,y)
     }
 
     fun navigateToHistoryState(index: Int) {
@@ -252,35 +350,34 @@ class DrawingView @JvmOverloads constructor(
 
     private fun createLoupeBitmap(px: Float, py: Float, loupeWidth: Int, loupeHeight: Int, isSelected: Boolean): Bitmap? {
         if (loupeWidth <= 0 || loupeHeight <= 0) return null
+        val zoomFactor = 2f
 
-        val zoomFactor = 1f
+        val loupeBitmap = Bitmap.createBitmap(loupeWidth, loupeHeight, Bitmap.Config.ARGB_8888)
+        val loupeCanvas = Canvas(loupeBitmap)
+        loupeCanvas.drawColor(Color.WHITE)
 
-        val tempBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val tempCanvas = Canvas(tempBitmap)
-        draw(tempCanvas)
+        val loupeMatrix = Matrix()
+        loupeMatrix.postScale(zoomFactor, zoomFactor)
+        loupeMatrix.postTranslate(-px * zoomFactor + loupeWidth / 2f, -py * zoomFactor + loupeHeight / 2f)
 
-        backingBitmap?.let {
-            val loupeBitmap = Bitmap.createBitmap(loupeWidth, loupeHeight, Bitmap.Config.ARGB_8888)
-            val loupeCanvas = Canvas(loupeBitmap)
-
-            loupeCanvas.save()
-            loupeCanvas.scale(zoomFactor, zoomFactor)
-            loupeCanvas.translate(-px + loupeWidth / (2 * zoomFactor), -py + loupeHeight / (2 * zoomFactor))
-
-            loupeCanvas.drawBitmap(tempBitmap, 0f, 0f, null)
-
-            loupeCanvas.restore()
-
-            val borderPaint = Paint().apply {
-                color = if (isSelected) Color.BLUE else Color.GRAY
-                style = Paint.Style.STROKE
-                strokeWidth = if (isSelected) 8f else 4f
-            }
-            loupeCanvas.drawRect(0f, 0f, loupeWidth.toFloat(), loupeHeight.toFloat(), borderPaint)
-
-            return loupeBitmap
+        loupeCanvas.save()
+        loupeCanvas.concat(loupeMatrix)
+        
+        backingBitmap?.let { loupeCanvas.drawBitmap(it, 0f, 0f, null) }
+        if (currentPoints.isNotEmpty()) {
+            drawPoints(loupeCanvas, currentPoints, currentPaint)
         }
-        return null
+
+        loupeCanvas.restore()
+        
+        val borderPaint = Paint().apply {
+            color = if (isSelected) Color.BLUE else Color.GRAY
+            style = Paint.Style.STROKE
+            strokeWidth = if (isSelected) 8f else 4f
+        }
+        loupeCanvas.drawRect(0f, 0f, loupeWidth.toFloat(), loupeHeight.toFloat(), borderPaint)
+
+        return loupeBitmap
     }
 
     private fun drawStrokeWithHalo(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
@@ -294,7 +391,7 @@ class DrawingView @JvmOverloads constructor(
         drawPoints(canvas, points, haloPaint)
 
         // 2. Draw the endpoint indicator circles
-        if (currentPoints.isNotEmpty()) {
+        if (currentPoints.isNotEmpty() && isEditingMode) {
             // Special case: Drawing in progress, highlight both ends
             val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
             val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
