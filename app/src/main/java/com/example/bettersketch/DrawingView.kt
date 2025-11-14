@@ -32,6 +32,11 @@ class DrawingView @JvmOverloads constructor(
                 listener?.onSelectedEndChanged(value)
             }
         }
+    var isEditingMode: Boolean = false
+        set(value) {
+            field = value
+            invalidate()
+        }
 
     // Drawing state
     private var backingBitmap: Bitmap? = null
@@ -78,10 +83,16 @@ class DrawingView @JvmOverloads constructor(
         // 1. Draw the cached history
         backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
 
-        // 2. Draw the selected stroke's halo or the in-progress stroke's halo
+        // 2. Draw the live stroke or the halo for the selected stroke
         if (currentPoints.isNotEmpty()) {
-            drawStrokeWithHalo(canvas, currentPoints, currentPaint)
-        } else {
+            // A stroke is actively being drawn
+            if (isEditingMode) {
+                drawStrokeWithHalo(canvas, currentPoints, currentPaint)
+            } else {
+                drawPoints(canvas, currentPoints, currentPaint)
+            }
+        } else if (isEditingMode) {
+            // Not drawing, but in editing mode, so show halo on the last stroke
             strokes.lastOrNull()?.let {
                 drawStrokeWithHalo(canvas, it.points, it.paint)
             }

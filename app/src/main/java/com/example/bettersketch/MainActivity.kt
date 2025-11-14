@@ -119,6 +119,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         toggleModeButton.setOnClickListener {
             isEditingMode = !isEditingMode
             updateModeButtonState()
+            updateUi()
         }
 
         loupeContainer.setOnTouchListener(::handleLoupeTouch)
@@ -197,7 +198,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         widthSlider.listener = object : MySlider.OnSliderValueChangedListener {
             override fun onValueChanged(value: Float) {
                 val strokeWidth = 2f + value * 30f // 2...32
-                drawingView.setStrokeWidth(strokeWidth, applyToLast = false)
+                drawingView.setStrokeWidth(strokeWidth, applyToLast = isEditingMode)
             }
 
             override fun onValueEdit(value: Float) {
@@ -216,7 +217,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             override fun onValueChanged(value: Float) {
                 val colorIndex = (value * (colors.size - 1)).roundToInt()
                 val color = colors[colorIndex]
-                drawingView.setColor(color, applyToLast = false)
+                drawingView.setColor(color, applyToLast = isEditingMode)
                 widthSlider.color = color
             }
 
@@ -267,6 +268,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         historyIndicator.strokeColors = drawingView.getStrokeColors()
         
         drawingView.selectedEnd = selectedEnd
+        drawingView.isEditingMode = isEditingMode
 
         val currentPaint = drawingView.lastStroke?.paint ?: drawingView.currentPaint
         val widthValue = (currentPaint.strokeWidth - 2f) / 30f
