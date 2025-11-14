@@ -100,8 +100,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         setupSliderListeners()
         setupAutoRepeatListeners()
 
-
-        findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.deleteCurrentStroke() }
+        findViewById<Button>(R.id.btnClear).setOnClickListener {
+            selectedEnd = SelectedEnd.END
+            drawingView.deleteCurrentStroke() 
+        }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
 
         loupeContainer.setOnTouchListener(::handleLoupeTouch)
@@ -209,6 +211,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
                     drawingView.navigateToHistoryState(progress)
+                    selectedEnd = SelectedEnd.END
                 }
             }
 
@@ -225,6 +228,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         loupeView.setImageBitmap(bitmap)
     }
 
+    override fun onSelectedEndChanged(selectedEnd: SelectedEnd) {
+        this.selectedEnd = selectedEnd
+    }
+
     private fun updateUi() {
         rewButton.isEnabled = drawingView.canRewind || selectedEnd == SelectedEnd.END
         ffButton.isEnabled = drawingView.canFF || selectedEnd == SelectedEnd.START
@@ -232,6 +239,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         progressSeekBar.max = drawingView.historySize
         progressSeekBar.progress = drawingView.currentHistoryPosition
         historyIndicator.strokeColors = drawingView.getStrokeColors()
+
+        drawingView.selectedEnd = selectedEnd
 
         val currentPaint = drawingView.lastStroke?.paint ?: drawingView.currentPaint
         val widthValue = (currentPaint.strokeWidth - 2f) / 30f

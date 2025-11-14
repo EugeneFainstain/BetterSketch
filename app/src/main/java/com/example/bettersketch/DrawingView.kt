@@ -12,6 +12,7 @@ import kotlin.math.sqrt
 interface DrawingViewListener {
     fun onStateChanged()
     fun onLoupeUpdate(bitmap: Bitmap?)
+    fun onSelectedEndChanged(selectedEnd: SelectedEnd)
 }
 
 enum class SelectedEnd {
@@ -23,6 +24,14 @@ class DrawingView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     var listener: DrawingViewListener? = null
+    var selectedEnd: SelectedEnd = SelectedEnd.NONE
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidate()
+                listener?.onSelectedEndChanged(value)
+            }
+        }
 
     // Drawing state
     private var backingBitmap: Bitmap? = null
@@ -100,6 +109,7 @@ class DrawingView @JvmOverloads constructor(
     private fun touchStart(x: Float, y: Float) {
         redrawHistory() // Redraw to remove halo from previous last stroke
 
+        selectedEnd = SelectedEnd.START
         currentPoints.clear()
         currentDistance = 0f
         currentPoints.add(PathPoint(PointF(x, y), 0f))
@@ -120,6 +130,7 @@ class DrawingView @JvmOverloads constructor(
 
     private fun touchUp() {
         if (currentPoints.isNotEmpty()) {
+            selectedEnd = SelectedEnd.END
             val newStroke = Stroke(currentPoints.toMutableList(), Paint(currentPaint), currentDistance)
             strokes.add(newStroke)
             currentPoints.clear()
@@ -262,6 +273,8 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun drawStrokeWithHalo(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
+        if (points.isEmpty()) return
+
         // 1. Draw the halo
         val haloPaint = Paint(paint).apply {
             color = Color.LTGRAY
@@ -269,7 +282,18 @@ class DrawingView @JvmOverloads constructor(
         }
         drawPoints(canvas, points, haloPaint)
 
-        // 2. Draw the actual stroke on top
+        // 2. Draw the endpoint indicator circle
+        if (selectedEnd != SelectedEnd.NONE) {
+            val endpointCirclePaint = Paint().apply {
+                style = Paint.Style.FILL
+                color = if (selectedEnd == SelectedEnd.START) Color.GREEN else Color.RED
+            }
+            val pointToHighlight = if (selectedEnd == SelectedEnd.START) points.first().point else points.last().point
+            val radius = haloPaint.strokeWidth / 2f
+            canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointCirclePaint)
+        }
+
+        // 3. Draw the actual stroke on top
         drawPoints(canvas, points, paint)
     }
 
