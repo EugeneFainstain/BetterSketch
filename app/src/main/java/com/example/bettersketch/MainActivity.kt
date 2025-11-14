@@ -95,7 +95,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         ffButton = findViewById(R.id.btnRedo)
         toggleModeButton = findViewById(R.id.btnToggleMode)
 
-        // Setup history slider with tick marks over the default rail
+
         historyIndicator = HistoryIndicatorDrawable()
         val originalProgressDrawable = progressSeekBar.progressDrawable.constantState?.newDrawable()?.mutate()
         if (originalProgressDrawable != null) {
@@ -108,12 +108,13 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         setupSliderListeners()
         setupAutoRepeatListeners()
 
+
         findViewById<Button>(R.id.btnClear).setOnClickListener { 
             selectedEnd = SelectedEnd.END
             drawingView.deleteCurrentStroke() 
         }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
-
+        
         toggleModeButton.setOnClickListener {
             isEditingMode = !isEditingMode
             updateModeButtonState()
@@ -122,7 +123,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         loupeView.setOnTouchListener(::handleLoupeTouch)
 
-        // Trigger an initial update to draw the loupes
         drawingView.post { updateUi() }
         updateModeButtonState()
     }
@@ -154,14 +154,14 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                     MotionEvent.ACTION_DOWN -> {
                         handler.removeCallbacksAndMessages(null)
                         view.isPressed = true
-                        action() // Perform first action immediately
+                        action() 
                         autoRepeatRunnable = object : Runnable {
                             override fun run() {
                                 action()
-                                handler.postDelayed(this, 100) // Re-queue for repeat
+                                handler.postDelayed(this, 100)
                             }
                         }
-                        handler.postDelayed(autoRepeatRunnable!!, 200) // Start repeating after initial delay
+                        handler.postDelayed(autoRepeatRunnable!!, 200)
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                         handler.removeCallbacks(autoRepeatRunnable!!)
@@ -202,7 +202,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     }
 
     private fun setupSliderListeners() {
-        // --- Width Slider ---
         widthSlider.listener = object : MySlider.OnSliderValueChangedListener {
             override fun onValueChanged(value: Float) {
                 val strokeWidth = 2f + value * 30f // 2...32
@@ -214,10 +213,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                 drawingView.setStrokeWidth(strokeWidth, applyToLast = true)
             }
 
-            override fun onValueEditEnd() {} // No action needed
+            override fun onValueEditEnd() {}
         }
 
-        // --- Color Slider ---
         colorSlider.colors = colors
         colorSlider.listener = object : MySlider.OnSliderValueChangedListener {
             override fun onValueChanged(value: Float) {
@@ -234,10 +232,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                 widthSlider.color = color
             }
 
-            override fun onValueEditEnd() {} // No action needed
+            override fun onValueEditEnd() {}
         }
 
-        // --- Progress SeekBar ---
         progressSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
@@ -289,10 +286,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
     private fun handleLoupeTouch(v: View, event: MotionEvent): Boolean {
         if (!isEditingMode) return true 
-
+        
         val action = event.actionMasked
 
-        // Handle multi-finger gestures for transform
         if (event.pointerCount >= 2) {
             isDraggingLoupe = false
             if (action == MotionEvent.ACTION_POINTER_DOWN || (action == MotionEvent.ACTION_DOWN && event.pointerCount > 1)) {
@@ -318,21 +314,15 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                 lastMidpointX = midpoint.x
                 lastMidpointY = midpoint.y
             }
-        }
-        // Handle single-finger gestures for moving the selected endpoint
-        else if (event.pointerCount == 1) {
+        } else if (event.pointerCount == 1) {
             when (action) {
                 MotionEvent.ACTION_DOWN -> {
-                    val loupeRect = Rect()
-                    loupeView.getHitRect(loupeRect)
-                    if (loupeRect.contains(event.x.toInt(), event.y.toInt())) {
-                        isDraggingLoupe = true
-                        downX = event.x
-                        downY = event.y
-                        downTime = System.currentTimeMillis()
-                        lastTouchX = event.x
-                        lastTouchY = event.y
-                    }
+                    isDraggingLoupe = true
+                    downX = event.x
+                    downY = event.y
+                    downTime = System.currentTimeMillis()
+                    lastTouchX = event.x
+                    lastTouchY = event.y
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (isDraggingLoupe) {
@@ -354,7 +344,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                         val dy = abs(event.y - downY)
                         val dt = System.currentTimeMillis() - downTime
                         if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout()*2 ) {
-                            // It's a tap, toggle the endpoint
                             selectedEnd = if (selectedEnd == SelectedEnd.START) SelectedEnd.END else SelectedEnd.START
                             updateUi()
                         }
@@ -365,7 +354,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         }
         return true
     }
-
 
     private fun distance(event: MotionEvent): Float {
         val dx = event.getX(0) - event.getX(1)

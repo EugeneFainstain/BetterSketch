@@ -53,10 +53,13 @@ class DrawingView @JvmOverloads constructor(
     private val undone = ArrayDeque<Stroke>()
 
     // Transformation state
+    private val transformMatrix = Matrix()
+    private val inverseMatrix = Matrix()
     private var lastMidpoint = PointF()
     private var lastDistance = 0f
     private var lastAngle = 0f
     private var isTransforming = false
+
 
     // Public properties for history state
     val canRewind: Boolean get() = strokes.isNotEmpty()
@@ -69,7 +72,7 @@ class DrawingView @JvmOverloads constructor(
     fun exportBitmap(): Bitmap {
         val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
-        draw(c) // draw the view as-is
+        draw(c)
         return bmp
     }
 
@@ -87,39 +90,49 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        canvas.save()
+        canvas.concat(transformMatrix)
+
         // 1. Draw the cached history
-        backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
+        if (isTransforming) {
+            redrawHistory(canvas, getScale())
+        } else {
+            backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
+        }
 
         // 2. Draw the live stroke or the halo for the selected stroke
         if (currentPoints.isNotEmpty()) {
-            // A stroke is actively being drawn
             if (isEditingMode) {
                 drawStrokeWithHalo(canvas, currentPoints, currentPaint)
             } else {
-                drawPoints(canvas, currentPoints, currentPaint)
+                val scaledPaint = Paint(currentPaint)
+                scaledPaint.strokeWidth = max(1f / getScale(), currentPaint.strokeWidth)
+                drawPoints(canvas, currentPoints, scaledPaint)
             }
         } else if (isEditingMode) {
-            // Not drawing, but in editing mode, so show halo on the last stroke
             strokes.lastOrNull()?.let {
                 drawStrokeWithHalo(canvas, it.points, it.paint)
             }
         }
+        
+        canvas.restore()
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (isEditingMode) return super.onTouchEvent(event)
-
         val action = event.actionMasked
         val pointerCount = event.pointerCount
 
         if (pointerCount >= 2) {
             handleMultiTouch(event)
         } else if (pointerCount == 1 && !isTransforming) {
-            handleSingleTouch(event)
+            if (!isEditingMode) {
+                handleSingleTouch(event)
+            }
         }
         
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL || (action == MotionEvent.ACTION_POINTER_UP && pointerCount == 2)) {
             if(isTransforming) {
+                applyAndResetTransform()
                 isTransforming = false
             }
         }
@@ -127,7 +140,7 @@ class DrawingView @JvmOverloads constructor(
         invalidate()
         return true
     }
-
+    
     private fun handleMultiTouch(event: MotionEvent) {
         val action = event.actionMasked
         val midpoint = midpoint(event)
@@ -147,18 +160,15 @@ class DrawingView @JvmOverloads constructor(
         } else if (action == MotionEvent.ACTION_MOVE) {
             val newDist = distance(event)
             val newAngle = angle(event)
-
+            
             val scale = if (lastDistance > 0) newDist / lastDistance else 1f
             val rotate = newAngle - lastAngle
             val dx = midpoint.x - lastMidpoint.x
             val dy = midpoint.y - lastMidpoint.y
-
-            val deltaMatrix = Matrix()
-            deltaMatrix.postTranslate(dx, dy)
-            deltaMatrix.postScale(scale, scale, midpoint.x, midpoint.y)
-            deltaMatrix.postRotate(rotate, midpoint.x, midpoint.y)
-
-            transformAllStrokes(deltaMatrix)
+            
+            transformMatrix.postTranslate(dx, dy)
+            transformMatrix.postScale(scale, scale, midpoint.x, midpoint.y)
+            transformMatrix.postRotate(rotate, midpoint.x, midpoint.y)
 
             lastDistance = newDist
             lastAngle = newAngle
@@ -167,38 +177,22 @@ class DrawingView @JvmOverloads constructor(
     }
     
     private fun handleSingleTouch(event: MotionEvent) {
-         val x = event.x
-         val y = event.y
-
+         val mappedEvent = MotionEvent.obtain(event)
+         transformMatrix.invert(inverseMatrix)
+         mappedEvent.transform(inverseMatrix)
+         val x = mappedEvent.x
+         val y = mappedEvent.y
+         
          when (event.actionMasked) {
              MotionEvent.ACTION_DOWN -> touchStart(x, y)
              MotionEvent.ACTION_MOVE -> touchMove(x, y)
              MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touchUp()
          }
-    }
-    
-    private fun transformAllStrokes(matrix: Matrix) {
-        val scale = getScaleFromMatrix(matrix)
-        (strokes + undone).forEach { stroke ->
-            stroke.paint.strokeWidth = max(1f, stroke.paint.strokeWidth * scale)
-            stroke.points.forEach { pathPoint ->
-                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                matrix.mapPoints(point)
-                pathPoint.point.set(point[0], point[1])
-            }
-        }
-        redrawHistory()
-    }
-
-    private fun getScaleFromMatrix(matrix: Matrix): Float {
-        val values = FloatArray(9)
-        matrix.getValues(values)
-        return values[Matrix.MSCALE_X]
+         mappedEvent.recycle()
     }
 
     private fun touchStart(x: Float, y: Float) {
         redrawHistory() // Redraw to remove halo from previous last stroke
-
         selectedEnd = SelectedEnd.END
         currentPoints.clear()
         currentDistance = 0f
@@ -231,6 +225,20 @@ class DrawingView @JvmOverloads constructor(
         listener?.onStateChanged()
     }
 
+    private fun applyAndResetTransform() {
+        val scale = getScale()
+        (strokes + undone).forEach { stroke ->
+            stroke.paint.strokeWidth *= scale
+            stroke.points.forEach { pathPoint ->
+                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                transformMatrix.mapPoints(point)
+                pathPoint.point.set(point[0], point[1])
+            }
+        }
+        transformMatrix.reset()
+        redrawHistory()
+    }
+    
     private fun distance(event: MotionEvent): Float {
         val dx = event.getX(0) - event.getX(1)
         val dy = event.getY(0) - event.getY(1)
@@ -242,7 +250,7 @@ class DrawingView @JvmOverloads constructor(
         val dy = event.getY(0) - event.getY(1)
         return Math.toDegrees(atan2(dy.toDouble(), dx.toDouble()).toDouble()).toFloat()
     }
-
+    
     private fun midpoint(event: MotionEvent): PointF {
         val x = (event.getX(0) + event.getX(1)) / 2f
         val y = (event.getY(0) + event.getY(1)) / 2f
@@ -306,8 +314,7 @@ class DrawingView @JvmOverloads constructor(
         if (strokes.isNotEmpty()) {
             val lastStroke = strokes.last()
             val totalDistance = lastStroke.totalDistance
-            if (totalDistance == 0f) return // Avoid division by zero
-
+            if (totalDistance == 0f) return 
             for (pathPoint in lastStroke.points) {
                 val weight = 1.0f - (pathPoint.distance / totalDistance)
                 pathPoint.point.offset(dx * weight, dy * weight)
@@ -321,8 +328,7 @@ class DrawingView @JvmOverloads constructor(
         if (strokes.isNotEmpty()) {
             val lastStroke = strokes.last()
             val totalDistance = lastStroke.totalDistance
-            if (totalDistance == 0f) return // Avoid division by zero
-
+            if (totalDistance == 0f) return 
             for (pathPoint in lastStroke.points) {
                 val weight = pathPoint.distance / totalDistance
                 pathPoint.point.offset(dx * weight, dy * weight)
@@ -380,13 +386,23 @@ class DrawingView @JvmOverloads constructor(
         return loupeBitmap
     }
 
+    private fun getScale(): Float {
+        val values = FloatArray(9)
+        transformMatrix.getValues(values)
+        return values[Matrix.MSCALE_X]
+    }
+
     private fun drawStrokeWithHalo(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
         if (points.isEmpty()) return
 
+        val scale = getScale()
+        val scaledPaint = Paint(paint)
+        scaledPaint.strokeWidth = max(1f / scale, paint.strokeWidth)
+
         // 1. Draw the halo
-        val haloPaint = Paint(paint).apply {
+        val haloPaint = Paint(scaledPaint).apply {
             color = Color.LTGRAY
-            strokeWidth = paint.strokeWidth + 32f
+            strokeWidth = scaledPaint.strokeWidth + (32f / scale)
         }
         drawPoints(canvas, points, haloPaint)
 
@@ -408,9 +424,9 @@ class DrawingView @JvmOverloads constructor(
             val radius = haloPaint.strokeWidth / 2f
             canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointCirclePaint)
         }
-
+        
         // 3. Draw the actual stroke on top
-        drawPoints(canvas, points, paint)
+        drawPoints(canvas, points, scaledPaint)
     }
 
     fun setColor(color: Int, applyToLast: Boolean = false) {
@@ -448,18 +464,23 @@ class DrawingView @JvmOverloads constructor(
         strokes.clear()
         undone.clear()
         currentPoints.clear()
+        transformMatrix.reset()
         redrawHistory()
         listener?.onStateChanged()
     }
 
-    private fun redrawHistory() {
-        val c = backingCanvas ?: return
-        c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
+    private fun redrawHistory(canvas: Canvas? = null, scale: Float = 1.0f) {
+        val c = canvas ?: backingCanvas ?: return
+        if (canvas == null) {
+            c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
+        }
+        
         val tempPaint = Paint()
 
         // Draw future strokes with 25% alpha
         for (s in undone.reversed()) {
             tempPaint.set(s.paint)
+            if(canvas != null) tempPaint.strokeWidth = max(1f / scale, s.paint.strokeWidth)
             val originalAlpha = tempPaint.alpha
             tempPaint.alpha = (originalAlpha * 0.25f).toInt()
             drawPoints(c, s.points, tempPaint)
@@ -467,10 +488,12 @@ class DrawingView @JvmOverloads constructor(
 
         // Draw past strokes at full opacity
         for (s in strokes) {
-            drawPoints(c, s.points, s.paint)
+            tempPaint.set(s.paint)
+            if(canvas != null) tempPaint.strokeWidth = max(1f / scale, s.paint.strokeWidth)
+            drawPoints(c, s.points, tempPaint)
         }
 
-        invalidate()
+        if (canvas == null) invalidate()
     }
 
     private fun drawPoints(canvas: Canvas?, points: List<PathPoint>, paint: Paint) {
