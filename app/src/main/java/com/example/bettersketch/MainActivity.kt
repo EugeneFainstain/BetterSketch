@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var rewButton: Button
     private lateinit var ffButton: Button
     private lateinit var loupeContainer: LinearLayout
+    private lateinit var toggleModeButton: Button
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -53,6 +54,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         Color.parseColor("#FF0080"),  // Rose
         Color.WHITE
     )
+
+    // App state
+    private var isEditingMode = false
 
     // Multi-touch tracking
     private var lastMidpointX = 0f
@@ -91,6 +95,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         rewButton = findViewById(R.id.btnUndo)
         ffButton = findViewById(R.id.btnRedo)
         loupeContainer = findViewById(R.id.loupeContainer)
+        toggleModeButton = findViewById(R.id.btnToggleMode)
 
         // Setup history slider with tick marks over the default rail
         historyIndicator = HistoryIndicatorDrawable()
@@ -105,16 +110,32 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         setupSliderListeners()
         setupAutoRepeatListeners()
 
-        findViewById<Button>(R.id.btnClear).setOnClickListener {
+        findViewById<Button>(R.id.btnClear).setOnClickListener { 
             selectedEnd = SelectedEnd.END
             drawingView.deleteCurrentStroke() 
         }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
 
+        toggleModeButton.setOnClickListener {
+            isEditingMode = !isEditingMode
+            updateModeButtonState()
+        }
+
         loupeContainer.setOnTouchListener(::handleLoupeTouch)
 
         // Trigger an initial update to draw the loupes
         drawingView.post { updateUi() }
+        updateModeButtonState()
+    }
+
+    private fun updateModeButtonState() {
+        if (isEditingMode) {
+            toggleModeButton.text = "EDITING"
+            toggleModeButton.setBackgroundColor(Color.parseColor("#BB0000")) // Darker Red
+        } else {
+            toggleModeButton.text = "DRAWING"
+            toggleModeButton.setBackgroundColor(Color.parseColor("#008800")) // Darker Green
+        }
     }
 
     private fun setupAutoRepeatListeners() {
