@@ -13,12 +13,14 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -60,6 +62,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
     // Single-touch tracking
     private var isDraggingLoupe = false
+    private var downX = 0f
+    private var downY = 0f
+    private var downTime = 0L
     private var lastTouchX = 0f
     private var lastTouchY = 0f
     
@@ -239,7 +244,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         progressSeekBar.max = drawingView.historySize
         progressSeekBar.progress = drawingView.currentHistoryPosition
         historyIndicator.strokeColors = drawingView.getStrokeColors()
-
+        
         drawingView.selectedEnd = selectedEnd
 
         val currentPaint = drawingView.lastStroke?.paint ?: drawingView.currentPaint
@@ -293,6 +298,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                     loupeView.getHitRect(loupeRect)
                     if (loupeRect.contains(event.x.toInt(), event.y.toInt())) {
                         isDraggingLoupe = true
+                        downX = event.x
+                        downY = event.y
+                        downTime = System.currentTimeMillis()
                         lastTouchX = event.x
                         lastTouchY = event.y
                     }
@@ -311,7 +319,18 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    isDraggingLoupe = false
+                    if (isDraggingLoupe) {
+                        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+                        val dx = abs(event.x - downX)
+                        val dy = abs(event.y - downY)
+                        val dt = System.currentTimeMillis() - downTime
+                        if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout()*2 ) {
+                            // It's a tap, toggle the endpoint
+                            selectedEnd = if (selectedEnd == SelectedEnd.START) SelectedEnd.END else SelectedEnd.START
+                            updateUi()
+                        }
+                        isDraggingLoupe = false
+                    }
                 }
             }
         }

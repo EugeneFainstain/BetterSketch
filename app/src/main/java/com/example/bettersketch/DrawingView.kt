@@ -109,7 +109,7 @@ class DrawingView @JvmOverloads constructor(
     private fun touchStart(x: Float, y: Float) {
         redrawHistory() // Redraw to remove halo from previous last stroke
 
-        selectedEnd = SelectedEnd.START
+        selectedEnd = SelectedEnd.END
         currentPoints.clear()
         currentDistance = 0f
         currentPoints.add(PathPoint(PointF(x, y), 0f))
@@ -282,8 +282,16 @@ class DrawingView @JvmOverloads constructor(
         }
         drawPoints(canvas, points, haloPaint)
 
-        // 2. Draw the endpoint indicator circle
-        if (selectedEnd != SelectedEnd.NONE) {
+        // 2. Draw the endpoint indicator circles
+        if (currentPoints.isNotEmpty()) {
+            // Special case: Drawing in progress, highlight both ends
+            val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
+            val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
+            val radius = haloPaint.strokeWidth / 2f
+            canvas.drawCircle(points.first().point.x, points.first().point.y, radius, startPaint)
+            canvas.drawCircle(points.last().point.x, points.last().point.y, radius, endPaint)
+        } else if (selectedEnd != SelectedEnd.NONE) {
+            // Normal case: Highlight only the selected end
             val endpointCirclePaint = Paint().apply {
                 style = Paint.Style.FILL
                 color = if (selectedEnd == SelectedEnd.START) Color.GREEN else Color.RED
