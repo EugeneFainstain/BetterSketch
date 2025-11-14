@@ -8,6 +8,8 @@ import android.graphics.Rect
 import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.view.MotionEvent
 import android.view.View
@@ -63,6 +65,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
+    // Auto-repeat for buttons
+    private val handler = Handler(Looper.getMainLooper())
+    private var autoRepeatRunnable: Runnable? = null
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,9 +97,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         }
 
         setupSliderListeners()
-
-        rewButton.setOnClickListener { drawingView.undo() }
-        ffButton.setOnClickListener { drawingView.redo() }
+        setupAutoRepeatListeners()
 
         findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.deleteCurrentStroke() }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
@@ -102,6 +106,36 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         // Trigger an initial update to draw the loupes
         drawingView.post { drawingView.updateLoupes(startView.width, startView.height, endView.width, endView.height) }
+    }
+
+    private fun setupAutoRepeatListeners() {
+        val repeatListener = { action: () -> Unit ->
+            View.OnTouchListener { view, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        handler.removeCallbacksAndMessages(null)
+                        view.isPressed = true
+                        action() // Perform first action immediately
+                        autoRepeatRunnable = object : Runnable {
+                            override fun run() {
+                                action()
+                                handler.postDelayed(this, 100) // Re-queue for repeat
+                            }
+                        }
+                        handler.postDelayed(autoRepeatRunnable!!, 200) // Start repeating after initial delay
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        handler.removeCallbacks(autoRepeatRunnable!!)
+                        autoRepeatRunnable = null
+                        view.isPressed = false
+                    }
+                }
+                true
+            }
+        }
+
+        rewButton.setOnTouchListener(repeatListener(drawingView::undo))
+        ffButton.setOnTouchListener(repeatListener(drawingView::redo))
     }
 
     private fun setupSliderListeners() {
