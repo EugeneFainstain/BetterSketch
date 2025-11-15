@@ -119,7 +119,7 @@ class DrawingView @JvmOverloads constructor(
         } else {
             if (currentPoints.isNotEmpty()) {
                 val scaledPaint = Paint(currentPaint)
-                scaledPaint.strokeWidth = max(1f / getScale(), currentPaint.strokeWidth)
+                scaledPaint.strokeWidth = currentPaint.strokeWidth
                 drawPoints(canvas, currentPoints, scaledPaint)
             }
         }
@@ -241,7 +241,7 @@ class DrawingView @JvmOverloads constructor(
     private fun transformAllStrokes(matrix: Matrix) {
         val scale = getScaleFromMatrix(matrix)
         (strokes + undone).forEach { stroke ->
-            stroke.paint.strokeWidth = max(1f, stroke.paint.strokeWidth * scale)
+            stroke.paint.strokeWidth = stroke.paint.strokeWidth * scale
             stroke.points.forEach { pathPoint ->
                 val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
                 matrix.mapPoints(point)
@@ -441,12 +441,12 @@ class DrawingView @JvmOverloads constructor(
 
         val scale = getScale()
         val scaledPaint = Paint(paint)
-        scaledPaint.strokeWidth = max(1f / scale, paint.strokeWidth)
+        scaledPaint.strokeWidth = paint.strokeWidth
 
         // 1. Draw the halo
         val haloPaint = Paint(scaledPaint).apply {
             color = Color.LTGRAY
-            strokeWidth = scaledPaint.strokeWidth + (32f / scale)
+            strokeWidth = max( scaledPaint.strokeWidth * 3 , 48f )
         }
         drawPoints(canvas, points, haloPaint)
 
@@ -528,7 +528,7 @@ class DrawingView @JvmOverloads constructor(
         // Draw future strokes with 25% alpha
         for (s in undone.reversed()) {
             tempPaint.set(s.paint)
-            if(canvas != null) tempPaint.strokeWidth = max(1f / scale, s.paint.strokeWidth)
+            if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
             val originalAlpha = tempPaint.alpha
             tempPaint.alpha = (originalAlpha * 0.25f).toInt()
             drawPoints(c, s.points, tempPaint)
@@ -537,7 +537,7 @@ class DrawingView @JvmOverloads constructor(
         // Draw past strokes at full opacity
         for (s in strokes) {
             tempPaint.set(s.paint)
-            if(canvas != null) tempPaint.strokeWidth = max(1f / scale, s.paint.strokeWidth)
+            if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
             drawPoints(c, s.points, tempPaint)
         }
 
