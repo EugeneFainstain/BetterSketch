@@ -103,7 +103,11 @@ class DrawingView @JvmOverloads constructor(
         canvas.concat(transformMatrix)
 
         // 1. Draw the cached history
-        backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
+        if (isTransforming) {
+            redrawHistory(canvas, getScale())
+        } else {
+            backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
+        }
 
         // 2. Draw the live stroke or the halo for the selected stroke
         if (currentPoints.isNotEmpty()) {
@@ -135,9 +139,7 @@ class DrawingView @JvmOverloads constructor(
 
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL || (action == MotionEvent.ACTION_POINTER_UP && pointerCount == 2)) {
             if(isTransforming) {
-                if (!isEditingMode || selectedEnd == SelectedEnd.NONE) {
-                    applyAndResetTransform()
-                }
+                applyAndResetTransform()
                 isTransforming = false
             }
 
@@ -176,13 +178,12 @@ class DrawingView @JvmOverloads constructor(
             val dx = midpoint.x - lastMidpoint.x
             val dy = midpoint.y - lastMidpoint.y
             
-            if (isEditingMode && selectedEnd != SelectedEnd.NONE) {
-                transformSelectedStroke(dx, dy, scale, rotate)
-            } else {
-                transformMatrix.postTranslate(dx, dy)
-                transformMatrix.postScale(scale, scale, midpoint.x, midpoint.y)
-                transformMatrix.postRotate(rotate, midpoint.x, midpoint.y)
-            }
+            val deltaMatrix = Matrix()
+            deltaMatrix.postTranslate(dx, dy)
+            deltaMatrix.postScale(scale, scale, midpoint.x, midpoint.y)
+            deltaMatrix.postRotate(rotate, midpoint.x, midpoint.y)
+            
+            transformAllStrokes(deltaMatrix)
 
             lastDistance = newDist
             lastAngle = newAngle
@@ -240,28 +241,17 @@ class DrawingView @JvmOverloads constructor(
          mappedEvent.recycle()
     }
     
-    private fun transformSelectedStroke(translateX: Float, translateY: Float, scale: Float, rotate: Float) {
-        lastStroke?.let {
-            val bounds = it.getBounds()
-            val centerX = bounds.centerX()
-            val centerY = bounds.centerY()
-
-            val matrix = Matrix()
-            matrix.postTranslate(translateX, translateY)
-            matrix.postScale(scale, scale, centerX, centerY)
-            matrix.postRotate(rotate, centerX, centerY)
-
-            val pts = it.points.flatMap { listOf(it.point.x, it.point.y) }.toFloatArray()
-            matrix.mapPoints(pts)
-
-            for ((index, pathPoint) in it.points.withIndex()) {
-                pathPoint.point.x = pts[index * 2]
-                pathPoint.point.y = pts[index * 2 + 1]
+    private fun transformAllStrokes(matrix: Matrix) {
+        val scale = getScaleFromMatrix(matrix)
+        (strokes + undone).forEach { stroke ->
+            stroke.paint.strokeWidth = max(1f, stroke.paint.strokeWidth * scale)
+            stroke.points.forEach { pathPoint ->
+                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                matrix.mapPoints(point)
+                pathPoint.point.set(point[0], point[1])
             }
-
-            redrawHistory()
-            listener?.onStateChanged()
         }
+        redrawHistory()
     }
 
     private fun getScaleFromMatrix(matrix: Matrix): Float {
@@ -306,6 +296,7 @@ class DrawingView @JvmOverloads constructor(
     private fun applyAndResetTransform() {
         val scale = getScale()
         (strokes + undone).forEach { stroke ->
+            stroke.paint.strokeWidth *= scale
             stroke.points.forEach { pathPoint ->
                 val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
                 transformMatrix.mapPoints(point)
@@ -404,6 +395,30 @@ class DrawingView @JvmOverloads constructor(
         val pastColors = strokes.map { it.paint.color }
         val futureColors = undone.reversed().map { it.paint.color }
         return (pastColors + futureColors).toIntArray()
+    }
+
+    fun transformLastStroke(translateX: Float, translateY: Float, scale: Float, rotate: Float) {
+        lastStroke?.let {
+            val bounds = it.getBounds()
+            val centerX = bounds.centerX()
+            val centerY = bounds.centerY()
+
+            val matrix = Matrix()
+            matrix.postTranslate(translateX, translateY)
+            matrix.postScale(scale, scale, centerX + translateX, centerY + translateY)
+            matrix.postRotate(rotate, centerX + translateX, centerY + translateY)
+
+            val pts = it.points.flatMap { listOf(it.point.x, it.point.y) }.toFloatArray()
+            matrix.mapPoints(pts)
+
+            for ((index, pathPoint) in it.points.withIndex()) {
+                pathPoint.point.x = pts[index * 2]
+                pathPoint.point.y = pts[index * 2 + 1]
+            }
+
+            redrawHistory()
+            listener?.onStateChanged()
+        }
     }
 
     fun moveStartPoint(dx: Float, dy: Float) {
