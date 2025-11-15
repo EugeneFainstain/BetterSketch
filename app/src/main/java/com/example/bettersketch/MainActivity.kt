@@ -4,12 +4,14 @@ import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.PointF
 import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
@@ -28,6 +30,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var rewButton: Button
     private lateinit var ffButton: Button
     private lateinit var toggleModeButton: Button
+    private lateinit var drawingGestureDetector: GestureDetector
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -84,6 +87,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         setupSliderListeners()
         setupAutoRepeatListeners()
+        setupDrawingViewGestureDetector()
 
 
         findViewById<Button>(R.id.btnClear).setOnClickListener { 
@@ -108,7 +112,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             toggleModeButton.setBackgroundColor(Color.parseColor("#BB0000")) // Darker Red
             rewButton.visibility = View.VISIBLE
             ffButton.visibility = View.VISIBLE
-            drawingView.setOnTouchListener { _, event -> drawingView.onTouchEvent(event) }
+            drawingView.setOnTouchListener { _, event -> drawingGestureDetector.onTouchEvent(event) }
         } else {
             toggleModeButton.text = "DRAWING"
             toggleModeButton.setBackgroundColor(Color.parseColor("#008800")) // Darker Green
@@ -116,6 +120,20 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             ffButton.visibility = View.GONE
             drawingView.setOnTouchListener { _, event -> drawingView.onTouchEvent(event) }
         }
+    }
+
+    private fun setupDrawingViewGestureDetector() {
+        drawingGestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                drawingView.deselectAllStrokes()
+                return true
+            }
+
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                drawingView.findClosestStroke(PointF(e.x, e.y))
+                return true
+            }
+        })
     }
 
     private fun setupAutoRepeatListeners() {

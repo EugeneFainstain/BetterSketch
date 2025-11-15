@@ -356,6 +356,12 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
+    fun deselectAllStrokes() {
+        selectedEnd = SelectedEnd.NONE
+        redrawHistory()
+        listener?.onStateChanged()
+    }
+
     fun navigateToHistoryState(index: Int) {
         while (strokes.size > index) {
             undone.addLast(strokes.removeAt(strokes.lastIndex))
