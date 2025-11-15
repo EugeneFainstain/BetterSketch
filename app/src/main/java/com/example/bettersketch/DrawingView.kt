@@ -5,6 +5,8 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.max
 import kotlin.math.min
@@ -59,6 +61,11 @@ class DrawingView @JvmOverloads constructor(
     private var lastDistance = 0f
     private var lastAngle = 0f
     private var isTransforming = false
+    
+    // Tap detection state
+    private var downX = 0f
+    private var downY = 0f
+    private var downTime = 0L
 
 
     // Public properties for history state
@@ -164,9 +171,12 @@ class DrawingView @JvmOverloads constructor(
             val dx = midpoint.x - lastMidpoint.x
             val dy = midpoint.y - lastMidpoint.y
             
-            transformMatrix.postTranslate(dx, dy)
-            transformMatrix.postScale(scale, scale, midpoint.x, midpoint.y)
-            transformMatrix.postRotate(rotate, midpoint.x, midpoint.y)
+            val deltaMatrix = Matrix()
+            deltaMatrix.postTranslate(dx, dy)
+            deltaMatrix.postScale(scale, scale, midpoint.x, midpoint.y)
+            deltaMatrix.postRotate(rotate, midpoint.x, midpoint.y)
+            
+            transformAllStrokes(deltaMatrix)
 
             lastDistance = newDist
             lastAngle = newAngle
@@ -183,9 +193,10 @@ class DrawingView @JvmOverloads constructor(
          
          when (event.actionMasked) {
              MotionEvent.ACTION_DOWN -> {
-                 if(isEditingMode) {
-                     findClosestStroke(PointF(x,y))
-                 } else {
+                 downX = x
+                 downY = y
+                 downTime = System.currentTimeMillis()
+                 if (!isEditingMode) {
                      touchStart(x, y)
                  }
              }
@@ -195,12 +206,39 @@ class DrawingView @JvmOverloads constructor(
                  }
              }
              MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                 if (!isEditingMode) {
+                 if (isEditingMode) {
+                     val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+                     val dx = abs(x - downX)
+                     val dy = abs(y - downY)
+                     val dt = System.currentTimeMillis() - downTime
+                     if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout()) {
+                         findClosestStroke(PointF(x,y))
+                     }
+                 } else {
                     touchUp()
                  }
              }
          }
          mappedEvent.recycle()
+    }
+    
+    private fun transformAllStrokes(matrix: Matrix) {
+        val scale = getScaleFromMatrix(matrix)
+        (strokes + undone).forEach { stroke ->
+            stroke.paint.strokeWidth = max(1f, stroke.paint.strokeWidth * scale)
+            stroke.points.forEach { pathPoint ->
+                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                matrix.mapPoints(point)
+                pathPoint.point.set(point[0], point[1])
+            }
+        }
+        redrawHistory()
+    }
+
+    private fun getScaleFromMatrix(matrix: Matrix): Float {
+        val values = FloatArray(9)
+        matrix.getValues(values)
+        return values[Matrix.MSCALE_X]
     }
 
     private fun touchStart(x: Float, y: Float) {
