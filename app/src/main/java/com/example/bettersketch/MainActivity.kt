@@ -153,7 +153,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                         handler.postDelayed(autoRepeatRunnable!!, 200)
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        handler.removeCallbacks(autoRepeatRunnable!!)
+                        autoRepeatRunnable?.let { handler.removeCallbacks(it) }
                         autoRepeatRunnable = null
                         view.isPressed = false
                     }
@@ -162,32 +162,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             }
         }
 
-        rewButton.setOnTouchListener(repeatListener(::doRew))
-        ffButton.setOnTouchListener(repeatListener(::doFf))
-    }
-
-    private fun doFf() {
-        if (selectedEnd == SelectedEnd.START) {
-            selectedEnd = SelectedEnd.END
-            updateUi()
-        } else {
-            if (drawingView.canFF) {
-                selectedEnd = SelectedEnd.START
-                drawingView.redo()
-            }
-        }
-    }
-
-    private fun doRew() {
-        if (selectedEnd == SelectedEnd.END) {
-            selectedEnd = SelectedEnd.START
-            updateUi()
-        } else {
-            if (drawingView.canRewind) {
-                selectedEnd = SelectedEnd.END
-                drawingView.undo()
-            }
-        }
+        rewButton.setOnTouchListener(repeatListener(drawingView::undo))
+        ffButton.setOnTouchListener(repeatListener(drawingView::redo))
     }
 
     private fun setupSliderListeners() {
@@ -246,8 +222,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     }
 
     private fun updateUi() {
-        rewButton.isEnabled = drawingView.canRewind || selectedEnd == SelectedEnd.END
-        ffButton.isEnabled = drawingView.canFF || selectedEnd == SelectedEnd.START
+        rewButton.isEnabled = drawingView.canRewind
+        ffButton.isEnabled = drawingView.canFF
 
         progressSeekBar.max = drawingView.historySize
         progressSeekBar.progress = drawingView.currentHistoryPosition
