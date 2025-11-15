@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.graphics.Rect
 import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.Bundle
@@ -13,22 +12,15 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.widget.Button
-import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 class MainActivity : AppCompatActivity(), DrawingViewListener {
 
     private lateinit var drawingView: DrawingView
-    private lateinit var loupeView: ImageView
     private lateinit var widthSlider: WidthSlider
     private lateinit var colorSlider: ColorSlider
     private lateinit var progressSeekBar: SeekBar
@@ -57,20 +49,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     // App state
     private var isEditingMode = false
 
-    // Multi-touch tracking
-    private var lastMidpointX = 0f
-    private var lastMidpointY = 0f
-    private var lastAngle = 0f
-    private var lastDistance = 0f
-
-    // Single-touch tracking
-    private var isDraggingLoupe = false
-    private var downX = 0f
-    private var downY = 0f
-    private var downTime = 0L
-    private var lastTouchX = 0f
-    private var lastTouchY = 0f
-    
     // Auto-repeat for buttons
     private val handler = Handler(Looper.getMainLooper())
     private var autoRepeatRunnable: Runnable? = null
@@ -87,7 +65,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         drawingView = findViewById(R.id.drawingView)
         drawingView.listener = this
 
-        loupeView = findViewById(R.id.loupeView)
         widthSlider = findViewById(R.id.widthSlider)
         colorSlider = findViewById(R.id.colorSlider)
         progressSeekBar = findViewById(R.id.seekProgress)
@@ -121,8 +98,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             updateUi()
         }
 
-        loupeView.setOnTouchListener(::handleLoupeTouch)
-
         drawingView.post { updateUi() }
         updateModeButtonState()
     }
@@ -131,19 +106,15 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         if (isEditingMode) {
             toggleModeButton.text = "EDITING"
             toggleModeButton.setBackgroundColor(Color.parseColor("#BB0000")) // Darker Red
-            loupeView.visibility = View.VISIBLE
             rewButton.visibility = View.VISIBLE
             ffButton.visibility = View.VISIBLE
             drawingView.setOnTouchListener(null)
-            loupeView.setOnTouchListener(::handleLoupeTouch)
         } else {
             toggleModeButton.text = "DRAWING"
             toggleModeButton.setBackgroundColor(Color.parseColor("#008800")) // Darker Green
-            loupeView.visibility = View.GONE
             rewButton.visibility = View.GONE
             ffButton.visibility = View.GONE
             drawingView.setOnTouchListener { _, event -> drawingView.onTouchEvent(event) }
-            loupeView.setOnTouchListener(null)
         }
     }
 
@@ -252,10 +223,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         updateUi()
     }
 
-    override fun onLoupeUpdate(bitmap: Bitmap?) {
-        loupeView.setImageBitmap(bitmap)
-    }
-
     override fun onSelectedEndChanged(selectedEnd: SelectedEnd) {
         this.selectedEnd = selectedEnd
     }
@@ -281,98 +248,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         }
 
         widthSlider.color = currentPaint.color
-        drawingView.updateLoupes(loupeView.width, loupeView.height, selectedEnd)
     }
-
-    private fun handleLoupeTouch(v: View, event: MotionEvent): Boolean {
-        if (!isEditingMode) return true 
-        
-        val action = event.actionMasked
-
-        if (event.pointerCount >= 2) {
-            isDraggingLoupe = false
-            if (action == MotionEvent.ACTION_POINTER_DOWN || (action == MotionEvent.ACTION_DOWN && event.pointerCount > 1)) {
-                lastDistance = distance(event)
-                lastAngle = angle(event)
-                val midpoint = midpoint(event)
-                lastMidpointX = midpoint.x
-                lastMidpointY = midpoint.y
-            } else if (action == MotionEvent.ACTION_MOVE) {
-                val newDist = distance(event)
-                val newAngle = angle(event)
-                val midpoint = midpoint(event)
-
-                val scale = if (lastDistance > 0) newDist / lastDistance else 1f
-                val rotate = newAngle - lastAngle
-                val translateX = midpoint.x - lastMidpointX
-                val translateY = midpoint.y - lastMidpointY
-
-                drawingView.transformLastStroke(translateX, translateY, scale, rotate)
-
-                lastDistance = newDist
-                lastAngle = newAngle
-                lastMidpointX = midpoint.x
-                lastMidpointY = midpoint.y
-            }
-        } else if (event.pointerCount == 1) {
-            when (action) {
-                MotionEvent.ACTION_DOWN -> {
-                    isDraggingLoupe = true
-                    downX = event.x
-                    downY = event.y
-                    downTime = System.currentTimeMillis()
-                    lastTouchX = event.x
-                    lastTouchY = event.y
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    if (isDraggingLoupe) {
-                        val dx = event.x - lastTouchX
-                        val dy = event.y - lastTouchY
-                        if (selectedEnd == SelectedEnd.START) {
-                            drawingView.moveStartPoint(dx, dy)
-                        } else if (selectedEnd == SelectedEnd.END) {
-                            drawingView.moveEndPoint(dx, dy)
-                        }
-                        lastTouchX = event.x
-                        lastTouchY = event.y
-                    }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (isDraggingLoupe) {
-                        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
-                        val dx = abs(event.x - downX)
-                        val dy = abs(event.y - downY)
-                        val dt = System.currentTimeMillis() - downTime
-                        if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout()*2 ) {
-                            selectedEnd = if (selectedEnd == SelectedEnd.START) SelectedEnd.END else SelectedEnd.START
-                            updateUi()
-                        }
-                        isDraggingLoupe = false
-                    }
-                }
-            }
-        }
-        return true
-    }
-
-    private fun distance(event: MotionEvent): Float {
-        val dx = event.getX(0) - event.getX(1)
-        val dy = event.getY(0) - event.getY(1)
-        return sqrt(dx * dx + dy * dy)
-    }
-
-    private fun angle(event: MotionEvent): Float {
-        val dx = event.getX(0) - event.getX(1)
-        val dy = event.getY(0) - event.getY(1)
-        return atan2(dy, dx) * (180f / Math.PI.toFloat())
-    }
-
-    private fun midpoint(event: MotionEvent): android.graphics.PointF {
-        val x = (event.getX(0) + event.getX(1)) / 2f
-        val y = (event.getY(0) + event.getY(1)) / 2f
-        return android.graphics.PointF(x, y)
-    }
-
 
     private fun saveToGallery() {
         val bmp: Bitmap = drawingView.exportBitmap()

@@ -14,7 +14,6 @@ import kotlin.math.sqrt
 
 interface DrawingViewListener {
     fun onStateChanged()
-    fun onLoupeUpdate(bitmap: Bitmap?)
     fun onSelectedEndChanged(selectedEnd: SelectedEnd)
 }
 
@@ -422,54 +421,6 @@ class DrawingView @JvmOverloads constructor(
             redrawHistory()
             listener?.onStateChanged()
         }
-    }
-
-    fun updateLoupes(loupeWidth: Int, loupeHeight: Int, selectedEnd: SelectedEnd) {
-        var point: PointF? = null
-        if (currentPoints.isNotEmpty()) {
-            point = if (selectedEnd == SelectedEnd.START) currentPoints.first().point else currentPoints.last().point
-        } else if (strokes.isNotEmpty()) {
-            val lastStroke = strokes.last()
-            point = if (selectedEnd == SelectedEnd.START) lastStroke.points.first().point else lastStroke.points.last().point
-        }
-        
-        if (point != null) {
-            listener?.onLoupeUpdate(createLoupeBitmap(point.x, point.y, loupeWidth, loupeHeight, true))
-        } else {
-            listener?.onLoupeUpdate(null)
-        }
-    }
-
-    private fun createLoupeBitmap(px: Float, py: Float, loupeWidth: Int, loupeHeight: Int, isSelected: Boolean): Bitmap? {
-        if (loupeWidth <= 0 || loupeHeight <= 0) return null
-        val zoomFactor = 2f
-
-        val loupeBitmap = Bitmap.createBitmap(loupeWidth, loupeHeight, Bitmap.Config.ARGB_8888)
-        val loupeCanvas = Canvas(loupeBitmap)
-        loupeCanvas.drawColor(Color.WHITE)
-
-        val loupeMatrix = Matrix()
-        loupeMatrix.postScale(zoomFactor, zoomFactor)
-        loupeMatrix.postTranslate(-px * zoomFactor + loupeWidth / 2f, -py * zoomFactor + loupeHeight / 2f)
-
-        loupeCanvas.save()
-        loupeCanvas.concat(loupeMatrix)
-        
-        backingBitmap?.let { loupeCanvas.drawBitmap(it, 0f, 0f, null) }
-        if (currentPoints.isNotEmpty()) {
-            drawPoints(loupeCanvas, currentPoints, currentPaint)
-        }
-
-        loupeCanvas.restore()
-        
-        val borderPaint = Paint().apply {
-            color = if (isSelected) Color.BLUE else Color.GRAY
-            style = Paint.Style.STROKE
-            strokeWidth = if (isSelected) 8f else 4f
-        }
-        loupeCanvas.drawRect(0f, 0f, loupeWidth.toFloat(), loupeHeight.toFloat(), borderPaint)
-
-        return loupeBitmap
     }
 
     private fun getScale(): Float {
