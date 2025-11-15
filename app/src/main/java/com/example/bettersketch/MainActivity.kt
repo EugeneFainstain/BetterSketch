@@ -108,7 +108,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             toggleModeButton.setBackgroundColor(Color.parseColor("#BB0000")) // Darker Red
             rewButton.visibility = View.VISIBLE
             ffButton.visibility = View.VISIBLE
-            drawingView.setOnTouchListener(null)
+            drawingView.setOnTouchListener { _, event -> drawingView.onTouchEvent(event) }
         } else {
             toggleModeButton.text = "DRAWING"
             toggleModeButton.setBackgroundColor(Color.parseColor("#008800")) // Darker Green

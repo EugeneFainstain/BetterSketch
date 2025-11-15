@@ -65,6 +65,8 @@ class DrawingView @JvmOverloads constructor(
     private var downX = 0f
     private var downY = 0f
     private var downTime = 0L
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
 
 
     // Public properties for history state
@@ -195,12 +197,24 @@ class DrawingView @JvmOverloads constructor(
                  downX = x
                  downY = y
                  downTime = System.currentTimeMillis()
+                 lastTouchX = x
+                 lastTouchY = y
                  if (!isEditingMode) {
                      touchStart(x, y)
                  }
              }
              MotionEvent.ACTION_MOVE -> {
-                 if (!isEditingMode) {
+                 if (isEditingMode) {
+                     val dx = x - lastTouchX
+                     val dy = y - lastTouchY
+                     if (selectedEnd == SelectedEnd.START) {
+                         moveStartPoint(dx, dy)
+                     } else if (selectedEnd == SelectedEnd.END) {
+                         moveEndPoint(dx, dy)
+                     }
+                     lastTouchX = x
+                     lastTouchY = y
+                 } else {
                     touchMove(x, y)
                  }
              }
@@ -210,7 +224,7 @@ class DrawingView @JvmOverloads constructor(
                      val dx = abs(x - downX)
                      val dy = abs(y - downY)
                      val dt = System.currentTimeMillis() - downTime
-                     if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout()) {
+                     if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout() * 2) {
                          findClosestStroke(PointF(x,y))
                      }
                  } else {
