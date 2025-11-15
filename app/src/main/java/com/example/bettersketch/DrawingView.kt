@@ -54,8 +54,7 @@ class DrawingView @JvmOverloads constructor(
     private val undone = ArrayDeque<Stroke>()
 
     // Transformation state
-    private val transformMatrix = Matrix()
-    private val inverseMatrix = Matrix()
+    private var totalScale = 1.0f
     private var lastMidpoint = PointF()
     private var lastDistance = 0f
     private var lastAngle = 0f
@@ -100,7 +99,6 @@ class DrawingView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         canvas.save()
-        canvas.concat(transformMatrix)
 
         // 1. Draw the cached history
         if (isTransforming) {
@@ -139,7 +137,7 @@ class DrawingView @JvmOverloads constructor(
 
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL || (action == MotionEvent.ACTION_POINTER_UP && pointerCount == 2)) {
             if(isTransforming) {
-                applyAndResetTransform()
+                redrawHistory()
                 isTransforming = false
             }
 
@@ -174,6 +172,7 @@ class DrawingView @JvmOverloads constructor(
             val newAngle = angle(event)
             
             val scale = if (lastDistance > 0) newDist / lastDistance else 1f
+            totalScale *= scale
             val rotate = newAngle - lastAngle
             val dx = midpoint.x - lastMidpoint.x
             val dy = midpoint.y - lastMidpoint.y
@@ -192,11 +191,8 @@ class DrawingView @JvmOverloads constructor(
     }
     
     private fun handleSingleTouch(event: MotionEvent) {
-         val mappedEvent = MotionEvent.obtain(event)
-         transformMatrix.invert(inverseMatrix)
-         mappedEvent.transform(inverseMatrix)
-         val x = mappedEvent.x
-         val y = mappedEvent.y
+         val x = event.x
+         val y = event.y
          
          when (event.actionMasked) {
              MotionEvent.ACTION_DOWN -> {
@@ -238,7 +234,6 @@ class DrawingView @JvmOverloads constructor(
                  }
              }
          }
-         mappedEvent.recycle()
     }
     
     private fun transformAllStrokes(matrix: Matrix) {
@@ -291,20 +286,6 @@ class DrawingView @JvmOverloads constructor(
         currentPoints.clear()
         redrawHistory()
         listener?.onStateChanged()
-    }
-
-    private fun applyAndResetTransform() {
-        val scale = getScale()
-        (strokes + undone).forEach { stroke ->
-            stroke.paint.strokeWidth *= scale
-            stroke.points.forEach { pathPoint ->
-                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                transformMatrix.mapPoints(point)
-                pathPoint.point.set(point[0], point[1])
-            }
-        }
-        transformMatrix.reset()
-        redrawHistory()
     }
     
     private fun distance(event: MotionEvent): Float {
@@ -450,9 +431,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun getScale(): Float {
-        val values = FloatArray(9)
-        transformMatrix.getValues(values)
-        return values[Matrix.MSCALE_X]
+        return totalScale
     }
 
     private fun drawStrokeWithHalo(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
@@ -527,7 +506,7 @@ class DrawingView @JvmOverloads constructor(
         strokes.clear()
         undone.clear()
         currentPoints.clear()
-        transformMatrix.reset()
+        totalScale = 1.0f
         redrawHistory()
         listener?.onStateChanged()
     }
