@@ -324,9 +324,19 @@ class DrawingView @JvmOverloads constructor(
 
         if (closestStroke != null) {
             val index = strokes.indexOf(closestStroke)
-            if (index != -1 && index != strokes.size -1) {
-                strokes.removeAt(index)
-                strokes.add(closestStroke)
+            if (index != -1) {
+                if (index != strokes.size -1) {
+                    strokes.removeAt(index)
+                    strokes.add(closestStroke)
+                }
+
+                val startPoint = closestStroke.points.first().point
+                val endPoint = closestStroke.points.last().point
+                val distToStart = sqrt((startPoint.x - tapPoint.x) * (startPoint.x - tapPoint.x) + (startPoint.y - tapPoint.y) * (startPoint.y - tapPoint.y))
+                val distToEnd = sqrt((endPoint.x - tapPoint.x) * (endPoint.x - tapPoint.x) + (endPoint.y - tapPoint.y) * (endPoint.y - tapPoint.y))
+                
+                selectedEnd = if (distToStart < distToEnd) SelectedEnd.START else SelectedEnd.END
+                
                 redrawHistory()
                 listener?.onStateChanged()
             }

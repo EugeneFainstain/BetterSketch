@@ -37,6 +37,8 @@
                 android:padding="8dp"/>
 
             <!-- Drawing surface -->
+
+            <!-- Color slider -->
             <com.example.bettersketch.DrawingView
                 android:id="@+id/drawingView"
                 android:layout_width="0dp"
@@ -44,7 +46,6 @@
                 android:layout_weight="1"
                 android:background="#FFFFFF" />
 
-            <!-- Color slider -->
             <com.example.bettersketch.ColorSlider
                 android:id="@+id/colorSlider"
                 android:layout_width="wrap_content"
@@ -81,7 +82,7 @@
         <ImageView
             android:id="@+id/loupeView"
             android:layout_width="349dp"
-            android:layout_height="301dp"
+            android:layout_height="95dp"
             android:layout_gravity="bottom|center_horizontal"
             android:background="#E0E0E0"
             android:contentDescription="Selected endpoint"
