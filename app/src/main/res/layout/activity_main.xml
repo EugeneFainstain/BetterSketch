@@ -80,8 +80,8 @@
 
         <ImageView
             android:id="@+id/loupeView"
-            android:layout_width="150dp"
-            android:layout_height="100dp"
+            android:layout_width="349dp"
+            android:layout_height="301dp"
             android:layout_gravity="bottom|center_horizontal"
             android:background="#E0E0E0"
             android:contentDescription="Selected endpoint"

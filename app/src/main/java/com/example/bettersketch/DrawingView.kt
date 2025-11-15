@@ -125,9 +125,7 @@ class DrawingView @JvmOverloads constructor(
         if (pointerCount >= 2) {
             handleMultiTouch(event)
         } else if (pointerCount == 1 && !isTransforming) {
-            if (!isEditingMode) {
-                handleSingleTouch(event)
-            }
+            handleSingleTouch(event)
         }
         
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL || (action == MotionEvent.ACTION_POINTER_UP && pointerCount == 2)) {
@@ -184,15 +182,28 @@ class DrawingView @JvmOverloads constructor(
          val y = mappedEvent.y
          
          when (event.actionMasked) {
-             MotionEvent.ACTION_DOWN -> touchStart(x, y)
-             MotionEvent.ACTION_MOVE -> touchMove(x, y)
-             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touchUp()
+             MotionEvent.ACTION_DOWN -> {
+                 if(isEditingMode) {
+                     findClosestStroke(PointF(x,y))
+                 } else {
+                     touchStart(x, y)
+                 }
+             }
+             MotionEvent.ACTION_MOVE -> {
+                 if (!isEditingMode) {
+                    touchMove(x, y)
+                 }
+             }
+             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                 if (!isEditingMode) {
+                    touchUp()
+                 }
+             }
          }
          mappedEvent.recycle()
     }
 
     private fun touchStart(x: Float, y: Float) {
-        redrawHistory() // Redraw to remove halo from previous last stroke
         selectedEnd = SelectedEnd.END
         currentPoints.clear()
         currentDistance = 0f
@@ -255,6 +266,33 @@ class DrawingView @JvmOverloads constructor(
         val x = (event.getX(0) + event.getX(1)) / 2f
         val y = (event.getY(0) + event.getY(1)) / 2f
         return PointF(x,y)
+    }
+
+    fun findClosestStroke(tapPoint: PointF) {
+        var closestStroke: Stroke? = null
+        var minDistance = Float.MAX_VALUE
+
+        for (stroke in strokes) {
+            for (pathPoint in stroke.points) {
+                val dx = pathPoint.point.x - tapPoint.x
+                val dy = pathPoint.point.y - tapPoint.y
+                val distance = sqrt(dx * dx + dy * dy)
+                if (distance < minDistance) {
+                    minDistance = distance
+                    closestStroke = stroke
+                }
+            }
+        }
+
+        if (closestStroke != null) {
+            val index = strokes.indexOf(closestStroke)
+            if (index != -1 && index != strokes.size -1) {
+                strokes.removeAt(index)
+                strokes.add(closestStroke)
+                redrawHistory()
+                listener?.onStateChanged()
+            }
+        }
     }
 
     fun navigateToHistoryState(index: Int) {
