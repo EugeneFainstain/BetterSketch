@@ -60,7 +60,8 @@ class DrawingView @JvmOverloads constructor(
     private var lastDistance = 0f
     private var lastAngle = 0f
     private var isTransforming = false
-    
+    private var singleFingerGestureAllowed = true
+
     // Tap detection state
     private var downX = 0f
     private var downY = 0f
@@ -128,10 +129,10 @@ class DrawingView @JvmOverloads constructor(
 
         if (pointerCount >= 2) {
             handleMultiTouch(event)
-        } else if (pointerCount == 1 && !isTransforming) {
+        } else if (pointerCount == 1 && singleFingerGestureAllowed) {
             handleSingleTouch(event)
         }
-        
+
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL || (action == MotionEvent.ACTION_POINTER_UP && pointerCount == 2)) {
             if(isTransforming) {
                 if (!isEditingMode || selectedEnd == SelectedEnd.NONE) {
@@ -139,6 +140,10 @@ class DrawingView @JvmOverloads constructor(
                 }
                 isTransforming = false
             }
+
+            if( !singleFingerGestureAllowed )
+                if( action == MotionEvent.ACTION_UP ) // last finger lifted?
+                    singleFingerGestureAllowed = true // re-enable single fingure gestures
         }
 
         invalidate()
@@ -149,6 +154,7 @@ class DrawingView @JvmOverloads constructor(
         val action = event.actionMasked
         val midpoint = midpoint(event)
         isTransforming = true
+        singleFingerGestureAllowed = false // disable single finger gestures until all fingers are lifted
 
         if (action == MotionEvent.ACTION_POINTER_DOWN) {
             if (currentPoints.isNotEmpty()) {
