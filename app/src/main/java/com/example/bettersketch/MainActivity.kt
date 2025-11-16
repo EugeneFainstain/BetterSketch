@@ -229,7 +229,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             drawingView.strokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
         } else {
             drawingView.currentStrokeDrawHalo = drawingView.selectedEnd != SelectedEnd.NONE
-            drawingView.currentStrokeDrawEndpoints = false
+            drawingView.currentStrokeDrawEndpoints = true
             drawingView.strokesDrawingMethod = if (drawingView.selectedEnd != SelectedEnd.NONE) {
                 StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
             } else {
