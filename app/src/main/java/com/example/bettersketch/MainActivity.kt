@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     )
 
     // App state
-    private var isEditingMode = false
+    private var isAppInEditMode = false
 
     // Auto-repeat for buttons
     private val handler = Handler(Looper.getMainLooper())
@@ -97,7 +97,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
         
         toggleModeButton.setOnClickListener {
-            isEditingMode = !isEditingMode
+            isAppInEditMode = !isAppInEditMode
             updateModeButtonState()
             updateUi()
         }
@@ -107,7 +107,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     }
 
     private fun updateModeButtonState() {
-        if (isEditingMode) {
+        if (isAppInEditMode) {
             toggleModeButton.text = "EDITING"
             toggleModeButton.setBackgroundColor(Color.parseColor("#BB0000")) // Darker Red
             rewButton.visibility = View.VISIBLE
@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         widthSlider.listener = object : MySlider.OnSliderValueChangedListener {
             override fun onValueChanged(value: Float) {
                 val strokeWidth = 2f + value * 30f // 2...32
-                drawingView.setStrokeWidth(strokeWidth, applyToLast = isEditingMode)
+                drawingView.setStrokeWidth(strokeWidth, applyToLast = isAppInEditMode)
             }
 
             override fun onValueEdit(value: Float) {
@@ -186,7 +186,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             override fun onValueChanged(value: Float) {
                 val colorIndex = (value * (colors.size - 1)).roundToInt()
                 val color = colors[colorIndex]
-                drawingView.setColor(color, applyToLast = isEditingMode)
+                drawingView.setColor(color, applyToLast = isAppInEditMode)
                 widthSlider.color = color
             }
 
@@ -230,7 +230,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         historyIndicator.strokeColors = drawingView.getStrokeColors()
         
         drawingView.selectedEnd = selectedEnd
-        drawingView.isEditingMode = isEditingMode
+        drawingView.isEditingMode = isAppInEditMode
 
         val currentPaint = drawingView.lastStroke?.paint ?: drawingView.currentPaint
         val widthValue = (currentPaint.strokeWidth - 2f) / 30f
