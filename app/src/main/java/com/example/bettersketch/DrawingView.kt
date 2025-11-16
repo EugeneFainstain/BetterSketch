@@ -239,7 +239,17 @@ class DrawingView @JvmOverloads constructor(
                          findClosestStroke(PointF(x,y))
                      }
                  } else {
-                    touchUp()
+                    val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+                    val dx = abs(x - downX)
+                    val dy = abs(y - downY)
+                    val dt = System.currentTimeMillis() - downTime
+                    if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout() * 2) {
+                        // This is a tap, abandon the stroke
+                        currentPoints.clear()
+                        invalidate()
+                    } else {
+                        touchUp()
+                    }
                  }
              }
          }
