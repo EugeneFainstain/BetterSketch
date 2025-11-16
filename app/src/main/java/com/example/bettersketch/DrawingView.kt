@@ -102,7 +102,7 @@ class DrawingView @JvmOverloads constructor(
 
         // 1. Draw the cached history
         if (isTransforming) {
-            redrawHistory(canvas, getScale())
+            redrawHistory(canvas, totalScale)
         } else {
             backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
         }
@@ -118,9 +118,7 @@ class DrawingView @JvmOverloads constructor(
             }
         } else {
             if (currentPoints.isNotEmpty()) {
-                val scaledPaint = Paint(currentPaint)
-                scaledPaint.strokeWidth = currentPaint.strokeWidth
-                drawPoints(canvas, currentPoints, scaledPaint)
+                drawPoints(canvas, currentPoints, currentPaint)
             }
         }
         
@@ -432,21 +430,13 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun getScale(): Float {
-        return totalScale
-    }
-
     private fun drawStrokeWithHalo(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
         if (points.isEmpty()) return
 
-        val scale = getScale()
-        val scaledPaint = Paint(paint)
-        scaledPaint.strokeWidth = paint.strokeWidth
-
         // 1. Draw the halo
-        val haloPaint = Paint(scaledPaint).apply {
+        val haloPaint = Paint(paint).apply {
             color = Color.LTGRAY
-            strokeWidth = max( scaledPaint.strokeWidth * 3 , 48f )
+            strokeWidth = paint.strokeWidth * 2 + 32f
         }
         drawPoints(canvas, points, haloPaint)
 
@@ -474,7 +464,7 @@ class DrawingView @JvmOverloads constructor(
         }
         
         // 3. Draw the actual stroke on top
-        drawPoints(canvas, points, scaledPaint)
+        drawPoints(canvas, points, paint)
     }
 
     fun setColor(color: Int, applyToLast: Boolean = false) {
