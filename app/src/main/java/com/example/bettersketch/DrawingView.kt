@@ -533,8 +533,14 @@ class DrawingView @JvmOverloads constructor(
             c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
         }
         
+        // Temporary compatibility logic
+        if (!isEditingMode && selectedEnd != SelectedEnd.NONE) {
+            strokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
+        } else {
+            strokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaque
+        }
+
         val tempPaint = Paint()
-        val isFadedMode = !isEditingMode && selectedEnd != SelectedEnd.NONE
 
         // Draw future strokes (always faded)
         for (s in undone.reversed()) {
@@ -549,8 +555,16 @@ class DrawingView @JvmOverloads constructor(
             tempPaint.set(s.paint)
             if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
             
-            if (isFadedMode && index != currentStrokeIdx) {
-                 tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
+            when (strokesDrawingMethod) {
+                StrokesDrawingMethod.DrawAllOpaque -> { /* Do nothing */ }
+                StrokesDrawingMethod.DrawAllOpaqueExceptCurrent -> {
+                    if (index != currentStrokeIdx) {
+                        tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
+                    }
+                }
+                StrokesDrawingMethod.DrawOpaqueUpToCurrent -> {
+                    // For now, treat as DrawAllOpaque to maintain functionality
+                }
             }
 
             drawPoints(c, s.points, tempPaint)
