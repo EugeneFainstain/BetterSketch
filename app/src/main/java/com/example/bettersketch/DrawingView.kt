@@ -170,17 +170,28 @@ class DrawingView @JvmOverloads constructor(
             val newAngle = angle(event)
             
             val scale = if (lastDistance > 0) newDist / lastDistance else 1f
-            totalScale *= scale
             val rotate = newAngle - lastAngle
             val dx = midpoint.x - lastMidpoint.x
             val dy = midpoint.y - lastMidpoint.y
             
             val deltaMatrix = Matrix()
-            deltaMatrix.postTranslate(dx, dy)
-            deltaMatrix.postScale(scale, scale, midpoint.x, midpoint.y)
-            deltaMatrix.postRotate(rotate, midpoint.x, midpoint.y)
-            
-            transformAllStrokes(deltaMatrix)
+            if (isEditingMode && selectedEnd != SelectedEnd.NONE) {
+                lastStroke?.let {
+                    val bounds = it.getBounds()
+                    val centerX = bounds.centerX()
+                    val centerY = bounds.centerY()
+                    deltaMatrix.postTranslate(dx, dy)
+                    deltaMatrix.postScale(scale, scale, centerX + dx, centerY + dy)
+                    deltaMatrix.postRotate(rotate, centerX + dx, centerY + dy)
+                    transformStroke(it, deltaMatrix)
+                }
+            } else {
+                totalScale *= scale
+                deltaMatrix.postTranslate(dx, dy)
+                deltaMatrix.postScale(scale, scale, midpoint.x, midpoint.y)
+                deltaMatrix.postRotate(rotate, midpoint.x, midpoint.y)
+                transformAllStrokes(deltaMatrix)
+            }
 
             lastDistance = newDist
             lastAngle = newAngle
@@ -233,18 +244,22 @@ class DrawingView @JvmOverloads constructor(
              }
          }
     }
-    
-    private fun transformAllStrokes(matrix: Matrix) {
+
+    private fun transformStroke(stroke: Stroke, matrix: Matrix) {
         val scale = getScaleFromMatrix(matrix)
-        (strokes + undone).forEach { stroke ->
-            stroke.paint.strokeWidth = stroke.paint.strokeWidth * scale
-            stroke.points.forEach { pathPoint ->
-                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                matrix.mapPoints(point)
-                pathPoint.point.set(point[0], point[1])
-            }
+        stroke.paint.strokeWidth = stroke.paint.strokeWidth * scale
+        stroke.points.forEach { pathPoint ->
+            val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+            matrix.mapPoints(point)
+            pathPoint.point.set(point[0], point[1])
         }
         redrawHistory()
+    }
+    
+    private fun transformAllStrokes(matrix: Matrix) {
+        (strokes + undone).forEach { stroke ->
+            transformStroke(stroke, matrix)
+        }
     }
 
     private fun getScaleFromMatrix(matrix: Matrix): Float {
