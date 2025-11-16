@@ -109,6 +109,21 @@ class DrawingView @JvmOverloads constructor(
         super.onDraw(canvas)
         canvas.save()
 
+        // Temporary compatibility logic
+        if (isEditingMode) {
+            currentStrokeDrawHalo = true
+            currentStrokeDrawEndpoints = true
+            strokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
+        } else {
+            currentStrokeDrawHalo = selectedEnd != SelectedEnd.NONE
+            currentStrokeDrawEndpoints = false
+            strokesDrawingMethod = if (selectedEnd != SelectedEnd.NONE) {
+                StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
+            } else {
+                StrokesDrawingMethod.DrawAllOpaque
+            }
+        }
+
         // 1. Draw the cached history
         if (isTransforming) {
             redrawHistory(canvas, totalScale)
@@ -117,21 +132,15 @@ class DrawingView @JvmOverloads constructor(
         }
 
         // 2. Draw the live part
-        if (isEditingMode) {
-            if (strokeInProgressPoints.isNotEmpty()) {
+        if (strokeInProgressPoints.isNotEmpty()) {
+            if (isEditingMode) {
                 drawStrokeWithHalo(canvas, strokeInProgressPoints, currentPaint)
             } else {
-                currentStroke?.let {
-                    drawStrokeWithHalo(canvas, it.points, it.paint)
-                }
-            }
-        } else { // Drawing mode
-            if (strokeInProgressPoints.isNotEmpty()) {
                 drawPoints(canvas, strokeInProgressPoints, currentPaint)
-            } else if (selectedEnd != SelectedEnd.NONE) {
-                currentStroke?.let {
-                    drawStrokeWithHalo(canvas, it.points, it.paint)
-                }
+            }
+        } else {
+            currentStroke?.let {
+                drawStrokeWithHalo(canvas, it.points, it.paint)
             }
         }
         
@@ -453,20 +462,22 @@ class DrawingView @JvmOverloads constructor(
     private fun drawStrokeWithHalo(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
         if (points.isEmpty()) return
 
-        if (selectedEnd != SelectedEnd.NONE) {
+        if (currentStrokeDrawHalo) {
             // 1. Draw the halo
             val haloPaint = Paint(paint).apply {
                 color = Color.LTGRAY
                 strokeWidth = paint.strokeWidth * 2 + 32f
             }
             drawPoints(canvas, points, haloPaint)
+        }
 
-            // 2. Draw the endpoint indicator circles
-            if (strokeInProgressPoints.isNotEmpty() && isEditingMode) {
+        // 2. Draw the endpoint indicator circles
+        if (currentStrokeDrawEndpoints) {
+            if (strokeInProgressPoints.isNotEmpty()) {
                 // Special case: Drawing a new stroke while in edit mode.
                 val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
                 val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
-                val radius = haloPaint.strokeWidth / 2f
+                val radius = (paint.strokeWidth * 2 + 32f) / 2f
                 canvas.drawCircle(points.first().point.x, points.first().point.y, radius, startPaint)
                 canvas.drawCircle(points.last().point.x, points.last().point.y, radius, endPaint)
             } else if (selectedEnd != SelectedEnd.NONE) {
@@ -476,7 +487,7 @@ class DrawingView @JvmOverloads constructor(
                     color = if (selectedEnd == SelectedEnd.START) Color.GREEN else Color.RED
                 }
                 val pointToHighlight = if (selectedEnd == SelectedEnd.START) points.first().point else points.last().point
-                val radius = haloPaint.strokeWidth / 2f
+                val radius = (paint.strokeWidth * 2 + 32f) / 2f
                 canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointCirclePaint)
             }
         }
