@@ -56,9 +56,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private val handler = Handler(Looper.getMainLooper())
     private var autoRepeatRunnable: Runnable? = null
 
-    // Endpoint selection
-    private var selectedEnd: SelectedEnd = SelectedEnd.START
-
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,7 +88,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
 
         findViewById<Button>(R.id.btnClear).setOnClickListener { 
-            selectedEnd = SelectedEnd.END
+            drawingView.resetStrokeSelection()
             drawingView.deleteCurrentStroke() 
         }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
@@ -204,7 +201,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
                     drawingView.navigateToHistoryState(progress)
-                    selectedEnd = SelectedEnd.END
+                    drawingView.resetStrokeSelection()
                 }
             }
 
@@ -217,10 +214,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         updateUi()
     }
 
-    override fun onSelectedEndChanged(selectedEnd: SelectedEnd) {
-        this.selectedEnd = selectedEnd
-    }
-
     private fun updateUi() {
         rewButton.isEnabled = drawingView.canRewind
         ffButton.isEnabled = drawingView.canFF
@@ -229,7 +222,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         progressSeekBar.progress = drawingView.currentHistoryPosition
         historyIndicator.strokeColors = drawingView.getStrokeColors()
         
-        drawingView.selectedEnd = selectedEnd
         drawingView.isEditingMode = isAppInEditMode
 
         val currentPaint = drawingView.lastStroke?.paint ?: drawingView.currentPaint

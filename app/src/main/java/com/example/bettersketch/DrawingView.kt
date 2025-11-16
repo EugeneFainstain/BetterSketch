@@ -14,7 +14,6 @@ import kotlin.math.sqrt
 
 interface DrawingViewListener {
     fun onStateChanged()
-    fun onSelectedEndChanged(selectedEnd: SelectedEnd)
 }
 
 enum class SelectedEnd {
@@ -31,7 +30,6 @@ class DrawingView @JvmOverloads constructor(
             if (field != value) {
                 field = value
                 invalidate()
-                listener?.onSelectedEndChanged(value)
             }
         }
     var isEditingMode: Boolean = false
@@ -347,6 +345,10 @@ class DrawingView @JvmOverloads constructor(
         selectedEnd = SelectedEnd.NONE
         redrawHistory()
         listener?.onStateChanged()
+    }
+
+    fun resetStrokeSelection() {
+        selectedEnd = SelectedEnd.END
     }
 
     fun navigateToHistoryState(index: Int) {
