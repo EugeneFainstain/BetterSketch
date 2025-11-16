@@ -42,9 +42,9 @@ class DrawingView @JvmOverloads constructor(
     private var backingBitmap: Bitmap? = null
     private var backingCanvas: Canvas? = null
 
-    // Current tools
-    private val currentPoints = mutableListOf<PathPoint>()
-    private var currentDistance = 0f
+    // Stroke in progress
+    private val strokeInProgressPoints = mutableListOf<PathPoint>()
+    private var strokeInProgressDistance = 0f
     var currentPaint = defaultPaint(Color.BLACK, 12f)
 
     // History for undo/redo
@@ -108,16 +108,16 @@ class DrawingView @JvmOverloads constructor(
 
         // 2. Draw the live part
         if (isEditingMode) {
-            if (currentPoints.isNotEmpty()) {
-                drawStrokeWithHalo(canvas, currentPoints, currentPaint)
+            if (strokeInProgressPoints.isNotEmpty()) {
+                drawStrokeWithHalo(canvas, strokeInProgressPoints, currentPaint)
             } else {
                 selectedStroke?.let {
                     drawStrokeWithHalo(canvas, it.points, it.paint)
                 }
             }
         } else { // Drawing mode
-            if (currentPoints.isNotEmpty()) {
-                drawPoints(canvas, currentPoints, currentPaint)
+            if (strokeInProgressPoints.isNotEmpty()) {
+                drawPoints(canvas, strokeInProgressPoints, currentPaint)
             } else if (selectedEnd != SelectedEnd.NONE) {
                 selectedStroke?.let {
                     drawStrokeWithHalo(canvas, it.points, it.paint)
@@ -160,11 +160,11 @@ class DrawingView @JvmOverloads constructor(
         singleFingerGestureAllowed = false // disable single finger gestures until all fingers are lifted
 
         if (action == MotionEvent.ACTION_POINTER_DOWN) {
-            if (currentPoints.isNotEmpty()) {
-                if (currentPoints.size > 5) {
-                    commitCurrentStroke()
+            if (strokeInProgressPoints.isNotEmpty()) {
+                if (strokeInProgressPoints.size > 5) {
+                    commitStrokeInProgress()
                 } else {
-                    currentPoints.clear()
+                    strokeInProgressPoints.clear()
                 }
             }
             lastDistance = distance(event)
@@ -250,7 +250,7 @@ class DrawingView @JvmOverloads constructor(
                     val dt = System.currentTimeMillis() - downTime
                     if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout() * 2) {
                         // This is a tap, abandon the stroke and find the closest one
-                        currentPoints.clear()
+                        strokeInProgressPoints.clear()
                         findClosestStroke(PointF(x,y))
                         invalidate()
                     } else {
@@ -287,34 +287,34 @@ class DrawingView @JvmOverloads constructor(
     private fun touchStart(x: Float, y: Float) {
         selectedStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
-        currentPoints.clear()
-        currentDistance = 0f
-        currentPoints.add(PathPoint(PointF(x, y), 0f))
+        strokeInProgressPoints.clear()
+        strokeInProgressDistance = 0f
+        strokeInProgressPoints.add(PathPoint(PointF(x, y), 0f))
         listener?.onStateChanged()
     }
 
     private fun touchMove(x: Float, y: Float) {
-        if (currentPoints.isEmpty()) return
-        val lastPoint = currentPoints.last().point
+        if (strokeInProgressPoints.isEmpty()) return
+        val lastPoint = strokeInProgressPoints.last().point
         val dx = x - lastPoint.x
         val dy = y - lastPoint.y
-        currentDistance += sqrt(dx * dx + dy * dy)
-        currentPoints.add(PathPoint(PointF(x, y), currentDistance))
+        strokeInProgressDistance += sqrt(dx * dx + dy * dy)
+        strokeInProgressPoints.add(PathPoint(PointF(x, y), strokeInProgressDistance))
         listener?.onStateChanged()
     }
 
     private fun touchUp() {
-        if (currentPoints.isNotEmpty()) {
-            commitCurrentStroke()
+        if (strokeInProgressPoints.isNotEmpty()) {
+            commitStrokeInProgress()
         }
     }
 
-    private fun commitCurrentStroke() {
-        val newStroke = Stroke(currentPoints.toMutableList(), Paint(currentPaint), currentDistance)
+    private fun commitStrokeInProgress() {
+        val newStroke = Stroke(strokeInProgressPoints.toMutableList(), Paint(currentPaint), strokeInProgressDistance)
         strokes.add(newStroke)
         selectedStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
-        currentPoints.clear()
+        strokeInProgressPoints.clear()
         redrawHistory()
         listener?.onStateChanged()
     }
@@ -452,7 +452,7 @@ class DrawingView @JvmOverloads constructor(
             drawPoints(canvas, points, haloPaint)
 
             // 2. Draw the endpoint indicator circles
-            if (currentPoints.isNotEmpty() && isEditingMode) {
+            if (strokeInProgressPoints.isNotEmpty() && isEditingMode) {
                 // Special case: Drawing a new stroke while in edit mode.
                 val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
                 val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
@@ -509,7 +509,7 @@ class DrawingView @JvmOverloads constructor(
     fun clearAll() {
         strokes.clear()
         undone.clear()
-        currentPoints.clear()
+        strokeInProgressPoints.clear()
         selectedStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
         totalScale = 1.0f
