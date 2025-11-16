@@ -64,7 +64,7 @@ class DrawingView @JvmOverloads constructor(
     private var totalScale = 1.0f
     private var isTransforming = false
 
-    // Touch state for drag calculations (now managed by CustomGestureDetector)
+    // Touch state for drag calculations
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
@@ -529,14 +529,14 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
         val deltaMatrix = Matrix()
-        if (isEditingMode && selectedEnd != SelectedEnd.NONE) {
+        if (isEditingMode && currentStrokeIdx != -1) { // Check currentStrokeIdx instead of selectedEnd != SelectedEnd.NONE
             currentStroke?.let {
                 val bounds = it.getBounds()
                 val centerX = bounds.centerX()
                 val centerY = bounds.centerY()
                 deltaMatrix.postTranslate(dx, dy)
-                deltaMatrix.postScale(scale, scale, centerX + dx, centerY + dy)
-                deltaMatrix.postRotate(rotate, centerX + dx, centerY + centerY)
+                deltaMatrix.postScale(scale, scale, centerX, centerY) // Corrected pivot
+                deltaMatrix.postRotate(rotate, centerX, centerY) // Corrected pivot
                 transformStroke(it, deltaMatrix)
             }
         } else {
