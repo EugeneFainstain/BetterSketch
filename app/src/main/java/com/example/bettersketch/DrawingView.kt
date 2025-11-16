@@ -20,6 +20,12 @@ enum class SelectedEnd {
     START, END, NONE
 }
 
+enum class StrokesDrawingMethod {
+    DrawAllOpaque,
+    DrawAllOpaqueExceptCurrent,
+    DrawOpaqueUpToCurrent
+}
+
 class DrawingView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
@@ -37,6 +43,10 @@ class DrawingView @JvmOverloads constructor(
             field = value
             invalidate()
         }
+
+    var currentStrokeDrawHalo: Boolean = false
+    var currentStrokeDrawEndpoints: Boolean = false
+    var strokesDrawingMethod: StrokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaque
 
     // Drawing state
     private var backingBitmap: Bitmap? = null
