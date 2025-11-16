@@ -167,12 +167,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         widthSlider.listener = object : MySlider.OnSliderValueChangedListener {
             override fun onValueChanged(value: Float) {
                 val strokeWidth = 2f + value * 30f // 2...32
-                drawingView.setStrokeWidth(strokeWidth, applyToLast = isAppInEditMode)
+                drawingView.setStrokeWidth(strokeWidth, applyToSelected = isAppInEditMode)
             }
 
             override fun onValueEdit(value: Float) {
                 val strokeWidth = 2f + value * 30f // 2...32
-                drawingView.setStrokeWidth(strokeWidth, applyToLast = true)
+                drawingView.setStrokeWidth(strokeWidth, applyToSelected = true)
             }
 
             override fun onValueEditEnd() {}
@@ -183,14 +183,14 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             override fun onValueChanged(value: Float) {
                 val colorIndex = (value * (colors.size - 1)).roundToInt()
                 val color = colors[colorIndex]
-                drawingView.setColor(color, applyToLast = isAppInEditMode)
+                drawingView.setColor(color, applyToSelected = isAppInEditMode)
                 widthSlider.color = color
             }
 
             override fun onValueEdit(value: Float) {
                 val colorIndex = (value * (colors.size - 1)).roundToInt()
                 val color = colors[colorIndex]
-                drawingView.setColor(color, applyToLast = true)
+                drawingView.setColor(color, applyToSelected = true)
                 widthSlider.color = color
             }
 
@@ -224,7 +224,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         
         drawingView.isEditingMode = isAppInEditMode
 
-        val currentPaint = drawingView.lastStroke?.paint ?: drawingView.currentPaint
+        val currentPaint = drawingView.currentPaint
         val widthValue = (currentPaint.strokeWidth - 2f) / 30f
         widthSlider.value = widthValue
 

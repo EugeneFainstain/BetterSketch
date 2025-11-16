@@ -50,6 +50,7 @@ class DrawingView @JvmOverloads constructor(
     // History for undo/redo
     private val strokes = mutableListOf<Stroke>()
     private val undone = ArrayDeque<Stroke>()
+    private var selectedStrokeIdx: Int = -1
 
     // Transformation state
     private var totalScale = 1.0f
@@ -72,7 +73,7 @@ class DrawingView @JvmOverloads constructor(
     val canFF: Boolean get() = undone.isNotEmpty()
     val historySize: Int get() = strokes.size + undone.size
     val currentHistoryPosition: Int get() = strokes.size
-    val lastStroke: Stroke? get() = strokes.lastOrNull()
+    private val selectedStroke: Stroke? get() = strokes.getOrNull(selectedStrokeIdx)
 
     // Export bitmap helper
     fun exportBitmap(): Bitmap {
@@ -110,7 +111,7 @@ class DrawingView @JvmOverloads constructor(
             if (currentPoints.isNotEmpty()) {
                 drawStrokeWithHalo(canvas, currentPoints, currentPaint)
             } else {
-                strokes.lastOrNull()?.let {
+                selectedStroke?.let {
                     drawStrokeWithHalo(canvas, it.points, it.paint)
                 }
             }
@@ -118,7 +119,7 @@ class DrawingView @JvmOverloads constructor(
             if (currentPoints.isNotEmpty()) {
                 drawPoints(canvas, currentPoints, currentPaint)
             } else if (selectedEnd != SelectedEnd.NONE) {
-                strokes.lastOrNull()?.let {
+                selectedStroke?.let {
                     drawStrokeWithHalo(canvas, it.points, it.paint)
                 }
             }
@@ -180,7 +181,7 @@ class DrawingView @JvmOverloads constructor(
             
             val deltaMatrix = Matrix()
             if (isEditingMode && selectedEnd != SelectedEnd.NONE) {
-                lastStroke?.let {
+                selectedStroke?.let {
                     val bounds = it.getBounds()
                     val centerX = bounds.centerX()
                     val centerY = bounds.centerY()
@@ -284,6 +285,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchStart(x: Float, y: Float) {
+        selectedStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
         currentPoints.clear()
         currentDistance = 0f
@@ -308,9 +310,10 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun commitCurrentStroke() {
-        selectedEnd = SelectedEnd.END
         val newStroke = Stroke(currentPoints.toMutableList(), Paint(currentPaint), currentDistance)
         strokes.add(newStroke)
+        selectedStrokeIdx = -1
+        selectedEnd = SelectedEnd.NONE
         currentPoints.clear()
         redrawHistory()
         listener?.onStateChanged()
@@ -335,43 +338,38 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun findClosestStroke(tapPoint: PointF) {
-        var closestStroke: Stroke? = null
         var minDistance = Float.MAX_VALUE
+        var closestIndex = -1
 
-        for (stroke in strokes) {
+        strokes.forEachIndexed { index, stroke ->
             for (pathPoint in stroke.points) {
                 val dx = pathPoint.point.x - tapPoint.x
                 val dy = pathPoint.point.y - tapPoint.y
                 val distance = sqrt(dx * dx + dy * dy)
                 if (distance < minDistance) {
                     minDistance = distance
-                    closestStroke = stroke
+                    closestIndex = index
                 }
             }
         }
 
-        if (closestStroke != null) {
-            val index = strokes.indexOf(closestStroke)
-            if (index != -1) {
-                if (index != strokes.size -1) {
-                    strokes.removeAt(index)
-                    strokes.add(closestStroke)
-                }
-
-                val startPoint = closestStroke.points.first().point
-                val endPoint = closestStroke.points.last().point
-                val distToStart = sqrt((startPoint.x - tapPoint.x) * (startPoint.x - tapPoint.x) + (startPoint.y - tapPoint.y) * (startPoint.y - tapPoint.y))
-                val distToEnd = sqrt((endPoint.x - tapPoint.x) * (endPoint.x - tapPoint.x) + (endPoint.y - tapPoint.y) * (endPoint.y - tapPoint.y))
-                
-                selectedEnd = if (distToStart < distToEnd) SelectedEnd.START else SelectedEnd.END
-                
-                redrawHistory()
-                listener?.onStateChanged()
-            }
+        if (closestIndex != -1) {
+            selectedStrokeIdx = closestIndex
+            val closestStroke = strokes[closestIndex]
+            val startPoint = closestStroke.points.first().point
+            val endPoint = closestStroke.points.last().point
+            val distToStart = sqrt((startPoint.x - tapPoint.x) * (startPoint.x - tapPoint.x) + (startPoint.y - tapPoint.y) * (startPoint.y - tapPoint.y))
+            val distToEnd = sqrt((endPoint.x - tapPoint.x) * (endPoint.x - tapPoint.x) + (endPoint.y - tapPoint.y) * (endPoint.y - tapPoint.y))
+            
+            selectedEnd = if (distToStart < distToEnd) SelectedEnd.START else SelectedEnd.END
+            
+            redrawHistory()
+            listener?.onStateChanged()
         }
     }
 
     fun deselectAllStrokes() {
+        selectedStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
         redrawHistory()
         listener?.onStateChanged()
@@ -392,16 +390,22 @@ class DrawingView @JvmOverloads constructor(
                 break
             }
         }
+        selectedStrokeIdx = -1
+        selectedEnd = SelectedEnd.NONE
         redrawHistory()
         listener?.onStateChanged()
     }
 
     fun deleteCurrentStroke() {
-        if (strokes.isNotEmpty()) {
+        if (selectedStrokeIdx != -1) {
+            strokes.removeAt(selectedStrokeIdx)
+            selectedStrokeIdx = -1
+            selectedEnd = SelectedEnd.NONE
+        } else if (strokes.isNotEmpty()) {
             strokes.removeAt(strokes.lastIndex)
-            redrawHistory()
-            listener?.onStateChanged()
         }
+        redrawHistory()
+        listener?.onStateChanged()
     }
 
     fun getStrokeColors(): IntArray {
@@ -410,36 +414,11 @@ class DrawingView @JvmOverloads constructor(
         return (pastColors + futureColors).toIntArray()
     }
 
-    fun transformLastStroke(translateX: Float, translateY: Float, scale: Float, rotate: Float) {
-        lastStroke?.let {
-            val bounds = it.getBounds()
-            val centerX = bounds.centerX()
-            val centerY = bounds.centerY()
-
-            val matrix = Matrix()
-            matrix.postTranslate(translateX, translateY)
-            matrix.postScale(scale, scale, centerX + translateX, centerY + translateY)
-            matrix.postRotate(rotate, centerX + translateX, centerY + translateY)
-
-            val pts = it.points.flatMap { listOf(it.point.x, it.point.y) }.toFloatArray()
-            matrix.mapPoints(pts)
-
-            for ((index, pathPoint) in it.points.withIndex()) {
-                pathPoint.point.x = pts[index * 2]
-                pathPoint.point.y = pts[index * 2 + 1]
-            }
-
-            redrawHistory()
-            listener?.onStateChanged()
-        }
-    }
-
     fun moveStartPoint(dx: Float, dy: Float) {
-        if (strokes.isNotEmpty()) {
-            val lastStroke = strokes.last()
-            val totalDistance = lastStroke.totalDistance
+        selectedStroke?.let {
+            val totalDistance = it.totalDistance
             if (totalDistance == 0f) return 
-            for (pathPoint in lastStroke.points) {
+            for (pathPoint in it.points) {
                 val weight = 1.0f - (pathPoint.distance / totalDistance)
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
@@ -449,11 +428,10 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun moveEndPoint(dx: Float, dy: Float) {
-        if (strokes.isNotEmpty()) {
-            val lastStroke = strokes.last()
-            val totalDistance = lastStroke.totalDistance
+        selectedStroke?.let {
+            val totalDistance = it.totalDistance
             if (totalDistance == 0f) return 
-            for (pathPoint in lastStroke.points) {
+            for (pathPoint in it.points) {
                 val weight = pathPoint.distance / totalDistance
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
@@ -497,20 +475,20 @@ class DrawingView @JvmOverloads constructor(
         drawPoints(canvas, points, paint)
     }
 
-    fun setColor(color: Int, applyToLast: Boolean = false) {
+    fun setColor(color: Int, applyToSelected: Boolean = false) {
         currentPaint.color = color
-        if (applyToLast && strokes.isNotEmpty()) {
-            strokes.last().paint.color = color
+        if (applyToSelected) {
+            selectedStroke?.paint?.color = color
             redrawHistory()
             listener?.onStateChanged()
         }
     }
 
-    fun setStrokeWidth(px: Float, applyToLast: Boolean = false) {
+    fun setStrokeWidth(px: Float, applyToSelected: Boolean = false) {
         val w = max(1f, min(120f, px))
         currentPaint.strokeWidth = w
-        if (applyToLast && strokes.isNotEmpty()) {
-            strokes.last().paint.strokeWidth = w
+        if (applyToSelected) {
+            selectedStroke?.paint?.strokeWidth = w
             redrawHistory()
             listener?.onStateChanged()
         }
@@ -532,6 +510,8 @@ class DrawingView @JvmOverloads constructor(
         strokes.clear()
         undone.clear()
         currentPoints.clear()
+        selectedStrokeIdx = -1
+        selectedEnd = SelectedEnd.NONE
         totalScale = 1.0f
         redrawHistory()
         listener?.onStateChanged()
@@ -555,11 +535,11 @@ class DrawingView @JvmOverloads constructor(
         }
 
         // Draw past strokes
-        for (s in strokes) {
+        for ((index, s) in strokes.withIndex()) {
             tempPaint.set(s.paint)
             if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
             
-            if (isFadedMode) {
+            if (isFadedMode && index != selectedStrokeIdx) {
                  tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             }
 
