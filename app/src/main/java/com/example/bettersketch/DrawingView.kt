@@ -5,8 +5,6 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
-import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.max
 import kotlin.math.min
@@ -28,7 +26,7 @@ enum class StrokesDrawingMethod {
 
 class DrawingView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
-) : View(context, attrs) {
+) : View(context, attrs), CustomGestureDetector.OnGestureListener {
 
     var listener: DrawingViewListener? = null
     var selectedEnd: SelectedEnd = SelectedEnd.NONE
@@ -70,12 +68,15 @@ class DrawingView @JvmOverloads constructor(
     private var isTransforming = false
     private var singleFingerGestureAllowed = true
 
-    // Tap detection state
-    private var downX = 0f
-    private var downY = 0f
-    private var downTime = 0L
+    // Touch state for drag calculations
     private var lastTouchX = 0f
     private var lastTouchY = 0f
+
+    private val customGestureDetector: CustomGestureDetector
+
+    init {
+        customGestureDetector = CustomGestureDetector(context, this)
+    }
 
 
     // Public properties for history state
@@ -133,24 +134,22 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val action = event.actionMasked
         val pointerCount = event.pointerCount
-
         if (pointerCount >= 2) {
             handleMultiTouch(event)
-        } else if (pointerCount == 1 && singleFingerGestureAllowed) {
-            handleSingleTouch(event)
+        } else if (pointerCount == 1 && singleFingerGestureAllowed) { // <--- Added this check
+            customGestureDetector.onTouchEvent(event)
         }
 
-        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL || (action == MotionEvent.ACTION_POINTER_UP && pointerCount == 2)) {
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL || (event.actionMasked == MotionEvent.ACTION_POINTER_UP && pointerCount == 2)) {
             if(isTransforming) {
                 redrawHistory()
                 isTransforming = false
             }
 
-            if( !singleFingerGestureAllowed )
-                if( action == MotionEvent.ACTION_UP ) // last finger lifted?
-                    singleFingerGestureAllowed = true // re-enable single fingure gestures
+            if( !singleFingerGestureAllowed ) // If single finger gestures were disabled
+                if( event.actionMasked == MotionEvent.ACTION_UP ) // and the last finger was lifted
+                    singleFingerGestureAllowed = true // re-enable them
         }
 
         invalidate()
@@ -206,63 +205,6 @@ class DrawingView @JvmOverloads constructor(
             lastAngle = newAngle
             lastMidpoint.set(midpoint)
         }
-    }
-    
-    private fun handleSingleTouch(event: MotionEvent) {
-         val x = event.x
-         val y = event.y
-         
-         when (event.actionMasked) {
-             MotionEvent.ACTION_DOWN -> {
-                 downX = x
-                 downY = y
-                 downTime = System.currentTimeMillis()
-                 lastTouchX = x
-                 lastTouchY = y
-                 if (!isEditingMode) {
-                     touchStart(x, y)
-                 }
-             }
-             MotionEvent.ACTION_MOVE -> {
-                 if (isEditingMode) {
-                     val dx = x - lastTouchX
-                     val dy = y - lastTouchY
-                     if (selectedEnd == SelectedEnd.START) {
-                         moveStartPoint(dx, dy)
-                     } else if (selectedEnd == SelectedEnd.END) {
-                         moveEndPoint(dx, dy)
-                     }
-                     lastTouchX = x
-                     lastTouchY = y
-                 } else {
-                    touchMove(x, y)
-                 }
-             }
-             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                 if (isEditingMode) {
-                     val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-                     val dx = abs(x - downX)
-                     val dy = abs(y - downY)
-                     val dt = System.currentTimeMillis() - downTime
-                     if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout() * 2) {
-                         findClosestStroke(PointF(x,y))
-                     }
-                 } else {
-                    val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-                    val dx = abs(x - downX)
-                    val dy = abs(y - downY)
-                    val dt = System.currentTimeMillis() - downTime
-                    if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout() * 2) {
-                        // This is a tap, abandon the stroke and find the closest one
-                        strokeInProgressPoints.clear()
-                        findClosestStroke(PointF(x,y))
-                        invalidate()
-                    } else {
-                        touchUp()
-                    }
-                 }
-             }
-         }
     }
 
     private fun transformStroke(stroke: Stroke, matrix: Matrix) {
@@ -375,7 +317,6 @@ class DrawingView @JvmOverloads constructor(
     fun deselectAllStrokes() {
         currentStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
-        redrawHistory()
         listener?.onStateChanged()
     }
 
@@ -458,14 +399,15 @@ class DrawingView @JvmOverloads constructor(
 
         // 2. Draw the endpoint indicator circles
         if (currentStrokeDrawEndpoints) {
-            if (strokeInProgressPoints.isNotEmpty()) {
+            // Check if we are drawing a new stroke in edit mode, or if a completed stroke is selected
+            if (strokeInProgressPoints.isNotEmpty() && isEditingMode) {
                 // Special case: Drawing a new stroke while in edit mode.
                 val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
                 val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
                 val radius = (paint.strokeWidth * 2 + 32f) / 2f
                 canvas.drawCircle(points.first().point.x, points.first().point.y, radius, startPaint)
                 canvas.drawCircle(points.last().point.x, points.last().point.y, radius, endPaint)
-            } else if (selectedEnd != SelectedEnd.NONE) {
+            } else if (currentStrokeIdx != -1) { // Check if a stroke is selected
                 // Normal case: A completed stroke is selected.
                 val endpointCirclePaint = Paint().apply {
                     style = Paint.Style.FILL
@@ -580,5 +522,48 @@ class DrawingView @JvmOverloads constructor(
         strokeCap = Paint.Cap.ROUND
         color = _color
         strokeWidth = _widthPx
+    }
+
+    override fun onSingleTap(event: MotionEvent): Boolean {
+        findClosestStroke(PointF(event.x, event.y))
+        return true
+    }
+
+    override fun onDoubleTap(event: MotionEvent): Boolean {
+        deselectAllStrokes()
+        return true
+    }
+
+    override fun onDragStart(event: MotionEvent): Boolean {
+        lastTouchX = event.x
+        lastTouchY = event.y
+        if (!isEditingMode) {
+            touchStart(event.x, event.y)
+        }
+        return true
+    }
+
+    override fun onDrag(event: MotionEvent): Boolean {
+        if (isEditingMode) {
+            val dx = event.x - lastTouchX
+            val dy = event.y - lastTouchY
+            if (selectedEnd == SelectedEnd.START) {
+                moveStartPoint(dx, dy)
+            } else if (selectedEnd == SelectedEnd.END) {
+                moveEndPoint(dx, dy)
+            }
+            lastTouchX = event.x
+            lastTouchY = event.y
+        } else {
+            touchMove(event.x, event.y)
+        }
+        return true
+    }
+
+    override fun onDragEnd(event: MotionEvent): Boolean {
+        if (!isEditingMode) {
+            touchUp()
+        }
+        return true
     }
 }
