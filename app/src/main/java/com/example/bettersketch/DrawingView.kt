@@ -534,9 +534,9 @@ class DrawingView @JvmOverloads constructor(
                 val bounds = it.getBounds()
                 val centerX = bounds.centerX()
                 val centerY = bounds.centerY()
-                deltaMatrix.postTranslate(dx, dy)
                 deltaMatrix.postScale(scale, scale, centerX, centerY) // Corrected pivot
                 deltaMatrix.postRotate(rotate, centerX, centerY) // Corrected pivot
+                deltaMatrix.postTranslate(dx, dy) // Apply translation last
                 transformStroke(it, deltaMatrix)
             }
         } else {
