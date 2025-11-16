@@ -435,25 +435,25 @@ class DrawingView @JvmOverloads constructor(
     private fun drawStrokeWithHalo(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
         if (points.isEmpty()) return
 
-        // 1. Draw the halo
-        val haloPaint = Paint(paint).apply {
-            color = Color.LTGRAY
-            strokeWidth = paint.strokeWidth * 2 + 32f
-        }
-        drawPoints(canvas, points, haloPaint)
+        if (selectedEnd != SelectedEnd.NONE) {
+            // 1. Draw the halo
+            val haloPaint = Paint(paint).apply {
+                color = Color.LTGRAY
+                strokeWidth = paint.strokeWidth * 2 + 32f
+            }
+            drawPoints(canvas, points, haloPaint)
 
-        // 2. Draw the endpoint indicator circles
-        if (isEditingMode) {
-            if (currentPoints.isNotEmpty()) {
-                // Special case: Drawing in progress, highlight both ends
-                val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
-                val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
-                val radius = haloPaint.strokeWidth / 2f
-                canvas.drawCircle(points.first().point.x, points.first().point.y, radius, startPaint)
-                canvas.drawCircle(points.last().point.x, points.last().point.y, radius, endPaint)
-            } else {
-                // Normal case: Highlight only the selected end
-                if (selectedEnd != SelectedEnd.NONE) {
+            // 2. Draw the endpoint indicator circles
+            if (isEditingMode) {
+                if (currentPoints.isNotEmpty()) {
+                    // Special case: Drawing in progress, highlight both ends
+                    val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
+                    val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
+                    val radius = haloPaint.strokeWidth / 2f
+                    canvas.drawCircle(points.first().point.x, points.first().point.y, radius, startPaint)
+                    canvas.drawCircle(points.last().point.x, points.last().point.y, radius, endPaint)
+                } else {
+                    // Normal case: Highlight only the selected end
                     val endpointCirclePaint = Paint().apply {
                         style = Paint.Style.FILL
                         color = if (selectedEnd == SelectedEnd.START) Color.GREEN else Color.RED
