@@ -105,7 +105,7 @@ class DrawingView @JvmOverloads constructor(
             backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
         }
 
-        // 2. Draw the live stroke or the halo for the selected stroke
+        // 2. Draw the live part
         if (isEditingMode) {
             if (currentPoints.isNotEmpty()) {
                 drawStrokeWithHalo(canvas, currentPoints, currentPaint)
@@ -114,9 +114,13 @@ class DrawingView @JvmOverloads constructor(
                     drawStrokeWithHalo(canvas, it.points, it.paint)
                 }
             }
-        } else {
+        } else { // Drawing mode
             if (currentPoints.isNotEmpty()) {
                 drawPoints(canvas, currentPoints, currentPaint)
+            } else if (selectedEnd != SelectedEnd.NONE) {
+                strokes.lastOrNull()?.let {
+                    drawStrokeWithHalo(canvas, it.points, it.paint)
+                }
             }
         }
         
@@ -244,8 +248,9 @@ class DrawingView @JvmOverloads constructor(
                     val dy = abs(y - downY)
                     val dt = System.currentTimeMillis() - downTime
                     if (dx < touchSlop && dy < touchSlop && dt < ViewConfiguration.getTapTimeout() * 2) {
-                        // This is a tap, abandon the stroke
+                        // This is a tap, abandon the stroke and find the closest one
                         currentPoints.clear()
+                        findClosestStroke(PointF(x,y))
                         invalidate()
                     } else {
                         touchUp()
@@ -279,7 +284,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchStart(x: Float, y: Float) {
-        selectedEnd = SelectedEnd.END
+        selectedEnd = SelectedEnd.NONE
         currentPoints.clear()
         currentDistance = 0f
         currentPoints.add(PathPoint(PointF(x, y), 0f))
@@ -469,24 +474,22 @@ class DrawingView @JvmOverloads constructor(
             drawPoints(canvas, points, haloPaint)
 
             // 2. Draw the endpoint indicator circles
-            if (isEditingMode) {
-                if (currentPoints.isNotEmpty()) {
-                    // Special case: Drawing in progress, highlight both ends
-                    val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
-                    val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
-                    val radius = haloPaint.strokeWidth / 2f
-                    canvas.drawCircle(points.first().point.x, points.first().point.y, radius, startPaint)
-                    canvas.drawCircle(points.last().point.x, points.last().point.y, radius, endPaint)
-                } else {
-                    // Normal case: Highlight only the selected end
-                    val endpointCirclePaint = Paint().apply {
-                        style = Paint.Style.FILL
-                        color = if (selectedEnd == SelectedEnd.START) Color.GREEN else Color.RED
-                    }
-                    val pointToHighlight = if (selectedEnd == SelectedEnd.START) points.first().point else points.last().point
-                    val radius = haloPaint.strokeWidth / 2f
-                    canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointCirclePaint)
+            if (currentPoints.isNotEmpty() && isEditingMode) {
+                // Special case: Drawing a new stroke while in edit mode.
+                val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
+                val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
+                val radius = haloPaint.strokeWidth / 2f
+                canvas.drawCircle(points.first().point.x, points.first().point.y, radius, startPaint)
+                canvas.drawCircle(points.last().point.x, points.last().point.y, radius, endPaint)
+            } else if (selectedEnd != SelectedEnd.NONE) {
+                // Normal case: A completed stroke is selected.
+                val endpointCirclePaint = Paint().apply {
+                    style = Paint.Style.FILL
+                    color = if (selectedEnd == SelectedEnd.START) Color.GREEN else Color.RED
                 }
+                val pointToHighlight = if (selectedEnd == SelectedEnd.START) points.first().point else points.last().point
+                val radius = haloPaint.strokeWidth / 2f
+                canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointCirclePaint)
             }
         }
         
@@ -541,20 +544,25 @@ class DrawingView @JvmOverloads constructor(
         }
         
         val tempPaint = Paint()
+        val isFadedMode = !isEditingMode && selectedEnd != SelectedEnd.NONE
 
-        // Draw future strokes with 25% alpha
+        // Draw future strokes (always faded)
         for (s in undone.reversed()) {
             tempPaint.set(s.paint)
             if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
-            val originalAlpha = tempPaint.alpha
-            tempPaint.alpha = (originalAlpha * 0.25f).toInt()
+            tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             drawPoints(c, s.points, tempPaint)
         }
 
-        // Draw past strokes at full opacity
+        // Draw past strokes
         for (s in strokes) {
             tempPaint.set(s.paint)
             if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
+            
+            if (isFadedMode) {
+                 tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
+            }
+
             drawPoints(c, s.points, tempPaint)
         }
 
