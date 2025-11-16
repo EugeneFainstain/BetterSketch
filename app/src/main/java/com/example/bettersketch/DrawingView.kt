@@ -50,7 +50,7 @@ class DrawingView @JvmOverloads constructor(
     // History for undo/redo
     private val strokes = mutableListOf<Stroke>()
     private val undone = ArrayDeque<Stroke>()
-    private var selectedStrokeIdx: Int = -1
+    private var currentStrokeIdx: Int = -1
 
     // Transformation state
     private var totalScale = 1.0f
@@ -73,7 +73,7 @@ class DrawingView @JvmOverloads constructor(
     val canFF: Boolean get() = undone.isNotEmpty()
     val historySize: Int get() = strokes.size + undone.size
     val currentHistoryPosition: Int get() = strokes.size
-    private val selectedStroke: Stroke? get() = strokes.getOrNull(selectedStrokeIdx)
+    private val currentStroke: Stroke? get() = strokes.getOrNull(currentStrokeIdx)
 
     // Export bitmap helper
     fun exportBitmap(): Bitmap {
@@ -111,7 +111,7 @@ class DrawingView @JvmOverloads constructor(
             if (strokeInProgressPoints.isNotEmpty()) {
                 drawStrokeWithHalo(canvas, strokeInProgressPoints, currentPaint)
             } else {
-                selectedStroke?.let {
+                currentStroke?.let {
                     drawStrokeWithHalo(canvas, it.points, it.paint)
                 }
             }
@@ -119,7 +119,7 @@ class DrawingView @JvmOverloads constructor(
             if (strokeInProgressPoints.isNotEmpty()) {
                 drawPoints(canvas, strokeInProgressPoints, currentPaint)
             } else if (selectedEnd != SelectedEnd.NONE) {
-                selectedStroke?.let {
+                currentStroke?.let {
                     drawStrokeWithHalo(canvas, it.points, it.paint)
                 }
             }
@@ -181,7 +181,7 @@ class DrawingView @JvmOverloads constructor(
             
             val deltaMatrix = Matrix()
             if (isEditingMode && selectedEnd != SelectedEnd.NONE) {
-                selectedStroke?.let {
+                currentStroke?.let {
                     val bounds = it.getBounds()
                     val centerX = bounds.centerX()
                     val centerY = bounds.centerY()
@@ -285,7 +285,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchStart(x: Float, y: Float) {
-        selectedStrokeIdx = -1
+        currentStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
         strokeInProgressPoints.clear()
         strokeInProgressDistance = 0f
@@ -312,7 +312,7 @@ class DrawingView @JvmOverloads constructor(
     private fun commitStrokeInProgress() {
         val newStroke = Stroke(strokeInProgressPoints.toMutableList(), Paint(currentPaint), strokeInProgressDistance)
         strokes.add(newStroke)
-        selectedStrokeIdx = -1
+        currentStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
         strokeInProgressPoints.clear()
         redrawHistory()
@@ -354,7 +354,7 @@ class DrawingView @JvmOverloads constructor(
         }
 
         if (closestIndex != -1) {
-            selectedStrokeIdx = closestIndex
+            currentStrokeIdx = closestIndex
             val closestStroke = strokes[closestIndex]
             val startPoint = closestStroke.points.first().point
             val endPoint = closestStroke.points.last().point
@@ -369,7 +369,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun deselectAllStrokes() {
-        selectedStrokeIdx = -1
+        currentStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
         redrawHistory()
         listener?.onStateChanged()
@@ -390,16 +390,16 @@ class DrawingView @JvmOverloads constructor(
                 break
             }
         }
-        selectedStrokeIdx = -1
+        currentStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
         redrawHistory()
         listener?.onStateChanged()
     }
 
     fun deleteCurrentStroke() {
-        if (selectedStrokeIdx != -1) {
-            strokes.removeAt(selectedStrokeIdx)
-            selectedStrokeIdx = -1
+        if (currentStrokeIdx != -1) {
+            strokes.removeAt(currentStrokeIdx)
+            currentStrokeIdx = -1
             selectedEnd = SelectedEnd.NONE
         } else if (strokes.isNotEmpty()) {
             strokes.removeAt(strokes.lastIndex)
@@ -415,7 +415,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun moveStartPoint(dx: Float, dy: Float) {
-        selectedStroke?.let {
+        currentStroke?.let {
             val totalDistance = it.totalDistance
             if (totalDistance == 0f) return 
             for (pathPoint in it.points) {
@@ -428,7 +428,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun moveEndPoint(dx: Float, dy: Float) {
-        selectedStroke?.let {
+        currentStroke?.let {
             val totalDistance = it.totalDistance
             if (totalDistance == 0f) return 
             for (pathPoint in it.points) {
@@ -478,7 +478,7 @@ class DrawingView @JvmOverloads constructor(
     fun setColor(color: Int, applyToSelected: Boolean = false) {
         currentPaint.color = color
         if (applyToSelected) {
-            selectedStroke?.paint?.color = color
+            currentStroke?.paint?.color = color
             redrawHistory()
             listener?.onStateChanged()
         }
@@ -488,7 +488,7 @@ class DrawingView @JvmOverloads constructor(
         val w = max(1f, min(120f, px))
         currentPaint.strokeWidth = w
         if (applyToSelected) {
-            selectedStroke?.paint?.strokeWidth = w
+            currentStroke?.paint?.strokeWidth = w
             redrawHistory()
             listener?.onStateChanged()
         }
@@ -510,7 +510,7 @@ class DrawingView @JvmOverloads constructor(
         strokes.clear()
         undone.clear()
         strokeInProgressPoints.clear()
-        selectedStrokeIdx = -1
+        currentStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
         totalScale = 1.0f
         redrawHistory()
@@ -539,7 +539,7 @@ class DrawingView @JvmOverloads constructor(
             tempPaint.set(s.paint)
             if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
             
-            if (isFadedMode && index != selectedStrokeIdx) {
+            if (isFadedMode && index != currentStrokeIdx) {
                  tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             }
 
