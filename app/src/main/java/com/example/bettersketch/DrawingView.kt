@@ -109,21 +109,6 @@ class DrawingView @JvmOverloads constructor(
         super.onDraw(canvas)
         canvas.save()
 
-        // Temporary compatibility logic
-        if (isEditingMode) {
-            currentStrokeDrawHalo = true
-            currentStrokeDrawEndpoints = true
-            strokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
-        } else {
-            currentStrokeDrawHalo = selectedEnd != SelectedEnd.NONE
-            currentStrokeDrawEndpoints = false
-            strokesDrawingMethod = if (selectedEnd != SelectedEnd.NONE) {
-                StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
-            } else {
-                StrokesDrawingMethod.DrawAllOpaque
-            }
-        }
-
         // 1. Draw the cached history
         if (isTransforming) {
             redrawHistory(canvas, totalScale)
@@ -544,13 +529,6 @@ class DrawingView @JvmOverloads constructor(
             c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
         }
         
-        // Temporary compatibility logic
-        if (!isEditingMode && selectedEnd != SelectedEnd.NONE) {
-            strokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
-        } else {
-            strokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaque
-        }
-
         val tempPaint = Paint()
 
         // Draw future strokes (always faded)

@@ -223,6 +223,19 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         historyIndicator.strokeColors = drawingView.getStrokeColors()
         
         drawingView.isEditingMode = isAppInEditMode
+        if (isAppInEditMode) {
+            drawingView.currentStrokeDrawHalo = true
+            drawingView.currentStrokeDrawEndpoints = true
+            drawingView.strokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
+        } else {
+            drawingView.currentStrokeDrawHalo = drawingView.selectedEnd != SelectedEnd.NONE
+            drawingView.currentStrokeDrawEndpoints = false
+            drawingView.strokesDrawingMethod = if (drawingView.selectedEnd != SelectedEnd.NONE) {
+                StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
+            } else {
+                StrokesDrawingMethod.DrawAllOpaque
+            }
+        }
 
         val currentPaint = drawingView.currentPaint
         val widthValue = (currentPaint.strokeWidth - 2f) / 30f
