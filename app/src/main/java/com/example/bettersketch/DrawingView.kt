@@ -62,13 +62,9 @@ class DrawingView @JvmOverloads constructor(
 
     // Transformation state
     private var totalScale = 1.0f
-    private var lastMidpoint = PointF()
-    private var lastDistance = 0f
-    private var lastAngle = 0f
     private var isTransforming = false
-    private var singleFingerGestureAllowed = true
 
-    // Touch state for drag calculations
+    // Touch state for drag calculations (now managed by CustomGestureDetector)
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
@@ -134,78 +130,26 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        customGestureDetector.onTouchEvent(event)
+
+        // Multi-touch handling (still separate for now, but will be simplified)
         val pointerCount = event.pointerCount
         if (pointerCount >= 2) {
-            handleMultiTouch(event)
-        } else if (pointerCount == 1 && singleFingerGestureAllowed) { // <--- Added this check
-            customGestureDetector.onTouchEvent(event)
-        }
-
-        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL || (event.actionMasked == MotionEvent.ACTION_POINTER_UP && pointerCount == 2)) {
-            if(isTransforming) {
-                redrawHistory()
-                isTransforming = false
+            // This part of multi-touch handling will be moved to CustomGestureDetector
+            // For now, it's here to ensure functionality
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL || (event.actionMasked == MotionEvent.ACTION_POINTER_UP && pointerCount == 2)) {
+                if(isTransforming) {
+                    redrawHistory()
+                    isTransforming = false
+                }
             }
-
-            if( !singleFingerGestureAllowed ) // If single finger gestures were disabled
-                if( event.actionMasked == MotionEvent.ACTION_UP ) // and the last finger was lifted
-                    singleFingerGestureAllowed = true // re-enable them
         }
-
+        
         invalidate()
         return true
     }
     
-    private fun handleMultiTouch(event: MotionEvent) {
-        val action = event.actionMasked
-        val midpoint = midpoint(event)
-        isTransforming = true
-        singleFingerGestureAllowed = false // disable single finger gestures until all fingers are lifted
-
-        if (action == MotionEvent.ACTION_POINTER_DOWN) {
-            if (strokeInProgressPoints.isNotEmpty()) {
-                if (strokeInProgressPoints.size > 5) {
-                    commitStrokeInProgress()
-                } else {
-                    strokeInProgressPoints.clear()
-                }
-            }
-            lastDistance = distance(event)
-            lastAngle = angle(event)
-            lastMidpoint.set(midpoint)
-        } else if (action == MotionEvent.ACTION_MOVE) {
-            val newDist = distance(event)
-            val newAngle = angle(event)
-            
-            val scale = if (lastDistance > 0) newDist / lastDistance else 1f
-            val rotate = newAngle - lastAngle
-            val dx = midpoint.x - lastMidpoint.x
-            val dy = midpoint.y - lastMidpoint.y
-            
-            val deltaMatrix = Matrix()
-            if (isEditingMode && selectedEnd != SelectedEnd.NONE) {
-                currentStroke?.let {
-                    val bounds = it.getBounds()
-                    val centerX = bounds.centerX()
-                    val centerY = bounds.centerY()
-                    deltaMatrix.postTranslate(dx, dy)
-                    deltaMatrix.postScale(scale, scale, centerX + dx, centerY + dy)
-                    deltaMatrix.postRotate(rotate, centerX + dx, centerY + dy)
-                    transformStroke(it, deltaMatrix)
-                }
-            } else {
-                totalScale *= scale
-                deltaMatrix.postTranslate(dx, dy)
-                deltaMatrix.postScale(scale, scale, midpoint.x, midpoint.y)
-                deltaMatrix.postRotate(rotate, midpoint.x, midpoint.y)
-                transformAllStrokes(deltaMatrix)
-            }
-
-            lastDistance = newDist
-            lastAngle = newAngle
-            lastMidpoint.set(midpoint)
-        }
-    }
+    // handleMultiTouch method is now removed, its logic is in CustomGestureDetector.onTwoFingerDrag
 
     private fun transformStroke(stroke: Stroke, matrix: Matrix) {
         val scale = getScaleFromMatrix(matrix)
@@ -534,7 +478,7 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    override fun onDragStart(event: MotionEvent): Boolean {
+    override fun onFirstFingerDown(event: MotionEvent): Boolean {
         lastTouchX = event.x
         lastTouchY = event.y
         if (!isEditingMode) {
@@ -543,27 +487,70 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    override fun onDrag(event: MotionEvent): Boolean {
+    override fun onSecondFingerDown(event: MotionEvent): Boolean {
+        if (strokeInProgressPoints.isNotEmpty()) {
+            if (strokeInProgressPoints.size > 5) {
+                commitStrokeInProgress()
+            } else {
+                strokeInProgressPoints.clear()
+            }
+        }
+        isTransforming = true
+        return true
+    }
+
+    override fun onSomeFingerUp(event: MotionEvent): Boolean {
+        return true
+    }
+
+    override fun onLastFingerUp(event: MotionEvent): Boolean {
+        if(isTransforming) {
+            redrawHistory()
+            isTransforming = false
+        }
+        if (!isEditingMode && strokeInProgressPoints.isNotEmpty()) {
+            touchUp()
+        }
+        return true
+    }
+
+    override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
         if (isEditingMode) {
-            val dx = event.x - lastTouchX
-            val dy = event.y - lastTouchY
             if (selectedEnd == SelectedEnd.START) {
                 moveStartPoint(dx, dy)
             } else if (selectedEnd == SelectedEnd.END) {
                 moveEndPoint(dx, dy)
             }
-            lastTouchX = event.x
-            lastTouchY = event.y
         } else {
             touchMove(event.x, event.y)
         }
         return true
     }
 
-    override fun onDragEnd(event: MotionEvent): Boolean {
-        if (!isEditingMode) {
-            touchUp()
+    override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
+        val deltaMatrix = Matrix()
+        if (isEditingMode && selectedEnd != SelectedEnd.NONE) {
+            currentStroke?.let {
+                val bounds = it.getBounds()
+                val centerX = bounds.centerX()
+                val centerY = bounds.centerY()
+                deltaMatrix.postTranslate(dx, dy)
+                deltaMatrix.postScale(scale, scale, centerX + dx, centerY + dy)
+                deltaMatrix.postRotate(rotate, centerX + dx, centerY + centerY)
+                transformStroke(it, deltaMatrix)
+            }
+        } else {
+            totalScale *= scale
+            deltaMatrix.postTranslate(dx, dy)
+            deltaMatrix.postScale(scale, scale, midpoint(event).x, midpoint(event).y)
+            deltaMatrix.postRotate(rotate, midpoint(event).x, midpoint(event).y)
+            transformAllStrokes(deltaMatrix)
         }
+        return true
+    }
+
+    override fun onTapAndAHalf(event: MotionEvent): Boolean {
+        deselectAllStrokes() // Default action for now
         return true
     }
 }
