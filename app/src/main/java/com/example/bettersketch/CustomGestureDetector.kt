@@ -101,7 +101,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 val totalDx = abs(event.x - downX)
                 val totalDy = abs(event.y - downY)
 
-                if (totalDx > touchSlop || totalDy > touchSlop) {
+                if (totalDx > touchSlop || totalDy > touchSlop || (System.currentTimeMillis() - downTime) > 100 ) {
                     isDragging = true
                 }
 
