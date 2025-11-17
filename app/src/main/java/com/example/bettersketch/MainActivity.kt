@@ -4,14 +4,12 @@ import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.graphics.PointF
 import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
-import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
@@ -29,8 +27,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var historyIndicator: HistoryIndicatorDrawable
     private lateinit var rewButton: Button
     private lateinit var ffButton: Button
-    private lateinit var toggleModeButton: Button
-    private lateinit var drawingGestureDetector: GestureDetector
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -49,13 +45,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         Color.WHITE
     )
 
-    // App state
-    private var isAppInEditMode = false
-
-    // Auto-repeat for buttons
     private val handler = Handler(Looper.getMainLooper())
     private var autoRepeatRunnable: Runnable? = null
-
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,8 +61,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         progressSeekBar = findViewById(R.id.seekProgress)
         rewButton = findViewById(R.id.btnUndo)
         ffButton = findViewById(R.id.btnRedo)
-        toggleModeButton = findViewById(R.id.btnToggleMode)
-
 
         historyIndicator = HistoryIndicatorDrawable()
         val originalProgressDrawable = progressSeekBar.progressDrawable.constantState?.newDrawable()?.mutate()
@@ -84,53 +73,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         setupSliderListeners()
         setupAutoRepeatListeners()
-        setupDrawingViewGestureDetector()
 
-
-        findViewById<Button>(R.id.btnClear).setOnClickListener { 
-            drawingView.resetStrokeSelection()
-            drawingView.deleteCurrentStroke() 
-        }
+        findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.deleteCurrentStroke() }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
-        
-        toggleModeButton.setOnClickListener {
-            isAppInEditMode = !isAppInEditMode
-            updateModeButtonState()
-            updateUi()
-        }
+        findViewById<View>(R.id.btnToggleMode).visibility = View.GONE
 
         drawingView.post { updateUi() }
-        updateModeButtonState()
-    }
-
-    private fun updateModeButtonState() {
-        if (isAppInEditMode) {
-            toggleModeButton.text = "EDITING"
-            toggleModeButton.setBackgroundColor(Color.parseColor("#BB0000")) // Darker Red
-            rewButton.visibility = View.VISIBLE
-            ffButton.visibility = View.VISIBLE
-            drawingView.setOnTouchListener { _, event -> drawingGestureDetector.onTouchEvent(event) }
-        } else {
-            toggleModeButton.text = "DRAWING"
-            toggleModeButton.setBackgroundColor(Color.parseColor("#008800")) // Darker Green
-            rewButton.visibility = View.GONE
-            ffButton.visibility = View.GONE
-            drawingView.setOnTouchListener { _, event -> drawingView.onTouchEvent(event) }
-        }
-    }
-
-    private fun setupDrawingViewGestureDetector() {
-        drawingGestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                drawingView.deselectAllStrokes()
-                return true
-            }
-
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                drawingView.findClosestStroke(PointF(e.x, e.y))
-                return true
-            }
-        })
     }
 
     private fun setupAutoRepeatListeners() {
@@ -140,7 +88,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                     MotionEvent.ACTION_DOWN -> {
                         handler.removeCallbacksAndMessages(null)
                         view.isPressed = true
-                        action() 
+                        action()
                         autoRepeatRunnable = object : Runnable {
                             override fun run() {
                                 action()
@@ -167,12 +115,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         widthSlider.listener = object : MySlider.OnSliderValueChangedListener {
             override fun onValueChanged(value: Float) {
                 val strokeWidth = 2f + value * 30f // 2...32
-                drawingView.setStrokeWidth(strokeWidth, applyToSelected = isAppInEditMode)
+                drawingView.setStrokeWidth(strokeWidth, drawingView.isStrokeSelected)
             }
 
             override fun onValueEdit(value: Float) {
                 val strokeWidth = 2f + value * 30f // 2...32
-                drawingView.setStrokeWidth(strokeWidth, applyToSelected = true)
+                drawingView.setStrokeWidth(strokeWidth, true)
             }
 
             override fun onValueEditEnd() {}
@@ -183,14 +131,14 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             override fun onValueChanged(value: Float) {
                 val colorIndex = (value * (colors.size - 1)).roundToInt()
                 val color = colors[colorIndex]
-                drawingView.setColor(color, applyToSelected = isAppInEditMode)
+                drawingView.setColor(color, drawingView.isStrokeSelected)
                 widthSlider.color = color
             }
 
             override fun onValueEdit(value: Float) {
                 val colorIndex = (value * (colors.size - 1)).roundToInt()
                 val color = colors[colorIndex]
-                drawingView.setColor(color, applyToSelected = true)
+                drawingView.setColor(color, true)
                 widthSlider.color = color
             }
 
@@ -201,7 +149,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
                     drawingView.navigateToHistoryState(progress)
-                    drawingView.resetStrokeSelection()
                 }
             }
 
@@ -221,20 +168,11 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         progressSeekBar.max = drawingView.historySize
         progressSeekBar.progress = drawingView.currentHistoryPosition
         historyIndicator.strokeColors = drawingView.getStrokeColors()
-        
-        drawingView.isEditingMode = isAppInEditMode
-        if (isAppInEditMode) {
-            drawingView.currentStrokeDrawHalo = true
-            drawingView.currentStrokeDrawEndpoints = true
-            drawingView.strokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
+
+        drawingView.strokesDrawingMethod = if (drawingView.isStrokeSelected) {
+            StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
         } else {
-            drawingView.currentStrokeDrawHalo = drawingView.selectedEnd != SelectedEnd.NONE
-            drawingView.currentStrokeDrawEndpoints = true
-            drawingView.strokesDrawingMethod = if (drawingView.selectedEnd != SelectedEnd.NONE) {
-                StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
-            } else {
-                StrokesDrawingMethod.DrawAllOpaque
-            }
+            StrokesDrawingMethod.DrawAllOpaque
         }
 
         val currentPaint = drawingView.currentPaint
