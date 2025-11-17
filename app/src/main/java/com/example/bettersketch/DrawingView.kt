@@ -32,18 +32,11 @@ class DrawingView @JvmOverloads constructor(
 
     private var currentState = State.NORMAL_DRAWING
     private fun setState(newState: State) {
-        if (currentState == newState) return
-        currentState = newState
-
-        if (newState == State.NORMAL_DRAWING) {
-            currentStrokeIdx = -1
-            selectedEnd = SelectedEnd.NONE
-        } else if (newState == State.CHOSEN_STROKE) {
-            selectedEnd = SelectedEnd.NONE
+        if (currentState != newState) {
+            currentState = newState
+            redrawHistory()
+            listener?.onStateChanged()
         }
-
-        listener?.onStateChanged()
-        redrawHistory()
     }
 
     // Drawing state
@@ -102,22 +95,24 @@ class DrawingView @JvmOverloads constructor(
         canvas.save()
 
         // 1. Draw the cached history
-        if (isTransforming) {
-            redrawHistory(canvas, totalScale)
-        } else {
-            backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
-        }
+        backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
 
-        // 2. Draw the live part
-        if (strokeInProgressPoints.isNotEmpty()) {
-            drawPoints(canvas, strokeInProgressPoints, currentPaint)
-        } else if (currentState == State.CHOSEN_STROKE) {
-            currentStroke?.let {
-                drawPoints(canvas, it.points, it.paint)
+        // 2. Draw the "live" part depending on the state
+        when (currentState) {
+            State.NORMAL_DRAWING -> {
+                if (strokeInProgressPoints.isNotEmpty()) {
+                    drawPoints(canvas, strokeInProgressPoints, currentPaint)
+                }
             }
-        } else if (currentState == State.STROKE_EDITING) {
-            currentStroke?.let {
-                drawStrokeWithHalo(canvas, it.points, it.paint)
+            State.CHOSEN_STROKE -> {
+                currentStroke?.let {
+                    drawPoints(canvas, it.points, it.paint)
+                }
+            }
+            State.STROKE_EDITING -> {
+                currentStroke?.let {
+                    drawStrokeWithHalo(canvas, it.points, it.paint)
+                }
             }
         }
 
@@ -229,10 +224,6 @@ class DrawingView @JvmOverloads constructor(
         return false
     }
 
-    fun deselectAllStrokes() {
-        setState(State.NORMAL_DRAWING)
-    }
-
     fun navigateToHistoryState(index: Int) {
         while (strokes.size > index) {
             undone.addLast(strokes.removeAt(strokes.lastIndex))
@@ -244,6 +235,8 @@ class DrawingView @JvmOverloads constructor(
                 break
             }
         }
+        currentStrokeIdx = -1
+        selectedEnd = SelectedEnd.NONE
         setState(State.NORMAL_DRAWING)
     }
 
@@ -253,6 +246,8 @@ class DrawingView @JvmOverloads constructor(
         } else if (strokes.isNotEmpty()) {
             strokes.removeAt(strokes.lastIndex)
         }
+        currentStrokeIdx = -1
+        selectedEnd = SelectedEnd.NONE
         setState(State.NORMAL_DRAWING)
     }
 
@@ -352,6 +347,8 @@ class DrawingView @JvmOverloads constructor(
         strokes.clear()
         undone.clear()
         strokeInProgressPoints.clear()
+        currentStrokeIdx = -1
+        selectedEnd = SelectedEnd.NONE
         setState(State.NORMAL_DRAWING)
         totalScale = 1.0f
     }
@@ -376,7 +373,7 @@ class DrawingView @JvmOverloads constructor(
         for ((index, s) in strokes.withIndex()) {
             tempPaint.set(s.paint)
             if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
-
+            
             if (currentState != State.NORMAL_DRAWING && index != currentStrokeIdx) {
                 tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             }
@@ -426,7 +423,6 @@ class DrawingView @JvmOverloads constructor(
                     if (selectStrokeAt(tapPoint) && currentStrokeIdx != originalIdx) {
                         redrawHistory() // A new stroke was selected, redraw.
                     }
-                    // If same stroke or empty space is tapped, do nothing.
                 }
             }
             State.STROKE_EDITING -> {
@@ -441,8 +437,13 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onDoubleTap(event: MotionEvent): Boolean {
-        if (currentState == State.CHOSEN_STROKE || currentState == State.STROKE_EDITING) {
-            setState(State.NORMAL_DRAWING)
+        when (currentState) {
+            State.CHOSEN_STROKE, State.STROKE_EDITING -> {
+                currentStrokeIdx = -1
+                selectedEnd = SelectedEnd.NONE
+                setState(State.NORMAL_DRAWING)
+            }
+            else -> {}
         }
         return true
     }
@@ -459,8 +460,9 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
             State.STROKE_EDITING -> {
-                // Allow re-selecting an endpoint on finger down
-                selectEndpointOfCurrentStroke(downPoint)
+                if (selectEndpointOfCurrentStroke(downPoint)) {
+                    redrawHistory()
+                }
             }
         }
         listener?.onStateChanged()
@@ -484,14 +486,20 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onLastFingerUp(event: MotionEvent): Boolean {
+        when (currentState) {
+            State.NORMAL_DRAWING -> {
+                if (strokeInProgressPoints.isNotEmpty()) {
+                    touchUp()
+                }
+            }
+            State.STROKE_EDITING -> {
+                setState(State.CHOSEN_STROKE)
+            }
+            else -> {}
+        }
         if (isTransforming) {
             redrawHistory()
             isTransforming = false
-        }
-        if (strokeInProgressPoints.isNotEmpty()) {
-            touchUp()
-        } else if (currentState == State.STROKE_EDITING) {
-            setState(State.CHOSEN_STROKE)
         }
         return true
     }
@@ -513,29 +521,34 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
         val deltaMatrix = Matrix()
-        if (currentState == State.CHOSEN_STROKE || currentState == State.STROKE_EDITING) {
-            currentStroke?.let {
-                val bounds = it.getBounds()
-                val centerX = bounds.centerX()
-                val centerY = bounds.centerY()
-                deltaMatrix.postScale(scale, scale, centerX, centerY)
-                deltaMatrix.postRotate(rotate, centerX, centerY)
+        when (currentState) {
+            State.NORMAL_DRAWING -> {
+                totalScale *= scale
+                val mid = PointF((event.getX(0) + event.getX(1)) / 2f, (event.getY(0) + event.getY(1)) / 2f)
                 deltaMatrix.postTranslate(dx, dy)
-                transformStroke(it, deltaMatrix)
+                deltaMatrix.postScale(scale, scale, mid.x, mid.y)
+                deltaMatrix.postRotate(rotate, mid.x, mid.y)
+                transformAllStrokes(deltaMatrix)
             }
-        } else {
-            totalScale *= scale
-            val mid = PointF((event.getX(0) + event.getX(1)) / 2f, (event.getY(0) + event.getY(1)) / 2f)
-            deltaMatrix.postTranslate(dx, dy)
-            deltaMatrix.postScale(scale, scale, mid.x, mid.y)
-            deltaMatrix.postRotate(rotate, mid.x, mid.y)
-            transformAllStrokes(deltaMatrix)
+            State.CHOSEN_STROKE, State.STROKE_EDITING -> {
+                currentStroke?.let {
+                    val bounds = it.getBounds()
+                    val centerX = bounds.centerX()
+                    val centerY = bounds.centerY()
+                    deltaMatrix.postScale(scale, scale, centerX, centerY)
+                    deltaMatrix.postRotate(rotate, centerX, centerY)
+                    deltaMatrix.postTranslate(dx, dy)
+                    transformStroke(it, deltaMatrix)
+                }
+            }
         }
         return true
     }
 
     override fun onTapAndAHalf(event: MotionEvent): Boolean {
-        deselectAllStrokes()
+        currentStrokeIdx = -1
+        selectedEnd = SelectedEnd.NONE
+        setState(State.NORMAL_DRAWING)
         return true
     }
 }
