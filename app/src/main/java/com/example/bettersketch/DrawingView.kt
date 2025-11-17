@@ -54,6 +54,7 @@ class DrawingView @JvmOverloads constructor(
 
     // Transformation state
     private var twoFingerGestureOccured = false
+    private var threeFingerGestureOccured = false
 
     private val customGestureDetector: CustomGestureDetector
 
@@ -247,6 +248,12 @@ class DrawingView @JvmOverloads constructor(
     private fun drawStrokeWithEndpoints(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
         if (points.isEmpty()) return
 
+        // During a two-finger drag, we don't want to see the endpoints at all.
+        if (twoFingerGestureOccured && !threeFingerGestureOccured) {
+            drawPoints(canvas, points, paint)
+            return
+        }
+
         // 1. Draw the endpoint indicator circles FIRST
         val radius = paint.strokeWidth * 2f
         val startPoint = points.first().point
@@ -257,16 +264,16 @@ class DrawingView @JvmOverloads constructor(
             color = Color.GREEN
         }
 
-        val drawOnlyOne = !twoFingerGestureOccured
-        if (drawOnlyOne) {
+        // If we are three-finger dragging, draw both endpoints.
+        if (threeFingerGestureOccured) {
+            canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
+            canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
+        } else { // Otherwise, it's a single-finger drag on an endpoint
             if (selectedEnd == SelectedEnd.START) {
                 canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
             } else {
                 canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
             }
-        } else {
-            canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
-            canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
         }
 
         // 2. Draw the actual stroke on TOP of the circles
@@ -400,6 +407,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onThirdFingerDown(event: MotionEvent): Boolean {
+        threeFingerGestureOccured = true
         return true
     }
 
@@ -409,6 +417,7 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
         twoFingerGestureOccured = false
+        threeFingerGestureOccured = false
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 if (strokeInProgressPoints.isNotEmpty()) {
@@ -425,7 +434,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
-        if (twoFingerGestureOccured) return true
+        if (twoFingerGestureOccured || threeFingerGestureOccured) return true
 
         when (currentState) {
             State.NORMAL_DRAWING -> touchMove(event.x, event.y)
