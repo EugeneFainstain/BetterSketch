@@ -11,8 +11,8 @@ import kotlin.math.sqrt
 class CustomGestureDetector(context: Context, private val listener: OnGestureListener) {
 
     interface OnGestureListener {
-        fun onSingleTap(event: MotionEvent): Boolean
-        fun onDoubleTap(event: MotionEvent): Boolean
+        fun onSingleTapEnd(event: MotionEvent): Boolean
+        fun onDoubleTapEnd(event: MotionEvent): Boolean
         fun onFirstFingerDown(event: MotionEvent): Boolean
         fun onSecondFingerDown(event: MotionEvent): Boolean
         fun onSecondFingerUp(event: MotionEvent): Boolean
@@ -160,7 +160,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                         } else {
                             // Confirmed double tap
                             lastTapTime = 0 // Reset
-                            listener.onDoubleTap(event)
+                            listener.onDoubleTapEnd(event)
                         }
                     } else {
                         // This is a single tap
@@ -170,7 +170,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                         firstTapY = event.y
                         isPotentialTapAndAHalf = true // Set for next potential tap-and-a-half
                         lastTapTime = currentTime // For double tap detection
-                        listener.onSingleTap(event)
+                        listener.onSingleTapEnd(event)
                     }
                 } else {
                     // Not a tap, not a drag - just a release after some movement

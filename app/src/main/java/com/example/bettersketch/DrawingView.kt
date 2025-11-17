@@ -416,26 +416,28 @@ class DrawingView @JvmOverloads constructor(
         strokeWidth = _widthPx
     }
 
-    override fun onSingleTap(event: MotionEvent): Boolean {
-        val tapPoint = PointF(event.x, event.y)
+    override fun onSingleTapEnd(event: MotionEvent): Boolean {
         when (currentState) {
             State.NORMAL_DRAWING -> {
-                if (selectStrokeAt(tapPoint)) {
+                if (selectStrokeAt(PointF(event.x, event.y))) {
                     setState(State.CHOSEN_STROKE)
                 }
             }
             State.CHOSEN_STROKE -> {
-                redrawHistory() // Redraw to update highlight
+                // This is the result of a finger down and up without a drag.
+                // We were momentarily in STROKE_EDITING, now go back.
+                setState(State.CHOSEN_STROKE)
             }
             State.STROKE_EDITING -> {
+                // This case happens if a tap occurs while already editing,
+                // which means we should revert to chosen, not editing.
                 setState(State.CHOSEN_STROKE)
-                redrawHistory() // Redraw to update highlight
             }
         }
         return true
     }
 
-    override fun onDoubleTap(event: MotionEvent): Boolean {
+    override fun onDoubleTapEnd(event: MotionEvent): Boolean {
         when (currentState) {
             State.CHOSEN_STROKE, State.STROKE_EDITING -> {
                 currentStrokeIdx = -1
