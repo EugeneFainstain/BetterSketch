@@ -49,6 +49,7 @@ class DrawingView @JvmOverloads constructor(
     // Data
     private val strokes = mutableListOf<Stroke>()
     private var selectedStrokeIdx: Int = -1
+    private var middlePointRelativeDistance: Float = 0.5f
 
     // Transformation state
     private var twoFingerGestureOccured = false
@@ -192,13 +193,13 @@ class DrawingView @JvmOverloads constructor(
         return false
     }
 
-    private fun getMiddlePoint(stroke: Stroke): PathPoint? {
+    private fun getPointAtRelativeDistance(stroke: Stroke, relativeDist: Float): PathPoint? {
         if (stroke.points.isEmpty()) return null
-        val midDistance = stroke.totalDistance / 2f
+        val targetDist = stroke.totalDistance * relativeDist
         var closestPoint = stroke.points.first()
         var smallestDist = Float.MAX_VALUE
         for (p in stroke.points) {
-            val dist = abs(p.distance - midDistance)
+            val dist = abs(p.distance - targetDist)
             if (dist < smallestDist) {
                 smallestDist = dist
                 closestPoint = p
@@ -210,23 +211,34 @@ class DrawingView @JvmOverloads constructor(
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         if (selectedStrokeIdx == -1) return false
         val stroke = currentStroke ?: return false
+        if (stroke.points.isEmpty()) return false
 
-        val startPoint = stroke.points.first().point
-        val endPoint = stroke.points.last().point
-        val middlePathPoint = getMiddlePoint(stroke)
-        val middlePoint = middlePathPoint?.point
+        // Find the point on the stroke physically closest to the tap
+        var closestDist = Float.MAX_VALUE
+        var closestPoint: PathPoint? = null
+        stroke.points.forEach { pathPoint ->
+            val d = distance(pathPoint.point, tapPoint)
+            if (d < closestDist) {
+                closestDist = d
+                closestPoint = pathPoint
+            }
+        }
 
-        val distToStart = distance(startPoint, tapPoint)
-        val distToEnd = distance(endPoint, tapPoint)
-        val distToMiddle = if (middlePoint != null) distance(middlePoint, tapPoint) else Float.MAX_VALUE
+        if (closestPoint == null) {
+            selectedEnd = SelectedEnd.NONE
+            return false
+        }
 
-        val min = min(distToStart, min(distToEnd, distToMiddle))
+        val relativeDistance = if (stroke.totalDistance > 0) closestPoint.distance / stroke.totalDistance else 0f
 
-        selectedEnd = when (min) {
-            distToStart -> SelectedEnd.START
-            distToEnd -> SelectedEnd.END
-            distToMiddle -> SelectedEnd.MIDDLE
-            else -> SelectedEnd.NONE
+        // Snap to endpoints if close enough
+        if (relativeDistance < 0.05f) {
+            selectedEnd = SelectedEnd.START
+        } else if (relativeDistance > 0.95f) {
+            selectedEnd = SelectedEnd.END
+        } else {
+            selectedEnd = SelectedEnd.MIDDLE
+            middlePointRelativeDistance = relativeDistance
         }
         return true
     }
@@ -276,7 +288,13 @@ class DrawingView @JvmOverloads constructor(
             if (totalDistance == 0f) return
             for (pathPoint in it.points) {
                 val relativeDistance = pathPoint.distance / totalDistance
-                val weight = sin(relativeDistance * PI).toFloat()
+
+                val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
+                    relativeDistance / middlePointRelativeDistance
+                } else {
+                    1 - ((relativeDistance - middlePointRelativeDistance) / (1 - middlePointRelativeDistance))
+                }
+                val weight = sin(mappedDistance * PI / 2).toFloat()
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
             redrawHistory()
@@ -286,39 +304,37 @@ class DrawingView @JvmOverloads constructor(
     private fun drawStrokeWithEndpoints(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
         if (points.isEmpty()) return
 
-        // If we are transforming the whole canvas, or implicitly transforming the last stroke,
-        // just draw the path and nothing else.
         if ((twoFingerGestureOccured && !threeFingerGestureOccured) || strokeImplicitlySelectedForTransform) {
             drawPoints(canvas, points, paint)
             return
         }
 
-        // 1. Draw the endpoint indicator circles FIRST
         val radius = paint.strokeWidth * 2f
         val startPoint = points.first().point
         val endPoint = points.last().point
-        val middlePoint = getMiddlePoint(currentStroke!!)?.point
 
         val endpointPaint = Paint().apply {
             style = Paint.Style.FILL
             color = Color.GREEN
         }
 
-        // If we are three-finger dragging an explicit stroke, draw all three endpoints.
         if (threeFingerGestureOccured) {
+            val middlePoint = getPointAtRelativeDistance(currentStroke!!, 0.5f)?.point
             canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
             canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
             middlePoint?.let { canvas.drawCircle(it.x, it.y, radius, endpointPaint) }
-        } else { // Otherwise, it's a single-finger drag on an endpoint
+        } else {
             when (selectedEnd) {
                 SelectedEnd.START -> canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
                 SelectedEnd.END -> canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
-                SelectedEnd.MIDDLE -> middlePoint?.let { canvas.drawCircle(it.x, it.y, radius, endpointPaint) }
+                SelectedEnd.MIDDLE -> {
+                    val middlePoint = getPointAtRelativeDistance(currentStroke!!, middlePointRelativeDistance)?.point
+                    middlePoint?.let { canvas.drawCircle(it.x, it.y, radius, endpointPaint) }
+                }
                 else -> {}
             }
         }
 
-        // 2. Draw the actual stroke on TOP of the circles
         drawPoints(canvas, points, paint)
     }
 
