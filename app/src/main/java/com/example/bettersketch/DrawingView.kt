@@ -54,7 +54,6 @@ class DrawingView @JvmOverloads constructor(
     private var currentStrokeIdx: Int = -1
 
     // Transformation state
-    private var totalScale = 1.0f
     private var isTransforming = false
 
     private val customGestureDetector: CustomGestureDetector
@@ -268,39 +267,33 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun drawStrokeWithHalo(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
+    private fun drawStrokeWithEndpoints(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
         if (points.isEmpty()) return
 
-        // 1. Draw the halo
-        val haloPaint = Paint(paint).apply {
-            color = Color.LTGRAY
-            strokeWidth = paint.strokeWidth * 2 + 32f
-        }
-        drawPoints(canvas, points, haloPaint)
-        
-        // 2. Draw the actual stroke on top of the halo
-        drawPoints(canvas, points, paint)
-
-        // 3. Draw the endpoint indicator circles and highlight on top of everything
-        val radius = (paint.strokeWidth * 2 + 32f) / 2f
+        // 1. Draw the endpoint indicator circles FIRST
+        val radius = paint.strokeWidth * 2f
         val startPoint = points.first().point
         val endPoint = points.last().point
 
-        val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
-        val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
-
-        canvas.drawCircle(startPoint.x, startPoint.y, radius, startPaint)
-        canvas.drawCircle(endPoint.x, endPoint.y, radius, endPaint)
-
-        if (selectedEnd != SelectedEnd.NONE) {
-            val highlightPaint = Paint().apply {
-                style = Paint.Style.STROKE
-                color = Color.CYAN
-                strokeWidth = 8f
-            }
-            val pointToHighlight = if (selectedEnd == SelectedEnd.START) startPoint else endPoint
-            canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius + 6f, highlightPaint)
+        val endpointPaint = Paint().apply {
+            style = Paint.Style.FILL
+            color = Color.GREEN
         }
+
+        val drawOnlyOne = !isTransforming
+        if (drawOnlyOne) {
+            if (selectedEnd == SelectedEnd.START) {
+                canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
+            } else {
+                canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
+            }
+        } else {
+            canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
+            canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
+        }
+
+        // 2. Draw the actual stroke on TOP of the circles
+        drawPoints(canvas, points, paint)
     }
 
     fun setColor(color: Int, applyToSelected: Boolean) {
@@ -337,7 +330,6 @@ class DrawingView @JvmOverloads constructor(
         currentStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
         setState(State.NORMAL_DRAWING)
-        totalScale = 1.0f
     }
 
     private fun redrawHistory(canvas: Canvas? = null) {
@@ -368,7 +360,7 @@ class DrawingView @JvmOverloads constructor(
         // Draw the selected stroke's decorations on top if needed
         if (currentState == State.STROKE_EDITING) {
             currentStroke?.let {
-                drawStrokeWithHalo(c, it.points, it.paint)
+                drawStrokeWithEndpoints(c, it.points, it.paint)
             }
         }
 
@@ -404,17 +396,13 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
             State.CHOSEN_STROKE -> {
-                if (selectEndpointOfCurrentStroke(tapPoint)) {
-                    setState(State.STROKE_EDITING)
-                }
-                // If tap is not on an endpoint, do nothing.
+                redrawHistory() // Redraw to update highlight
             }
             State.STROKE_EDITING -> {
                 if (!selectEndpointOfCurrentStroke(tapPoint)) {
                     setState(State.CHOSEN_STROKE)
-                } else {
-                    redrawHistory() // Redraw to update highlight if endpoint changes
                 }
+                redrawHistory() // Redraw to update highlight
             }
         }
         return true
@@ -462,6 +450,7 @@ class DrawingView @JvmOverloads constructor(
             }
         }
         isTransforming = true
+        redrawHistory()
         return true
     }
 
@@ -470,6 +459,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onLastFingerUp(event: MotionEvent): Boolean {
+        isTransforming = false
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 if (strokeInProgressPoints.isNotEmpty()) {
@@ -481,10 +471,7 @@ class DrawingView @JvmOverloads constructor(
             }
             else -> {}
         }
-        if (isTransforming) {
-            redrawHistory()
-            isTransforming = false
-        }
+        redrawHistory()
         return true
     }
 
@@ -507,12 +494,7 @@ class DrawingView @JvmOverloads constructor(
         val deltaMatrix = Matrix()
         when (currentState) {
             State.NORMAL_DRAWING -> {
-                totalScale *= scale
-                val mid = PointF((event.getX(0) + event.getX(1)) / 2f, (event.getY(0) + event.getY(1)) / 2f)
-                deltaMatrix.postTranslate(dx, dy)
-                deltaMatrix.postScale(scale, scale, mid.x, mid.y)
-                deltaMatrix.postRotate(rotate, mid.x, mid.y)
-                transformAllStrokes(deltaMatrix)
+                // This case should not happen if we are transforming
             }
             State.CHOSEN_STROKE, State.STROKE_EDITING -> {
                 currentStroke?.let {
