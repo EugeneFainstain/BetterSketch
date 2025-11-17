@@ -53,7 +53,7 @@ class DrawingView @JvmOverloads constructor(
     private var selectedStrokeIdx: Int = -1
 
     // Transformation state
-    private var isTransforming = false
+    private var twoFingerGestureOccured = false
 
     private val customGestureDetector: CustomGestureDetector
 
@@ -257,7 +257,7 @@ class DrawingView @JvmOverloads constructor(
             color = Color.GREEN
         }
 
-        val drawOnlyOne = !isTransforming
+        val drawOnlyOne = !twoFingerGestureOccured
         if (drawOnlyOne) {
             if (selectedEnd == SelectedEnd.START) {
                 canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
@@ -394,7 +394,7 @@ class DrawingView @JvmOverloads constructor(
                 strokeInProgressPoints.clear()
             }
         }
-        isTransforming = true
+        twoFingerGestureOccured = true
         redrawHistory()
         return true
     }
@@ -404,7 +404,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
-        isTransforming = false
+        twoFingerGestureOccured = false
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 if (strokeInProgressPoints.isNotEmpty()) {
@@ -421,7 +421,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
-        if (isTransforming) return true
+        if (twoFingerGestureOccured) return true
 
         when (currentState) {
             State.NORMAL_DRAWING -> touchMove(event.x, event.y)
