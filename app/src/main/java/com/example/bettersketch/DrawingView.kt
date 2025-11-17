@@ -74,15 +74,21 @@ class DrawingView @JvmOverloads constructor(
     fun exportBitmap(): Bitmap {
         val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
-        draw(c)
+        // Temporarily set to normal drawing to export all strokes as opaque
+        val oldState = currentState
+        currentState = State.NORMAL_DRAWING
+        redrawHistory(c)
+        currentState = oldState
         return bmp
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w > 0 && h > 0) {
-            backingBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            backingCanvas = Canvas(backingBitmap!!)
+            if (backingBitmap == null || w != backingBitmap!!.width || h != backingBitmap!!.height) {
+                backingBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                backingCanvas = Canvas(backingBitmap!!)
+            }
             redrawHistory()
         } else {
             backingBitmap = null
@@ -94,10 +100,10 @@ class DrawingView @JvmOverloads constructor(
         super.onDraw(canvas)
         canvas.save()
 
-        // 1. Draw the cached history
+        // 1. Draw the pre-rendered history from the bitmap
         backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
 
-        // 2. Draw the "live" part (the stroke being created)
+        // 2. Draw the "live" part (the new stroke being created) on top.
         if (currentState == State.NORMAL_DRAWING && strokeInProgressPoints.isNotEmpty()) {
             drawPoints(canvas, strokeInProgressPoints, currentPaint)
         }
@@ -105,9 +111,9 @@ class DrawingView @JvmOverloads constructor(
         canvas.restore()
     }
 
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         customGestureDetector.onTouchEvent(event)
-        invalidate()
         return true
     }
 
@@ -147,6 +153,7 @@ class DrawingView @JvmOverloads constructor(
         val dy = y - lastPoint.y
         strokeInProgressDistance += sqrt(dx * dx + dy * dy)
         strokeInProgressPoints.add(PathPoint(PointF(x, y), strokeInProgressDistance))
+        invalidate() // Redraw the live stroke
     }
 
     private fun touchUp() {
@@ -193,8 +200,6 @@ class DrawingView @JvmOverloads constructor(
 
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         if (currentStrokeIdx == -1) return false
-
-        val touchRadius = 44f
         val stroke = currentStroke ?: return false
 
         val startPoint = stroke.points.first().point
@@ -202,12 +207,8 @@ class DrawingView @JvmOverloads constructor(
         val distToStart = distance(startPoint, tapPoint)
         val distToEnd = distance(endPoint, tapPoint)
 
-        if (min(distToStart, distToEnd) < touchRadius) {
-            selectedEnd = if (distToStart < distToEnd) SelectedEnd.START else SelectedEnd.END
-            return true
-        }
-
-        return false
+        selectedEnd = if (distToStart < distToEnd) SelectedEnd.START else SelectedEnd.END
+        return true
     }
 
     fun navigateToHistoryState(index: Int) {
@@ -276,8 +277,11 @@ class DrawingView @JvmOverloads constructor(
             strokeWidth = paint.strokeWidth * 2 + 32f
         }
         drawPoints(canvas, points, haloPaint)
+        
+        // 2. Draw the actual stroke on top of the halo
+        drawPoints(canvas, points, paint)
 
-        // 2. Draw the endpoint indicator circles
+        // 3. Draw the endpoint indicator circles and highlight on top of everything
         val radius = (paint.strokeWidth * 2 + 32f) / 2f
         val startPoint = points.first().point
         val endPoint = points.last().point
@@ -297,9 +301,6 @@ class DrawingView @JvmOverloads constructor(
             val pointToHighlight = if (selectedEnd == SelectedEnd.START) startPoint else endPoint
             canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius + 6f, highlightPaint)
         }
-
-        // 3. Draw the actual stroke on top
-        drawPoints(canvas, points, paint)
     }
 
     fun setColor(color: Int, applyToSelected: Boolean) {
@@ -339,7 +340,7 @@ class DrawingView @JvmOverloads constructor(
         totalScale = 1.0f
     }
 
-    private fun redrawHistory(canvas: Canvas? = null, scale: Float = 1.0f) {
+    private fun redrawHistory(canvas: Canvas? = null) {
         val c = canvas ?: backingCanvas ?: return
         if (canvas == null) {
             c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
@@ -350,7 +351,6 @@ class DrawingView @JvmOverloads constructor(
         // Draw future strokes (always faded)
         for (s in undone.reversed()) {
             tempPaint.set(s.paint)
-            if (canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
             tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             drawPoints(c, s.points, tempPaint)
         }
@@ -358,7 +358,6 @@ class DrawingView @JvmOverloads constructor(
         // Draw past strokes
         for ((index, s) in strokes.withIndex()) {
             tempPaint.set(s.paint)
-            if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
             
             if (currentState != State.NORMAL_DRAWING && index != currentStrokeIdx) {
                 tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
@@ -366,7 +365,7 @@ class DrawingView @JvmOverloads constructor(
             drawPoints(c, s.points, tempPaint)
         }
         
-        // Draw the selected stroke on top if needed
+        // Draw the selected stroke's decorations on top if needed
         if (currentState == State.STROKE_EDITING) {
             currentStroke?.let {
                 drawStrokeWithHalo(c, it.points, it.paint)
@@ -413,6 +412,8 @@ class DrawingView @JvmOverloads constructor(
             State.STROKE_EDITING -> {
                 if (!selectEndpointOfCurrentStroke(tapPoint)) {
                     setState(State.CHOSEN_STROKE)
+                } else {
+                    redrawHistory() // Redraw to update highlight if endpoint changes
                 }
             }
         }
@@ -443,8 +444,9 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
             State.STROKE_EDITING -> {
-                selectEndpointOfCurrentStroke(downPoint)
-                redrawHistory()
+                if (selectEndpointOfCurrentStroke(downPoint)) {
+                    redrawHistory()
+                }
             }
         }
         listener?.onStateChanged()
