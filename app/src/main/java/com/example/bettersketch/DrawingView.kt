@@ -55,6 +55,7 @@ class DrawingView @JvmOverloads constructor(
     // Transformation state
     private var twoFingerGestureOccured = false
     private var threeFingerGestureOccured = false
+    private var strokeImplicitlySelectedForTransform = false
 
     private val customGestureDetector: CustomGestureDetector
 
@@ -248,8 +249,9 @@ class DrawingView @JvmOverloads constructor(
     private fun drawStrokeWithEndpoints(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
         if (points.isEmpty()) return
 
-        // During a two-finger drag, we don't want to see the endpoints at all.
-        if (twoFingerGestureOccured && !threeFingerGestureOccured) {
+        // If we are transforming the whole canvas, or implicitly transforming the last stroke,
+        // just draw the path and nothing else.
+        if ((twoFingerGestureOccured && !threeFingerGestureOccured) || strokeImplicitlySelectedForTransform) {
             drawPoints(canvas, points, paint)
             return
         }
@@ -264,7 +266,7 @@ class DrawingView @JvmOverloads constructor(
             color = Color.GREEN
         }
 
-        // If we are three-finger dragging, draw both endpoints.
+        // If we are three-finger dragging an explicit stroke, draw both endpoints.
         if (threeFingerGestureOccured) {
             canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
             canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
@@ -407,7 +409,21 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onThirdFingerDown(event: MotionEvent): Boolean {
+        if (strokeInProgressPoints.isNotEmpty()) {
+            if (strokeInProgressPoints.size > 5) {
+                commitStrokeInProgress()
+            } else {
+                strokeInProgressPoints.clear()
+            }
+        }
         threeFingerGestureOccured = true
+        if (selectedStrokeIdx == -1 && strokes.isNotEmpty()) {
+            selectedStrokeIdx = strokes.lastIndex
+            strokeImplicitlySelectedForTransform = true
+            setState(State.STROKE_EDITING)
+        } else {
+            redrawHistory() // Redraw to show endpoints on already-selected stroke
+        }
         return true
     }
 
@@ -418,16 +434,23 @@ class DrawingView @JvmOverloads constructor(
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
         twoFingerGestureOccured = false
         threeFingerGestureOccured = false
-        when (currentState) {
-            State.NORMAL_DRAWING -> {
-                if (strokeInProgressPoints.isNotEmpty()) {
-                    touchUp()
+
+        if (strokeImplicitlySelectedForTransform) {
+            selectedStrokeIdx = -1
+            strokeImplicitlySelectedForTransform = false
+            setState(State.NORMAL_DRAWING)
+        } else {
+            when (currentState) {
+                State.NORMAL_DRAWING -> {
+                    if (strokeInProgressPoints.isNotEmpty()) {
+                        touchUp()
+                    }
                 }
+                State.STROKE_EDITING -> {
+                    setState(State.CHOSEN_STROKE)
+                }
+                else -> {}
             }
-            State.STROKE_EDITING -> {
-                setState(State.CHOSEN_STROKE)
-            }
-            else -> {}
         }
         redrawHistory()
         return true
