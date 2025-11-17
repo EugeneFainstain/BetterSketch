@@ -13,14 +13,14 @@ interface DrawingViewListener {
     fun onStateChanged()
 }
 
-enum class SelectedEnd {
-    START, END, NONE
+private enum class State {
+    NORMAL_DRAWING,
+    CHOSEN_STROKE,
+    STROKE_EDITING
 }
 
-enum class StrokesDrawingMethod {
-    DrawAllOpaque,
-    DrawAllOpaqueExceptCurrent,
-    DrawOpaqueUpToCurrent
+enum class SelectedEnd {
+    START, END, NONE
 }
 
 class DrawingView @JvmOverloads constructor(
@@ -28,14 +28,21 @@ class DrawingView @JvmOverloads constructor(
 ) : View(context, attrs), CustomGestureDetector.OnGestureListener {
 
     var listener: DrawingViewListener? = null
-    var selectedEnd: SelectedEnd = SelectedEnd.NONE
-        set(value) {
-            if (field != value) {
-                field = value
-                invalidate()
-            }
+    private var selectedEnd: SelectedEnd = SelectedEnd.NONE
+    
+    private var currentState = State.NORMAL_DRAWING
+    private fun setState(newState: State) {
+        if (currentState == newState) return
+        currentState = newState
+        
+        if (newState == State.NORMAL_DRAWING) {
+            currentStrokeIdx = -1
+            selectedEnd = SelectedEnd.NONE
         }
-    var strokesDrawingMethod: StrokesDrawingMethod = StrokesDrawingMethod.DrawAllOpaque
+        
+        listener?.onStateChanged()
+        invalidate()
+    }
 
     // Drawing state
     private var backingBitmap: Bitmap? = null
@@ -102,7 +109,7 @@ class DrawingView @JvmOverloads constructor(
         // 2. Draw the live part (stroke in progress or selected stroke)
         if (strokeInProgressPoints.isNotEmpty()) {
             drawStrokeWithHalo(canvas, strokeInProgressPoints, currentPaint)
-        } else {
+        } else if (currentState != State.NORMAL_DRAWING) {
             currentStroke?.let {
                 drawStrokeWithHalo(canvas, it.points, it.paint)
             }
@@ -141,7 +148,6 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchStart(x: Float, y: Float) {
-        deselectAllStrokes()
         strokeInProgressPoints.clear()
         strokeInProgressDistance = 0f
         strokeInProgressPoints.add(PathPoint(PointF(x, y), 0f))
@@ -167,8 +173,6 @@ class DrawingView @JvmOverloads constructor(
     private fun commitStrokeInProgress() {
         val newStroke = Stroke(strokeInProgressPoints.toMutableList(), Paint(currentPaint), strokeInProgressDistance)
         strokes.add(newStroke)
-        currentStrokeIdx = strokes.lastIndex
-        selectedEnd = SelectedEnd.END
         strokeInProgressPoints.clear()
         redrawHistory()
         listener?.onStateChanged()
@@ -180,27 +184,7 @@ class DrawingView @JvmOverloads constructor(
         return sqrt(dx * dx + dy * dy)
     }
 
-    private fun selectEndpointAt(tapPoint: PointF): Boolean {
-        val touchRadius = 44f 
-        for ((index, stroke) in strokes.withIndex().reversed()) {
-            val startPoint = stroke.points.first().point
-            val endPoint = stroke.points.last().point
-            val distToStart = distance(startPoint, tapPoint)
-            val distToEnd = distance(endPoint, tapPoint)
-
-            if (distToStart < touchRadius || distToEnd < touchRadius) {
-                currentStrokeIdx = index
-                selectedEnd = if (distToStart < distToEnd) SelectedEnd.START else SelectedEnd.END
-                currentPaint = Paint(stroke.paint)
-                redrawHistory()
-                listener?.onStateChanged()
-                return true
-            }
-        }
-        return false
-    }
-
-    fun findClosestStroke(tapPoint: PointF) {
+    private fun findClosestStroke(tapPoint: PointF): Boolean {
         var minDistance = Float.MAX_VALUE
         var closestIndex = -1
 
@@ -216,24 +200,33 @@ class DrawingView @JvmOverloads constructor(
 
         if (closestIndex != -1) {
             currentStrokeIdx = closestIndex
-            val closestStroke = strokes[closestIndex]
-            val startPoint = closestStroke.points.first().point
-            val endPoint = closestStroke.points.last().point
-            val distToStart = distance(startPoint, tapPoint)
-            val distToEnd = distance(endPoint, tapPoint)
-
-            selectedEnd = if (distToStart < distToEnd) SelectedEnd.START else SelectedEnd.END
-            currentPaint = Paint(closestStroke.paint)
-            redrawHistory()
-            listener?.onStateChanged()
+            currentPaint = Paint(strokes[closestIndex].paint)
+            return true
         }
+        return false
+    }
+    
+    private fun selectEndpointAt(tapPoint: PointF): Boolean {
+        if (currentStrokeIdx == -1) return false
+        
+        val touchRadius = 44f
+        val stroke = currentStroke ?: return false
+        
+        val startPoint = stroke.points.first().point
+        val endPoint = stroke.points.last().point
+        val distToStart = distance(startPoint, tapPoint)
+        val distToEnd = distance(endPoint, tapPoint)
+
+        if (distToStart < touchRadius || distToEnd < touchRadius) {
+            selectedEnd = if (distToStart < distToEnd) SelectedEnd.START else SelectedEnd.END
+            return true
+        }
+        
+        return false
     }
 
     fun deselectAllStrokes() {
-        currentStrokeIdx = -1
-        selectedEnd = SelectedEnd.NONE
-        redrawHistory()
-        listener?.onStateChanged()
+        setState(State.NORMAL_DRAWING)
     }
 
     fun navigateToHistoryState(index: Int) {
@@ -247,17 +240,16 @@ class DrawingView @JvmOverloads constructor(
                 break
             }
         }
-        deselectAllStrokes()
+        setState(State.NORMAL_DRAWING)
     }
 
     fun deleteCurrentStroke() {
         if (currentStrokeIdx != -1) {
             strokes.removeAt(currentStrokeIdx)
-            deselectAllStrokes()
         } else if (strokes.isNotEmpty()) {
             strokes.removeAt(strokes.lastIndex)
-            deselectAllStrokes()
         }
+        setState(State.NORMAL_DRAWING)
     }
 
     fun getStrokeColors(): IntArray {
@@ -303,24 +295,26 @@ class DrawingView @JvmOverloads constructor(
         drawPoints(canvas, points, haloPaint)
 
         // 2. Draw the endpoint indicator circles
-        val radius = (paint.strokeWidth * 2 + 32f) / 2f
-        val startPoint = points.first().point
-        val endPoint = points.last().point
+        if (currentState == State.STROKE_EDITING) {
+            val radius = (paint.strokeWidth * 2 + 32f) / 2f
+            val startPoint = points.first().point
+            val endPoint = points.last().point
 
-        val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
-        val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
+            val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
+            val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
 
-        canvas.drawCircle(startPoint.x, startPoint.y, radius, startPaint)
-        canvas.drawCircle(endPoint.x, endPoint.y, radius, endPaint)
+            canvas.drawCircle(startPoint.x, startPoint.y, radius, startPaint)
+            canvas.drawCircle(endPoint.x, endPoint.y, radius, endPaint)
 
-        if (currentStrokeIdx != -1 && selectedEnd != SelectedEnd.NONE) {
-            val highlightPaint = Paint().apply {
-                style = Paint.Style.STROKE
-                color = Color.CYAN
-                strokeWidth = 8f
+            if (selectedEnd != SelectedEnd.NONE) {
+                val highlightPaint = Paint().apply {
+                    style = Paint.Style.STROKE
+                    color = Color.CYAN
+                    strokeWidth = 8f
+                }
+                val pointToHighlight = if (selectedEnd == SelectedEnd.START) startPoint else endPoint
+                canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius + 6f, highlightPaint)
             }
-            val pointToHighlight = if (selectedEnd == SelectedEnd.START) startPoint else endPoint
-            canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius + 6f, highlightPaint)
         }
 
         // 3. Draw the actual stroke on top
@@ -358,7 +352,7 @@ class DrawingView @JvmOverloads constructor(
         strokes.clear()
         undone.clear()
         strokeInProgressPoints.clear()
-        deselectAllStrokes()
+        setState(State.NORMAL_DRAWING)
         totalScale = 1.0f
     }
 
@@ -381,9 +375,9 @@ class DrawingView @JvmOverloads constructor(
         // Draw past strokes
         for ((index, s) in strokes.withIndex()) {
             tempPaint.set(s.paint)
-            if (canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
-
-            if (strokesDrawingMethod == StrokesDrawingMethod.DrawAllOpaqueExceptCurrent && index != currentStrokeIdx) {
+            if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
+            
+            if (currentState != State.NORMAL_DRAWING && index != currentStrokeIdx) {
                 tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             }
 
@@ -414,20 +408,42 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSingleTap(event: MotionEvent): Boolean {
-        if (!selectEndpointAt(PointF(event.x, event.y))) {
-            findClosestStroke(PointF(event.x, event.y))
+        when (currentState) {
+            State.NORMAL_DRAWING -> {
+                if (findClosestStroke(PointF(event.x, event.y))) {
+                    setState(State.CHOSEN_STROKE)
+                }
+            }
+            State.CHOSEN_STROKE -> {
+                if (selectEndpointAt(PointF(event.x, event.y))) {
+                    setState(State.STROKE_EDITING)
+                } else {
+                    setState(State.NORMAL_DRAWING)
+                }
+            }
+            State.STROKE_EDITING -> {
+                if (!selectEndpointAt(PointF(event.x, event.y))) {
+                    setState(State.CHOSEN_STROKE)
+                }
+            }
         }
         return true
     }
 
     override fun onDoubleTap(event: MotionEvent): Boolean {
-        deselectAllStrokes()
+        if (currentState == State.CHOSEN_STROKE || currentState == State.STROKE_EDITING) {
+            setState(State.NORMAL_DRAWING)
+        }
         return true
     }
 
     override fun onFirstFingerDown(event: MotionEvent): Boolean {
-        if (!selectEndpointAt(PointF(event.x, event.y))) {
+        if (currentState == State.NORMAL_DRAWING) {
             touchStart(event.x, event.y)
+        } else if (currentState == State.CHOSEN_STROKE) {
+            if (selectEndpointAt(PointF(event.x, event.y))) {
+                setState(State.STROKE_EDITING)
+            }
         }
         return true
     }
@@ -455,24 +471,30 @@ class DrawingView @JvmOverloads constructor(
         }
         if (strokeInProgressPoints.isNotEmpty()) {
             touchUp()
+        } else if (currentState == State.STROKE_EDITING) {
+            setState(State.CHOSEN_STROKE)
         }
         return true
     }
 
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
-        if (selectedEnd == SelectedEnd.START) {
-            moveStartPoint(dx, dy)
-        } else if (selectedEnd == SelectedEnd.END) {
-            moveEndPoint(dx, dy)
-        } else {
-            touchMove(event.x, event.y)
+        when (currentState) {
+            State.NORMAL_DRAWING -> touchMove(event.x, event.y)
+            State.STROKE_EDITING -> {
+                if (selectedEnd == SelectedEnd.START) {
+                    moveStartPoint(dx, dy)
+                } else if (selectedEnd == SelectedEnd.END) {
+                    moveEndPoint(dx, dy)
+                }
+            }
+            else -> {}
         }
         return true
     }
 
     override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
         val deltaMatrix = Matrix()
-        if (currentStrokeIdx != -1) {
+        if (currentState == State.CHOSEN_STROKE || currentState == State.STROKE_EDITING) {
             currentStroke?.let {
                 val bounds = it.getBounds()
                 val centerX = bounds.centerX()

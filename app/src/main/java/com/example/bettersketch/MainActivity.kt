@@ -119,7 +119,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
                     drawingView.navigateToHistoryState(progress)
-                    drawingView.deselectAllStrokes()
                 }
             }
 
@@ -139,12 +138,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         progressSeekBar.max = drawingView.historySize
         progressSeekBar.progress = drawingView.currentHistoryPosition
         historyIndicator.strokeColors = drawingView.getStrokeColors()
-
-        drawingView.strokesDrawingMethod = if (drawingView.isStrokeSelected) {
-            StrokesDrawingMethod.DrawAllOpaqueExceptCurrent
-        } else {
-            StrokesDrawingMethod.DrawAllOpaque
-        }
 
         val currentPaint = drawingView.currentPaint
         val widthValue = (currentPaint.strokeWidth - 2f) / 30f
