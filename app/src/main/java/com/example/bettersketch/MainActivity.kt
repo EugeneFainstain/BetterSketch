@@ -4,13 +4,11 @@ import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.View
 import android.widget.Button
-import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import kotlin.math.roundToInt
@@ -20,10 +18,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var drawingView: DrawingView
     private lateinit var widthSlider: WidthSlider
     private lateinit var colorSlider: ColorSlider
-    private lateinit var progressSeekBar: SeekBar
-    private lateinit var historyIndicator: HistoryIndicatorDrawable
-    private lateinit var rewButton: Button
-    private lateinit var ffButton: Button
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -52,24 +46,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         widthSlider = findViewById(R.id.widthSlider)
         colorSlider = findViewById(R.id.colorSlider)
-        progressSeekBar = findViewById(R.id.seekProgress)
-        rewButton = findViewById(R.id.btnUndo)
-        ffButton = findViewById(R.id.btnRedo)
-
-
-        historyIndicator = HistoryIndicatorDrawable()
-        val originalProgressDrawable = progressSeekBar.progressDrawable.constantState?.newDrawable()?.mutate()
-        if (originalProgressDrawable != null) {
-            val layers = arrayOf(originalProgressDrawable, historyIndicator)
-            progressSeekBar.progressDrawable = LayerDrawable(layers)
-        } else {
-            progressSeekBar.progressDrawable = historyIndicator
-        }
+        
+        findViewById<View>(R.id.seekProgress).visibility = View.GONE
+        findViewById<View>(R.id.btnUndo).visibility = View.GONE
+        findViewById<View>(R.id.btnRedo).visibility = View.GONE
 
         setupSliderListeners()
-
-        rewButton.setOnClickListener { drawingView.undo() }
-        ffButton.setOnClickListener { drawingView.redo() }
 
         findViewById<Button>(R.id.btnClear).setOnClickListener {
             drawingView.deleteCurrentStroke()
@@ -114,17 +96,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
             override fun onValueEditEnd() {}
         }
-
-        progressSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    drawingView.navigateToHistoryState(progress)
-                }
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
     }
 
     override fun onStateChanged() {
@@ -132,13 +103,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     }
 
     private fun updateUi() {
-        rewButton.isEnabled = drawingView.canRewind
-        ffButton.isEnabled = drawingView.canFF
-
-        progressSeekBar.max = drawingView.historySize
-        progressSeekBar.progress = drawingView.currentHistoryPosition
-        historyIndicator.strokeColors = drawingView.getStrokeColors()
-
         val currentPaint = drawingView.currentPaint
         val widthValue = (currentPaint.strokeWidth - 2f) / 30f
         widthSlider.value = widthValue

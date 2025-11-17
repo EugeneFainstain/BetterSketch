@@ -48,10 +48,9 @@ class DrawingView @JvmOverloads constructor(
     private var strokeInProgressDistance = 0f
     var currentPaint = defaultPaint(Color.BLACK, 12f)
 
-    // History for undo/redo
+    // Data
     private val strokes = mutableListOf<Stroke>()
-    private val undone = ArrayDeque<Stroke>()
-    private var currentStrokeIdx: Int = -1
+    private var selectedStrokeIdx: Int = -1
 
     // Transformation state
     private var isTransforming = false
@@ -63,12 +62,8 @@ class DrawingView @JvmOverloads constructor(
     }
 
     // Public properties
-    val canRewind: Boolean get() = strokes.isNotEmpty()
-    val canFF: Boolean get() = undone.isNotEmpty()
-    val historySize: Int get() = strokes.size + undone.size
-    val currentHistoryPosition: Int get() = strokes.size
-    val isStrokeSelected: Boolean get() = currentStrokeIdx != -1
-    private val currentStroke: Stroke? get() = strokes.getOrNull(currentStrokeIdx)
+    val isStrokeSelected: Boolean get() = selectedStrokeIdx != -1
+    private val currentStroke: Stroke? get() = strokes.getOrNull(selectedStrokeIdx)
 
     fun exportBitmap(): Bitmap {
         val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -128,7 +123,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun transformAllStrokes(matrix: Matrix) {
-        (strokes + undone).forEach { stroke ->
+        strokes.forEach { stroke ->
             transformStroke(stroke, matrix)
         }
     }
@@ -165,8 +160,8 @@ class DrawingView @JvmOverloads constructor(
         val newStroke = Stroke(strokeInProgressPoints.toMutableList(), Paint(currentPaint), strokeInProgressDistance)
         strokes.add(newStroke)
         strokeInProgressPoints.clear()
-        redrawHistory()
-        listener?.onStateChanged()
+        selectedStrokeIdx = -1
+        setState(State.NORMAL_DRAWING)
     }
 
     private fun distance(p1: PointF, p2: PointF): Float {
@@ -190,7 +185,7 @@ class DrawingView @JvmOverloads constructor(
         }
 
         if (closestIndex != -1) {
-            currentStrokeIdx = closestIndex
+            selectedStrokeIdx = closestIndex
             currentPaint = Paint(strokes[closestIndex].paint)
             return true
         }
@@ -198,7 +193,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
-        if (currentStrokeIdx == -1) return false
+        if (selectedStrokeIdx == -1) return false
         val stroke = currentStroke ?: return false
 
         val startPoint = stroke.points.first().point
@@ -210,37 +205,18 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    fun navigateToHistoryState(index: Int) {
-        while (strokes.size > index) {
-            undone.addLast(strokes.removeAt(strokes.lastIndex))
-        }
-        while (strokes.size < index) {
-            if (undone.isNotEmpty()) {
-                strokes.add(undone.removeLast())
-            } else {
-                break
-            }
-        }
-        currentStrokeIdx = -1
-        selectedEnd = SelectedEnd.NONE
-        setState(State.NORMAL_DRAWING)
-    }
-
     fun deleteCurrentStroke() {
-        if (currentStrokeIdx != -1) {
-            strokes.removeAt(currentStrokeIdx)
+        if (selectedStrokeIdx != -1) {
+            strokes.removeAt(selectedStrokeIdx)
         } else if (strokes.isNotEmpty()) {
             strokes.removeAt(strokes.lastIndex)
         }
-        currentStrokeIdx = -1
-        selectedEnd = SelectedEnd.NONE
+        selectedStrokeIdx = -1
         setState(State.NORMAL_DRAWING)
     }
 
     fun getStrokeColors(): IntArray {
-        val pastColors = strokes.map { it.paint.color }
-        val futureColors = undone.reversed().map { it.paint.color }
-        return (pastColors + futureColors).toIntArray()
+        return strokes.map { it.paint.color }.toIntArray()
     }
 
     fun moveStartPoint(dx: Float, dy: Float) {
@@ -298,7 +274,7 @@ class DrawingView @JvmOverloads constructor(
 
     fun setColor(color: Int, applyToSelected: Boolean) {
         currentPaint.color = color
-        if (applyToSelected && currentStrokeIdx != -1) {
+        if (applyToSelected && selectedStrokeIdx != -1) {
             currentStroke?.paint?.color = color
             redrawHistory()
         }
@@ -308,27 +284,16 @@ class DrawingView @JvmOverloads constructor(
     fun setStrokeWidth(px: Float, applyToSelected: Boolean) {
         val w = max(1f, min(120f, px))
         currentPaint.strokeWidth = w
-        if (applyToSelected && currentStrokeIdx != -1) {
+        if (applyToSelected && selectedStrokeIdx != -1) {
             currentStroke?.paint?.strokeWidth = w
             redrawHistory()
         }
         listener?.onStateChanged()
     }
 
-    fun undo() {
-        if (canRewind) navigateToHistoryState(currentHistoryPosition - 1)
-    }
-
-    fun redo() {
-        if (canFF) navigateToHistoryState(currentHistoryPosition + 1)
-    }
-
     fun clearAll() {
         strokes.clear()
-        undone.clear()
-        strokeInProgressPoints.clear()
-        currentStrokeIdx = -1
-        selectedEnd = SelectedEnd.NONE
+        selectedStrokeIdx = -1
         setState(State.NORMAL_DRAWING)
     }
 
@@ -338,62 +303,22 @@ class DrawingView @JvmOverloads constructor(
             c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
         }
 
-        when (currentState) {
-            State.NORMAL_DRAWING -> redrawHistoryNormal(c)
-            State.CHOSEN_STROKE -> redrawHistoryChosen(c)
-            State.STROKE_EDITING -> redrawHistoryEditing(c)
+        val tempPaint = Paint()
+        for ((index, s) in strokes.withIndex()) {
+            tempPaint.set(s.paint)
+            if (selectedStrokeIdx != -1 && index != selectedStrokeIdx) {
+                tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
+            }
+            drawPoints(c, s.points, tempPaint)
+        }
+
+        if (currentState == State.STROKE_EDITING) {
+            currentStroke?.let {
+                drawStrokeWithEndpoints(c, it.points, it.paint)
+            }
         }
 
         if (canvas == null) invalidate()
-    }
-
-    private fun redrawHistoryNormal(c: Canvas) {
-        val tempPaint = Paint()
-        for (s in undone.reversed()) {
-            tempPaint.set(s.paint)
-            tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
-            drawPoints(c, s.points, tempPaint)
-        }
-        for (s in strokes) {
-            drawPoints(c, s.points, s.paint)
-        }
-    }
-
-    private fun redrawHistoryChosen(c: Canvas) {
-        val tempPaint = Paint()
-        for (s in undone.reversed()) {
-            tempPaint.set(s.paint)
-            tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
-            drawPoints(c, s.points, tempPaint)
-        }
-        for ((index, s) in strokes.withIndex()) {
-            if (index == currentStrokeIdx) {
-                drawPoints(c, s.points, s.paint)
-            } else {
-                tempPaint.set(s.paint)
-                tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
-                drawPoints(c, s.points, tempPaint)
-            }
-        }
-    }
-
-    private fun redrawHistoryEditing(c: Canvas) {
-        val tempPaint = Paint()
-        for (s in undone.reversed()) {
-            tempPaint.set(s.paint)
-            tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
-            drawPoints(c, s.points, tempPaint)
-        }
-        for ((index, s) in strokes.withIndex()) {
-            if (index != currentStrokeIdx) {
-                tempPaint.set(s.paint)
-                tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
-                drawPoints(c, s.points, tempPaint)
-            }
-        }
-        currentStroke?.let {
-            drawStrokeWithEndpoints(c, it.points, it.paint)
-        }
     }
 
     private fun drawPoints(canvas: Canvas?, points: List<PathPoint>, paint: Paint) {
@@ -440,7 +365,7 @@ class DrawingView @JvmOverloads constructor(
     override fun onDoubleTapEnd(event: MotionEvent): Boolean {
         when (currentState) {
             State.CHOSEN_STROKE, State.STROKE_EDITING -> {
-                currentStrokeIdx = -1
+                selectedStrokeIdx = -1
                 selectedEnd = SelectedEnd.NONE
                 setState(State.NORMAL_DRAWING)
             }
@@ -484,7 +409,8 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSecondFingerUp(event: MotionEvent): Boolean {
-        isTransforming = false
+        onLastFingerUp(event)
+        onFirstFingerDown(event)
         return true
     }
 
@@ -546,7 +472,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onTapAndAHalf(event: MotionEvent): Boolean {
-        currentStrokeIdx = -1
+        selectedStrokeIdx = -1
         selectedEnd = SelectedEnd.NONE
         setState(State.NORMAL_DRAWING)
         return true
