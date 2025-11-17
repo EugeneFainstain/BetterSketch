@@ -399,6 +399,10 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
+    override fun onThirdFingerDown(event: MotionEvent): Boolean {
+        return true
+    }
+
     override fun onSomeFingerUp(event: MotionEvent): Boolean {
         return true
     }
@@ -466,6 +470,10 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
         }
+        return true
+    }
+
+    override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
         return true
     }
 

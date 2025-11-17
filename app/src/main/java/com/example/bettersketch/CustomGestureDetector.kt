@@ -15,10 +15,12 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
         fun onDoubleTapEnd(event: MotionEvent): Boolean
         fun onFirstFingerDown(event: MotionEvent): Boolean
         fun onSecondFingerDown(event: MotionEvent): Boolean
+        fun onThirdFingerDown(event: MotionEvent): Boolean
         fun onSomeFingerUp(event: MotionEvent): Boolean
         fun onLastRemainingFingerUp(event: MotionEvent): Boolean
         fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean
         fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean
+        fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean
         fun onTapAndAHalf(event: MotionEvent): Boolean
     }
 
@@ -47,6 +49,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
     private var lastMultiTouchDistance = 0f
     private var lastMultiTouchAngle = 0f
     private var lastMultiTouchMidpoint = PointF()
+    private var lastThreeFingerCentroid = PointF()
 
 
     fun onTouchEvent(event: MotionEvent): Boolean {
@@ -88,6 +91,9 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                     lastMultiTouchAngle = angle(event)
                     lastMultiTouchMidpoint = midpoint(event)
                     listener.onSecondFingerDown(event)
+                } else if (activePointerCount == 3) {
+                    lastThreeFingerCentroid = centroid(event)
+                    listener.onThirdFingerDown(event)
                 }
                 // Reset drag state for multi-touch
                 isDragging = false
@@ -105,7 +111,14 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                     isDragging = true
                 }
 
-                if (isMultiTouchActive && pointerCount >= 2) {
+                if (pointerCount >= 3) {
+                    val currentCentroid = centroid(event)
+                    val cdx = currentCentroid.x - lastThreeFingerCentroid.x
+                    val cdy = currentCentroid.y - lastThreeFingerCentroid.y
+                    listener.onThreeFingerDrag(event, cdx, cdy)
+                    lastThreeFingerCentroid.set(currentCentroid)
+                }
+                else if (isMultiTouchActive && pointerCount >= 2) {
                     val newDist = distance(event)
                     val newAngle = angle(event)
                     val currentMidpoint = midpoint(event)
@@ -202,5 +215,12 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
         val x = (event.getX(0) + event.getX(1)) / 2f
         val y = (event.getY(0) + event.getY(1)) / 2f
         return PointF(x,y)
+    }
+
+    private fun centroid(event: MotionEvent): PointF {
+        if (event.pointerCount < 3) return midpoint(event)
+        val x = (event.getX(0) + event.getX(1) + event.getX(2)) / 3f
+        val y = (event.getY(0) + event.getY(1) + event.getY(2)) / 3f
+        return PointF(x, y)
     }
 }
