@@ -213,6 +213,7 @@ class DrawingView @JvmOverloads constructor(
         }
         selectedStrokeIdx = -1
         setState(State.NORMAL_DRAWING)
+        redrawHistory()
     }
 
     fun getStrokeColors(): IntArray {
@@ -450,11 +451,22 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
+    private fun midpoint(event: MotionEvent): PointF {
+        if (event.pointerCount < 2) return PointF(event.x, event.y)
+        val x = (event.getX(0) + event.getX(1)) / 2f
+        val y = (event.getY(0) + event.getY(1)) / 2f
+        return PointF(x, y)
+    }
+
     override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
         val deltaMatrix = Matrix()
         when (currentState) {
             State.NORMAL_DRAWING -> {
-                // This case should not happen if we are transforming
+                val mid = midpoint(event)
+                deltaMatrix.postTranslate(dx, dy)
+                deltaMatrix.postScale(scale, scale, mid.x, mid.y)
+                deltaMatrix.postRotate(rotate, mid.x, mid.y)
+                transformAllStrokes(deltaMatrix)
             }
             State.CHOSEN_STROKE, State.STROKE_EDITING -> {
                 currentStroke?.let {
