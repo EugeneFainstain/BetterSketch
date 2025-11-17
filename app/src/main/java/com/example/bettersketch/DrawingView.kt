@@ -97,23 +97,9 @@ class DrawingView @JvmOverloads constructor(
         // 1. Draw the cached history
         backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
 
-        // 2. Draw the "live" part depending on the state
-        when (currentState) {
-            State.NORMAL_DRAWING -> {
-                if (strokeInProgressPoints.isNotEmpty()) {
-                    drawPoints(canvas, strokeInProgressPoints, currentPaint)
-                }
-            }
-            State.CHOSEN_STROKE -> {
-                currentStroke?.let {
-                    drawPoints(canvas, it.points, it.paint)
-                }
-            }
-            State.STROKE_EDITING -> {
-                currentStroke?.let {
-                    drawStrokeWithHalo(canvas, it.points, it.paint)
-                }
-            }
+        // 2. Draw the "live" part (the stroke being created)
+        if (currentState == State.NORMAL_DRAWING && strokeInProgressPoints.isNotEmpty()) {
+            drawPoints(canvas, strokeInProgressPoints, currentPaint)
         }
 
         canvas.restore()
@@ -377,10 +363,13 @@ class DrawingView @JvmOverloads constructor(
             if (currentState != State.NORMAL_DRAWING && index != currentStrokeIdx) {
                 tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             }
-
-            // In CHOSEN_STROKE or STROKE_EDITING, the current stroke is drawn in onDraw, not here.
-            if (currentState == State.NORMAL_DRAWING || index != currentStrokeIdx) {
-                drawPoints(c, s.points, tempPaint)
+            drawPoints(c, s.points, tempPaint)
+        }
+        
+        // Draw the selected stroke on top if needed
+        if (currentState == State.STROKE_EDITING) {
+            currentStroke?.let {
+                drawStrokeWithHalo(c, it.points, it.paint)
             }
         }
 
@@ -418,17 +407,11 @@ class DrawingView @JvmOverloads constructor(
             State.CHOSEN_STROKE -> {
                 if (selectEndpointOfCurrentStroke(tapPoint)) {
                     setState(State.STROKE_EDITING)
-                } else {
-                    val originalIdx = currentStrokeIdx
-                    if (selectStrokeAt(tapPoint) && currentStrokeIdx != originalIdx) {
-                        redrawHistory() // A new stroke was selected, redraw.
-                    }
                 }
+                // If tap is not on an endpoint, do nothing.
             }
             State.STROKE_EDITING -> {
-                if (selectEndpointOfCurrentStroke(tapPoint)) {
-                    redrawHistory() // Endpoint selection changed, redraw.
-                } else {
+                if (!selectEndpointOfCurrentStroke(tapPoint)) {
                     setState(State.CHOSEN_STROKE)
                 }
             }
@@ -460,9 +443,8 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
             State.STROKE_EDITING -> {
-                if (selectEndpointOfCurrentStroke(downPoint)) {
-                    redrawHistory()
-                }
+                selectEndpointOfCurrentStroke(downPoint)
+                redrawHistory()
             }
         }
         listener?.onStateChanged()
