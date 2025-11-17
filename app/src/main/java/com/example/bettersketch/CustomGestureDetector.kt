@@ -15,9 +15,8 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
         fun onDoubleTapEnd(event: MotionEvent): Boolean
         fun onFirstFingerDown(event: MotionEvent): Boolean
         fun onSecondFingerDown(event: MotionEvent): Boolean
-        fun onSecondFingerUp(event: MotionEvent): Boolean
         fun onSomeFingerUp(event: MotionEvent): Boolean
-        fun onLastFingerUp(event: MotionEvent): Boolean
+        fun onLastRemainingFingerUp(event: MotionEvent): Boolean
         fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean
         fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean
         fun onTapAndAHalf(event: MotionEvent): Boolean
@@ -126,9 +125,6 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 }
             }
             MotionEvent.ACTION_POINTER_UP -> {
-                if (activePointerCount == 2) {
-                    listener.onSecondFingerUp(event)
-                }
                 activePointerCount--
                 listener.onSomeFingerUp(event)
                 if (activePointerCount < 2) { // If less than two fingers remain, multi-touch might be ending
@@ -144,10 +140,10 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
 
                 if (isMultiTouchActive) { // Multi-touch just ended
                     isMultiTouchActive = false
-                    listener.onLastFingerUp(event)
+                    listener.onLastRemainingFingerUp(event)
                 } else if (isDragging) {
                     isDragging = false
-                    listener.onLastFingerUp(event)
+                    listener.onLastRemainingFingerUp(event)
                 } else if (totalDx < touchSlop && totalDy < touchSlop && duration < tapTimeout) {
                     // This was a tap
                     if (currentTime - lastTapTime < doubleTapTimeout) {
@@ -174,7 +170,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                     }
                 } else {
                     // Not a tap, not a drag - just a release after some movement
-                    listener.onLastFingerUp(event)
+                    listener.onLastRemainingFingerUp(event)
                 }
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -183,7 +179,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 isPotentialTapAndAHalf = false
                 lastTapTime = 0
                 isMultiTouchActive = false
-                listener.onLastFingerUp(event)
+                listener.onLastRemainingFingerUp(event)
             }
         }
         return true

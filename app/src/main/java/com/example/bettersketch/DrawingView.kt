@@ -409,17 +409,11 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    override fun onSecondFingerUp(event: MotionEvent): Boolean {
-        onLastFingerUp(event)
-        onFirstFingerDown(event)
-        return true
-    }
-
     override fun onSomeFingerUp(event: MotionEvent): Boolean {
         return true
     }
 
-    override fun onLastFingerUp(event: MotionEvent): Boolean {
+    override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
         isTransforming = false
         when (currentState) {
             State.NORMAL_DRAWING -> {
@@ -437,6 +431,8 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
+        if (isTransforming) return true
+
         when (currentState) {
             State.NORMAL_DRAWING -> touchMove(event.x, event.y)
             State.STROKE_EDITING -> {
