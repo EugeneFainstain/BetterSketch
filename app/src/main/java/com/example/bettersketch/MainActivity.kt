@@ -7,10 +7,7 @@ import android.graphics.Color
 import android.graphics.drawable.LayerDrawable
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.MediaStore
-import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
 import android.widget.SeekBar
@@ -45,11 +42,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         Color.WHITE
     )
 
-    // Auto-repeat for buttons
-    private val handler = Handler(Looper.getMainLooper())
-    private var autoRepeatRunnable: Runnable? = null
-
-
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,8 +67,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         }
 
         setupSliderListeners()
-        setupAutoRepeatListeners()
 
+        rewButton.setOnClickListener { drawingView.undo() }
+        ffButton.setOnClickListener { drawingView.redo() }
 
         findViewById<Button>(R.id.btnClear).setOnClickListener {
             drawingView.deleteCurrentStroke()
@@ -86,36 +79,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         findViewById<View>(R.id.btnToggleMode).visibility = View.GONE
 
         drawingView.post { updateUi() }
-    }
-
-    private fun setupAutoRepeatListeners() {
-        val repeatListener = { action: () -> Unit ->
-            View.OnTouchListener { view, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        handler.removeCallbacksAndMessages(null)
-                        view.isPressed = true
-                        action()
-                        autoRepeatRunnable = object : Runnable {
-                            override fun run() {
-                                action()
-                                handler.postDelayed(this, 100)
-                            }
-                        }
-                        handler.postDelayed(autoRepeatRunnable!!, 200)
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        autoRepeatRunnable?.let { handler.removeCallbacks(it) }
-                        autoRepeatRunnable = null
-                        view.isPressed = false
-                    }
-                }
-                true
-            }
-        }
-
-        rewButton.setOnTouchListener(repeatListener(drawingView::undo))
-        ffButton.setOnTouchListener(repeatListener(drawingView::redo))
     }
 
     private fun setupSliderListeners() {
@@ -171,7 +134,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
     private fun updateUi() {
         rewButton.isEnabled = drawingView.canRewind
-        ffButton.isEnabled = drawingVew.canFF
+        ffButton.isEnabled = drawingView.canFF
 
         progressSeekBar.max = drawingView.historySize
         progressSeekBar.progress = drawingView.currentHistoryPosition
