@@ -45,8 +45,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         Color.WHITE
     )
 
+    // Auto-repeat for buttons
     private val handler = Handler(Looper.getMainLooper())
     private var autoRepeatRunnable: Runnable? = null
+
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,6 +64,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         rewButton = findViewById(R.id.btnUndo)
         ffButton = findViewById(R.id.btnRedo)
 
+
         historyIndicator = HistoryIndicatorDrawable()
         val originalProgressDrawable = progressSeekBar.progressDrawable.constantState?.newDrawable()?.mutate()
         if (originalProgressDrawable != null) {
@@ -74,8 +77,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         setupSliderListeners()
         setupAutoRepeatListeners()
 
-        findViewById<Button>(R.id.btnClear).setOnClickListener { drawingView.deleteCurrentStroke() }
+
+        findViewById<Button>(R.id.btnClear).setOnClickListener {
+            drawingView.deleteCurrentStroke()
+        }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
+        
         findViewById<View>(R.id.btnToggleMode).visibility = View.GONE
 
         drawingView.post { updateUi() }
@@ -115,12 +122,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         widthSlider.listener = object : MySlider.OnSliderValueChangedListener {
             override fun onValueChanged(value: Float) {
                 val strokeWidth = 2f + value * 30f // 2...32
-                drawingView.setStrokeWidth(strokeWidth, drawingView.isStrokeSelected)
+                drawingView.setStrokeWidth(strokeWidth, applyToSelected = drawingView.isStrokeSelected)
             }
 
             override fun onValueEdit(value: Float) {
                 val strokeWidth = 2f + value * 30f // 2...32
-                drawingView.setStrokeWidth(strokeWidth, true)
+                drawingView.setStrokeWidth(strokeWidth, applyToSelected = true)
             }
 
             override fun onValueEditEnd() {}
@@ -131,14 +138,14 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             override fun onValueChanged(value: Float) {
                 val colorIndex = (value * (colors.size - 1)).roundToInt()
                 val color = colors[colorIndex]
-                drawingView.setColor(color, drawingView.isStrokeSelected)
+                drawingView.setColor(color, applyToSelected = drawingView.isStrokeSelected)
                 widthSlider.color = color
             }
 
             override fun onValueEdit(value: Float) {
                 val colorIndex = (value * (colors.size - 1)).roundToInt()
                 val color = colors[colorIndex]
-                drawingView.setColor(color, true)
+                drawingView.setColor(color, applyToSelected = true)
                 widthSlider.color = color
             }
 
@@ -149,6 +156,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
                     drawingView.navigateToHistoryState(progress)
+                    drawingView.deselectAllStrokes()
                 }
             }
 
@@ -163,7 +171,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
     private fun updateUi() {
         rewButton.isEnabled = drawingView.canRewind
-        ffButton.isEnabled = drawingView.canFF
+        ffButton.isEnabled = drawingVew.canFF
 
         progressSeekBar.max = drawingView.historySize
         progressSeekBar.progress = drawingView.currentHistoryPosition
