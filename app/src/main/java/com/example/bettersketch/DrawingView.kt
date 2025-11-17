@@ -5,6 +5,7 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -20,7 +21,7 @@ private enum class State {
 }
 
 enum class SelectedEnd {
-    START, END, NONE
+    START, END, MIDDLE, NONE
 }
 
 class DrawingView @JvmOverloads constructor(
@@ -194,16 +195,42 @@ class DrawingView @JvmOverloads constructor(
         return false
     }
 
+    private fun getMiddlePoint(stroke: Stroke): PathPoint? {
+        if (stroke.points.isEmpty()) return null
+        val midDistance = stroke.totalDistance / 2f
+        var closestPoint = stroke.points.first()
+        var smallestDist = Float.MAX_VALUE
+        for (p in stroke.points) {
+            val dist = abs(p.distance - midDistance)
+            if (dist < smallestDist) {
+                smallestDist = dist
+                closestPoint = p
+            }
+        }
+        return closestPoint
+    }
+
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         if (selectedStrokeIdx == -1) return false
         val stroke = currentStroke ?: return false
 
         val startPoint = stroke.points.first().point
         val endPoint = stroke.points.last().point
+        val middlePathPoint = getMiddlePoint(stroke)
+        val middlePoint = middlePathPoint?.point
+
         val distToStart = distance(startPoint, tapPoint)
         val distToEnd = distance(endPoint, tapPoint)
+        val distToMiddle = if (middlePoint != null) distance(middlePoint, tapPoint) else Float.MAX_VALUE
 
-        selectedEnd = if (distToStart < distToEnd) SelectedEnd.START else SelectedEnd.END
+        val min = min(distToStart, min(distToEnd, distToMiddle))
+
+        selectedEnd = when (min) {
+            distToStart -> SelectedEnd.START
+            distToEnd -> SelectedEnd.END
+            distToMiddle -> SelectedEnd.MIDDLE
+            else -> SelectedEnd.NONE
+        }
         return true
     }
 
@@ -260,21 +287,24 @@ class DrawingView @JvmOverloads constructor(
         val radius = paint.strokeWidth * 2f
         val startPoint = points.first().point
         val endPoint = points.last().point
+        val middlePoint = getMiddlePoint(currentStroke!!)?.point
 
         val endpointPaint = Paint().apply {
             style = Paint.Style.FILL
             color = Color.GREEN
         }
 
-        // If we are three-finger dragging an explicit stroke, draw both endpoints.
+        // If we are three-finger dragging an explicit stroke, draw all three endpoints.
         if (threeFingerGestureOccured) {
             canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
             canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
+            middlePoint?.let { canvas.drawCircle(it.x, it.y, radius, endpointPaint) }
         } else { // Otherwise, it's a single-finger drag on an endpoint
-            if (selectedEnd == SelectedEnd.START) {
-                canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
-            } else {
-                canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
+            when (selectedEnd) {
+                SelectedEnd.START -> canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
+                SelectedEnd.END -> canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
+                SelectedEnd.MIDDLE -> middlePoint?.let { canvas.drawCircle(it.x, it.y, radius, endpointPaint) }
+                else -> {}
             }
         }
 
