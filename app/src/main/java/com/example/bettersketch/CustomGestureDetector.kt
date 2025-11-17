@@ -15,6 +15,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
         fun onDoubleTap(event: MotionEvent): Boolean
         fun onFirstFingerDown(event: MotionEvent): Boolean
         fun onSecondFingerDown(event: MotionEvent): Boolean
+        fun onSecondFingerUp(event: MotionEvent): Boolean
         fun onSomeFingerUp(event: MotionEvent): Boolean
         fun onLastFingerUp(event: MotionEvent): Boolean
         fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean
@@ -125,6 +126,9 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 }
             }
             MotionEvent.ACTION_POINTER_UP -> {
+                if (activePointerCount == 2) {
+                    listener.onSecondFingerUp(event)
+                }
                 activePointerCount--
                 listener.onSomeFingerUp(event)
                 if (activePointerCount < 2) { // If less than two fingers remain, multi-touch might be ending

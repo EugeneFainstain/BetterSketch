@@ -481,6 +481,11 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
+    override fun onSecondFingerUp(event: MotionEvent): Boolean {
+        isTransforming = false
+        return true
+    }
+
     override fun onSomeFingerUp(event: MotionEvent): Boolean {
         return true
     }
