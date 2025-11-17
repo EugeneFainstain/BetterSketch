@@ -148,13 +148,9 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 val totalDy = abs(event.y - downY)
                 val duration = currentTime - downTime
 
-                if (aTwoFingerGestureHasOccured) { // Multi-touch just ended
-                    aTwoFingerGestureHasOccured = false
-                    listener.onLastRemainingFingerUp(event)
-                } else if (isDragging) {
-                    isDragging = false
-                    listener.onLastRemainingFingerUp(event)
-                } else if (totalDx < touchSlop && totalDy < touchSlop && duration < tapTimeout) {
+                val isTap = totalDx < touchSlop && totalDy < touchSlop && duration < tapTimeout
+
+                if (isTap && !aTwoFingerGestureHasOccured && !isDragging) {
                     // This was a tap
                     if (currentTime - lastTapTime < doubleTapTimeout) {
                         // This is the second tap of a double tap
@@ -179,7 +175,9 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                         listener.onSingleTapEnd(event)
                     }
                 } else {
-                    // Not a tap, not a drag - just a release after some movement
+                    // This is the end of a drag, a multi-touch gesture, or an invalid tap.
+                    aTwoFingerGestureHasOccured = false
+                    isDragging = false
                     listener.onLastRemainingFingerUp(event)
                 }
             }
