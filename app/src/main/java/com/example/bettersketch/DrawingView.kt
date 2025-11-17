@@ -41,7 +41,7 @@ class DrawingView @JvmOverloads constructor(
         }
         
         listener?.onStateChanged()
-        invalidate()
+        redrawHistory()
     }
 
     // Drawing state
@@ -106,15 +106,19 @@ class DrawingView @JvmOverloads constructor(
             backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
         }
 
-        // 2. Draw the live part (stroke in progress or selected stroke)
+        // 2. Draw the live part
         if (strokeInProgressPoints.isNotEmpty()) {
-            drawStrokeWithHalo(canvas, strokeInProgressPoints, currentPaint)
-        } else if (currentState != State.NORMAL_DRAWING) {
+            drawPoints(canvas, strokeInProgressPoints, currentPaint)
+        } else if (currentState == State.CHOSEN_STROKE) {
+            currentStroke?.let {
+                drawPoints(canvas, it.points, it.paint)
+            }
+        } else if (currentState == State.STROKE_EDITING) {
             currentStroke?.let {
                 drawStrokeWithHalo(canvas, it.points, it.paint)
             }
         }
-
+        
         canvas.restore()
     }
 
@@ -295,26 +299,24 @@ class DrawingView @JvmOverloads constructor(
         drawPoints(canvas, points, haloPaint)
 
         // 2. Draw the endpoint indicator circles
-        if (currentState == State.STROKE_EDITING) {
-            val radius = (paint.strokeWidth * 2 + 32f) / 2f
-            val startPoint = points.first().point
-            val endPoint = points.last().point
+        val radius = (paint.strokeWidth * 2 + 32f) / 2f
+        val startPoint = points.first().point
+        val endPoint = points.last().point
 
-            val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
-            val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
+        val startPaint = Paint().apply { style = Paint.Style.FILL; color = Color.GREEN }
+        val endPaint = Paint().apply { style = Paint.Style.FILL; color = Color.RED }
 
-            canvas.drawCircle(startPoint.x, startPoint.y, radius, startPaint)
-            canvas.drawCircle(endPoint.x, endPoint.y, radius, endPaint)
+        canvas.drawCircle(startPoint.x, startPoint.y, radius, startPaint)
+        canvas.drawCircle(endPoint.x, endPoint.y, radius, endPaint)
 
-            if (selectedEnd != SelectedEnd.NONE) {
-                val highlightPaint = Paint().apply {
-                    style = Paint.Style.STROKE
-                    color = Color.CYAN
-                    strokeWidth = 8f
-                }
-                val pointToHighlight = if (selectedEnd == SelectedEnd.START) startPoint else endPoint
-                canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius + 6f, highlightPaint)
+        if (selectedEnd != SelectedEnd.NONE) {
+            val highlightPaint = Paint().apply {
+                style = Paint.Style.STROKE
+                color = Color.CYAN
+                strokeWidth = 8f
             }
+            val pointToHighlight = if (selectedEnd == SelectedEnd.START) startPoint else endPoint
+            canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius + 6f, highlightPaint)
         }
 
         // 3. Draw the actual stroke on top
