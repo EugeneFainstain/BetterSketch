@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var drawingView: DrawingView
     private lateinit var widthSlider: WidthSlider
     private lateinit var colorSlider: ColorSlider
+    private lateinit var btnExitEditing: Button
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -46,6 +47,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         widthSlider = findViewById(R.id.widthSlider)
         colorSlider = findViewById(R.id.colorSlider)
+        btnExitEditing = findViewById(R.id.btnExitEditing)
         
         findViewById<View>(R.id.seekProgress).visibility = View.GONE
         findViewById<View>(R.id.btnUndo).visibility = View.GONE
@@ -59,6 +61,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
         
         findViewById<View>(R.id.btnToggleMode).visibility = View.GONE
+
+        btnExitEditing.setOnClickListener {
+            drawingView.exitEditingMode()
+        }
 
         drawingView.post { updateUi() }
     }
@@ -113,6 +119,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         }
 
         widthSlider.color = currentPaint.color
+
+        btnExitEditing.visibility = if (drawingView.isEditing()) View.VISIBLE else View.GONE
     }
 
     private fun saveToGallery() {

@@ -102,6 +102,16 @@
             android:textSize="12sp"
             android:layout_marginRight="32dp"
             android:text="FF"/>
+
+        <Button
+            android:id="@+id/btnExitEditing"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="16dp"
+            android:backgroundTint="@android:color/holo_red_light"
+            android:text="Exit Editing Mode"
+            android:visibility="gone" />
     </FrameLayout>
 
 </LinearLayout>

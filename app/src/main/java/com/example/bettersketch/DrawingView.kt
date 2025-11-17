@@ -66,6 +66,15 @@ class DrawingView @JvmOverloads constructor(
     val isStrokeSelected: Boolean get() = selectedStrokeIdx != -1
     private val currentStroke: Stroke? get() = strokes.getOrNull(selectedStrokeIdx)
 
+    fun isEditing(): Boolean {
+        return currentState != State.NORMAL_DRAWING
+    }
+
+    fun exitEditingMode() {
+        selectedStrokeIdx = -1
+        setState(State.NORMAL_DRAWING)
+    }
+
     fun exportBitmap(): Bitmap {
         val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
