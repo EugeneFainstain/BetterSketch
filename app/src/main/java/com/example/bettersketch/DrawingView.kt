@@ -344,20 +344,10 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onSingleTapEnd(event: MotionEvent): Boolean {
         when (currentState) {
-            State.NORMAL_DRAWING -> {
+            State.NORMAL_DRAWING, State.CHOSEN_STROKE, State.STROKE_EDITING -> {
                 if (selectStrokeAt(PointF(event.x, event.y))) {
                     setState(State.CHOSEN_STROKE)
                 }
-            }
-            State.CHOSEN_STROKE -> {
-                // This is the result of a finger down and up without a drag.
-                // We were momentarily in STROKE_EDITING, now go back.
-                setState(State.CHOSEN_STROKE)
-            }
-            State.STROKE_EDITING -> {
-                // This case happens if a tap occurs while already editing,
-                // which means we should revert to chosen, not editing.
-                setState(State.CHOSEN_STROKE)
             }
         }
         return true
