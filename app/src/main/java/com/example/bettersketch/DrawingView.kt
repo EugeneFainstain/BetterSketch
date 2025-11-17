@@ -338,33 +338,62 @@ class DrawingView @JvmOverloads constructor(
             c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
         }
 
-        val tempPaint = Paint()
+        when (currentState) {
+            State.NORMAL_DRAWING -> redrawHistoryNormal(c)
+            State.CHOSEN_STROKE -> redrawHistoryChosen(c)
+            State.STROKE_EDITING -> redrawHistoryEditing(c)
+        }
 
-        // Draw future strokes (always faded)
+        if (canvas == null) invalidate()
+    }
+
+    private fun redrawHistoryNormal(c: Canvas) {
+        val tempPaint = Paint()
         for (s in undone.reversed()) {
             tempPaint.set(s.paint)
             tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             drawPoints(c, s.points, tempPaint)
         }
+        for (s in strokes) {
+            drawPoints(c, s.points, s.paint)
+        }
+    }
 
-        // Draw past strokes
-        for ((index, s) in strokes.withIndex()) {
+    private fun redrawHistoryChosen(c: Canvas) {
+        val tempPaint = Paint()
+        for (s in undone.reversed()) {
             tempPaint.set(s.paint)
-            
-            if (currentState != State.NORMAL_DRAWING && index != currentStrokeIdx) {
-                tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
-            }
+            tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             drawPoints(c, s.points, tempPaint)
         }
-        
-        // Draw the selected stroke's decorations on top if needed
-        if (currentState == State.STROKE_EDITING) {
-            currentStroke?.let {
-                drawStrokeWithEndpoints(c, it.points, it.paint)
+        for ((index, s) in strokes.withIndex()) {
+            if (index == currentStrokeIdx) {
+                drawPoints(c, s.points, s.paint)
+            } else {
+                tempPaint.set(s.paint)
+                tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
+                drawPoints(c, s.points, tempPaint)
             }
         }
+    }
 
-        if (canvas == null) invalidate()
+    private fun redrawHistoryEditing(c: Canvas) {
+        val tempPaint = Paint()
+        for (s in undone.reversed()) {
+            tempPaint.set(s.paint)
+            tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
+            drawPoints(c, s.points, tempPaint)
+        }
+        for ((index, s) in strokes.withIndex()) {
+            if (index != currentStrokeIdx) {
+                tempPaint.set(s.paint)
+                tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
+                drawPoints(c, s.points, tempPaint)
+            }
+        }
+        currentStroke?.let {
+            drawStrokeWithEndpoints(c, it.points, it.paint)
+        }
     }
 
     private fun drawPoints(canvas: Canvas?, points: List<PathPoint>, paint: Paint) {
