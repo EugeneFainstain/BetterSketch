@@ -5,10 +5,7 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.sqrt
+import kotlin.math.*
 
 interface DrawingViewListener {
     fun onStateChanged()
@@ -273,6 +270,19 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
+    fun moveMiddlePoint(dx: Float, dy: Float) {
+        currentStroke?.let {
+            val totalDistance = it.totalDistance
+            if (totalDistance == 0f) return
+            for (pathPoint in it.points) {
+                val relativeDistance = pathPoint.distance / totalDistance
+                val weight = sin(relativeDistance * PI).toFloat()
+                pathPoint.point.offset(dx * weight, dy * weight)
+            }
+            redrawHistory()
+        }
+    }
+
     private fun drawStrokeWithEndpoints(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
         if (points.isEmpty()) return
 
@@ -492,10 +502,11 @@ class DrawingView @JvmOverloads constructor(
         when (currentState) {
             State.NORMAL_DRAWING -> touchMove(event.x, event.y)
             State.STROKE_EDITING -> {
-                if (selectedEnd == SelectedEnd.START) {
-                    moveStartPoint(dx, dy)
-                } else if (selectedEnd == SelectedEnd.END) {
-                    moveEndPoint(dx, dy)
+                when (selectedEnd) {
+                    SelectedEnd.START -> moveStartPoint(dx, dy)
+                    SelectedEnd.END -> moveEndPoint(dx, dy)
+                    SelectedEnd.MIDDLE -> moveMiddlePoint(dx, dy)
+                    else -> {}
                 }
             }
             else -> {}
