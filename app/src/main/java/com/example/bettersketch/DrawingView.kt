@@ -467,9 +467,14 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
+    override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
         currentStroke?.let {
             val deltaMatrix = Matrix()
+            val bounds = it.getBounds()
+            val centerX = bounds.centerX()
+            val centerY = bounds.centerY()
+            deltaMatrix.postScale(scale, scale, centerX, centerY)
+            deltaMatrix.postRotate(rotate, centerX, centerY)
             deltaMatrix.postTranslate(dx, dy)
             transformStroke(it, deltaMatrix)
         }
