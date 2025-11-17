@@ -316,7 +316,7 @@ class DrawingView @JvmOverloads constructor(
         val tempPaint = Paint()
         for ((index, s) in strokes.withIndex()) {
             tempPaint.set(s.paint)
-            if (selectedStrokeIdx != -1 && index != selectedStrokeIdx) {
+            if (selectedStrokeIdx != -1 && index != selectedStrokeIdx && !strokeImplicitlySelectedForTransform) {
                 tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             }
             drawPoints(c, s.points, tempPaint)
