@@ -29,17 +29,19 @@ class DrawingView @JvmOverloads constructor(
 
     var listener: DrawingViewListener? = null
     private var selectedEnd: SelectedEnd = SelectedEnd.NONE
-    
+
     private var currentState = State.NORMAL_DRAWING
     private fun setState(newState: State) {
         if (currentState == newState) return
         currentState = newState
-        
+
         if (newState == State.NORMAL_DRAWING) {
             currentStrokeIdx = -1
             selectedEnd = SelectedEnd.NONE
+        } else if (newState == State.CHOSEN_STROKE) {
+            selectedEnd = SelectedEnd.NONE
         }
-        
+
         listener?.onStateChanged()
         redrawHistory()
     }
@@ -118,7 +120,7 @@ class DrawingView @JvmOverloads constructor(
                 drawStrokeWithHalo(canvas, it.points, it.paint)
             }
         }
-        
+
         canvas.restore()
     }
 
@@ -155,7 +157,6 @@ class DrawingView @JvmOverloads constructor(
         strokeInProgressPoints.clear()
         strokeInProgressDistance = 0f
         strokeInProgressPoints.add(PathPoint(PointF(x, y), 0f))
-        listener?.onStateChanged()
     }
 
     private fun touchMove(x: Float, y: Float) {
@@ -165,7 +166,6 @@ class DrawingView @JvmOverloads constructor(
         val dy = y - lastPoint.y
         strokeInProgressDistance += sqrt(dx * dx + dy * dy)
         strokeInProgressPoints.add(PathPoint(PointF(x, y), strokeInProgressDistance))
-        listener?.onStateChanged()
     }
 
     private fun touchUp() {
@@ -188,7 +188,7 @@ class DrawingView @JvmOverloads constructor(
         return sqrt(dx * dx + dy * dy)
     }
 
-    private fun findClosestStroke(tapPoint: PointF): Boolean {
+    private fun selectStrokeAt(tapPoint: PointF): Boolean {
         var minDistance = Float.MAX_VALUE
         var closestIndex = -1
 
@@ -209,23 +209,23 @@ class DrawingView @JvmOverloads constructor(
         }
         return false
     }
-    
-    private fun selectEndpointAt(tapPoint: PointF): Boolean {
+
+    private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         if (currentStrokeIdx == -1) return false
-        
+
         val touchRadius = 44f
         val stroke = currentStroke ?: return false
-        
+
         val startPoint = stroke.points.first().point
         val endPoint = stroke.points.last().point
         val distToStart = distance(startPoint, tapPoint)
         val distToEnd = distance(endPoint, tapPoint)
 
-        if (distToStart < touchRadius || distToEnd < touchRadius) {
+        if (min(distToStart, distToEnd) < touchRadius) {
             selectedEnd = if (distToStart < distToEnd) SelectedEnd.START else SelectedEnd.END
             return true
         }
-        
+
         return false
     }
 
@@ -271,7 +271,6 @@ class DrawingView @JvmOverloads constructor(
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
             redrawHistory()
-            listener?.onStateChanged()
         }
     }
 
@@ -284,7 +283,6 @@ class DrawingView @JvmOverloads constructor(
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
             redrawHistory()
-            listener?.onStateChanged()
         }
     }
 
@@ -378,12 +376,15 @@ class DrawingView @JvmOverloads constructor(
         for ((index, s) in strokes.withIndex()) {
             tempPaint.set(s.paint)
             if(canvas != null) tempPaint.strokeWidth = s.paint.strokeWidth
-            
+
             if (currentState != State.NORMAL_DRAWING && index != currentStrokeIdx) {
                 tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
             }
 
-            drawPoints(c, s.points, tempPaint)
+            // In CHOSEN_STROKE or STROKE_EDITING, the current stroke is drawn in onDraw, not here.
+            if (currentState == State.NORMAL_DRAWING || index != currentStrokeIdx) {
+                drawPoints(c, s.points, tempPaint)
+            }
         }
 
         if (canvas == null) invalidate()
@@ -410,21 +411,28 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSingleTap(event: MotionEvent): Boolean {
+        val tapPoint = PointF(event.x, event.y)
         when (currentState) {
             State.NORMAL_DRAWING -> {
-                if (findClosestStroke(PointF(event.x, event.y))) {
+                if (selectStrokeAt(tapPoint)) {
                     setState(State.CHOSEN_STROKE)
                 }
             }
             State.CHOSEN_STROKE -> {
-                if (selectEndpointAt(PointF(event.x, event.y))) {
+                if (selectEndpointOfCurrentStroke(tapPoint)) {
                     setState(State.STROKE_EDITING)
                 } else {
-                    setState(State.NORMAL_DRAWING)
+                    val originalIdx = currentStrokeIdx
+                    if (selectStrokeAt(tapPoint) && currentStrokeIdx != originalIdx) {
+                        redrawHistory() // A new stroke was selected, redraw.
+                    }
+                    // If same stroke or empty space is tapped, do nothing.
                 }
             }
             State.STROKE_EDITING -> {
-                if (!selectEndpointAt(PointF(event.x, event.y))) {
+                if (selectEndpointOfCurrentStroke(tapPoint)) {
+                    redrawHistory() // Endpoint selection changed, redraw.
+                } else {
                     setState(State.CHOSEN_STROKE)
                 }
             }
@@ -440,13 +448,22 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onFirstFingerDown(event: MotionEvent): Boolean {
-        if (currentState == State.NORMAL_DRAWING) {
-            touchStart(event.x, event.y)
-        } else if (currentState == State.CHOSEN_STROKE) {
-            if (selectEndpointAt(PointF(event.x, event.y))) {
-                setState(State.STROKE_EDITING)
+        val downPoint = PointF(event.x, event.y)
+        when (currentState) {
+            State.NORMAL_DRAWING -> {
+                touchStart(downPoint.x, downPoint.y)
+            }
+            State.CHOSEN_STROKE -> {
+                if (selectEndpointOfCurrentStroke(downPoint)) {
+                    setState(State.STROKE_EDITING)
+                }
+            }
+            State.STROKE_EDITING -> {
+                // Allow re-selecting an endpoint on finger down
+                selectEndpointOfCurrentStroke(downPoint)
             }
         }
+        listener?.onStateChanged()
         return true
     }
 
