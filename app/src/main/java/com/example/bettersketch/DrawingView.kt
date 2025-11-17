@@ -428,9 +428,7 @@ class DrawingView @JvmOverloads constructor(
                 redrawHistory() // Redraw to update highlight
             }
             State.STROKE_EDITING -> {
-                if (!selectEndpointOfCurrentStroke(tapPoint)) {
-                    setState(State.CHOSEN_STROKE)
-                }
+                setState(State.CHOSEN_STROKE)
                 redrawHistory() // Redraw to update highlight
             }
         }
