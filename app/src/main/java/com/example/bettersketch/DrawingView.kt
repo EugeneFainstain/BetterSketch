@@ -181,6 +181,7 @@ class DrawingView @JvmOverloads constructor(
             stroke.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
 
             stroke.applySmoothing() // Re-smooth points and update totalDistance based on the new unsmoothedPoints
+            redrawHistory() // Redraw after individual stroke transformation
         }
     }
 
