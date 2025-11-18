@@ -197,12 +197,54 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
+    private fun preprocessStroke(points: MutableList<PathPoint>): MutableList<PathPoint> {
+        var currentPoints = points
+        while (currentPoints.size in 2..19) {
+            val newPoints = mutableListOf<PathPoint>()
+            newPoints.add(currentPoints.first())
+
+            for (i in 0 until currentPoints.size - 1) {
+                val p1 = currentPoints[i]
+                val p2 = currentPoints[i + 1]
+                val midPoint = PointF((p1.point.x + p2.point.x) / 2f, (p1.point.y + p2.point.y) / 2f)
+                newPoints.add(PathPoint(midPoint, 0f)) // placeholder distance
+                newPoints.add(p2)
+            }
+            currentPoints = newPoints
+        }
+
+        // If points were added, we need to recalculate distances and total distance
+        if (currentPoints.size != points.size) {
+            var totalDistance = 0f
+            val finalPoints = mutableListOf<PathPoint>()
+            if (currentPoints.isNotEmpty()) {
+                finalPoints.add(PathPoint(currentPoints.first().point, 0f))
+
+                for (i in 1 until currentPoints.size) {
+                    val p1 = finalPoints.last().point
+                    val p2 = currentPoints[i].point
+                    val dx = p2.x - p1.x
+                    val dy = p2.y - p1.y
+                    totalDistance += sqrt(dx * dx + dy * dy)
+                    finalPoints.add(PathPoint(p2, totalDistance))
+                }
+            }
+            return finalPoints
+        }
+
+        return points
+    }
+
     private fun commitStrokeInProgress() {
-        val newStroke = Stroke(strokeInProgressPoints.toMutableList(), Paint(currentPaint), strokeInProgressDistance)
-        strokes.add(newStroke)
-        strokeInProgressPoints.clear()
-        selectedStrokeIdx = -1
-        setState(State.NORMAL_DRAWING)
+        if (strokeInProgressPoints.isNotEmpty()) {
+            val processedPoints = preprocessStroke(strokeInProgressPoints)
+            val totalDistance = if (processedPoints.isNotEmpty()) processedPoints.last().distance else 0f
+            val newStroke = Stroke(processedPoints, Paint(currentPaint), totalDistance)
+            strokes.add(newStroke)
+            strokeInProgressPoints.clear()
+            selectedStrokeIdx = -1
+            setState(State.NORMAL_DRAWING)
+        }
     }
 
     private fun distance(p1: PointF, p2: PointF): Float {
