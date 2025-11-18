@@ -513,7 +513,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onDoubleTapEnd(event: MotionEvent): Boolean {
-        // Double tap no longer exits editing mode, but we can keep it for other potential actions.
+        onSingleTapEnd(event) // Do the exact thing as if it was a single tap end...
         return true
     }
 
@@ -642,15 +642,6 @@ class DrawingView @JvmOverloads constructor(
         deltaMatrix.postScale(scale, scale, mid.x, mid.y)
         deltaMatrix.postRotate(rotate, mid.x, mid.y)
         transformAllStrokes(deltaMatrix) // Canvas transformation
-        return true
-    }
-
-    override fun onTapAndAHalf(event: MotionEvent): Boolean {
-        selectedStrokeIdx = -1
-        selectedEnd = SelectedEnd.NONE
-        editingPointIndex = -1
-        editingPointInitialWeights = null
-        setState(State.NORMAL_DRAWING)
         return true
     }
 }

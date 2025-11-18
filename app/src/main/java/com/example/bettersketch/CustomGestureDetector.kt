@@ -21,7 +21,6 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
         fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean
         fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean
         fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean
-        fun onTapAndAHalf(event: MotionEvent): Boolean
     }
 
     private val touchSlop: Int = ViewConfiguration.get(context).scaledTouchSlop
@@ -36,13 +35,6 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
     private var lastMoveY: Float = 0f
     private var isDragging: Boolean = false
     private var activePointerCount: Int = 0
-
-    // For Tap and a Half
-    private var firstTapDownTime: Long = 0
-    private var firstTapUpTime: Long = 0
-    private var firstTapX: Float = 0f
-    private var firstTapY: Float = 0f
-    private var isPotentialTapAndAHalf: Boolean = false
 
     // Multi-touch state
     private var aTwoFingerGestureHasOccured = false
@@ -70,17 +62,6 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 isDragging = false
                 aTwoFingerGestureHasOccured = false
                 aThreeFingerGestureHasOccured = false
-
-                val currentTime = System.currentTimeMillis()
-                if (currentTime - lastTapTime < doubleTapTimeout) {
-                    if (isPotentialTapAndAHalf && currentTime - firstTapUpTime < doubleTapTimeout) {
-                        // This is the third touch of a tap-and-a-half
-                    } else {
-                        // Potential double tap
-                    }
-                } else {
-                    isPotentialTapAndAHalf = false
-                }
 
                 listener.onFirstFingerDown(event)
             }
@@ -162,20 +143,9 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
 
                 if (isTap && !aTwoFingerGestureHasOccured && !isDragging) {
                     if (currentTime - lastTapTime < doubleTapTimeout) {
-                        if (isPotentialTapAndAHalf && currentTime - firstTapUpTime < doubleTapTimeout) {
-                            isPotentialTapAndAHalf = false
-                            lastTapTime = 0
-                            listener.onTapAndAHalf(event)
-                        } else {
-                            lastTapTime = 0
-                            listener.onDoubleTapEnd(event)
-                        }
+                        lastTapTime = 0
+                        listener.onDoubleTapEnd(event)
                     } else {
-                        firstTapDownTime = downTime
-                        firstTapUpTime = currentTime
-                        firstTapX = event.x
-                        firstTapY = event.y
-                        isPotentialTapAndAHalf = true
                         lastTapTime = currentTime
                         listener.onSingleTapEnd(event)
                     }
@@ -189,7 +159,6 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
             MotionEvent.ACTION_CANCEL -> {
                 activePointerCount = 0
                 isDragging = false
-                isPotentialTapAndAHalf = false
                 lastTapTime = 0
                 aTwoFingerGestureHasOccured = false
                 aThreeFingerGestureHasOccured = false
