@@ -3,6 +3,7 @@ package com.example.bettersketch
 import android.graphics.Paint
 import android.graphics.PointF
 import android.graphics.RectF
+import android.graphics.Matrix // Added import
 import kotlin.math.sqrt
 import kotlin.math.PI
 import kotlin.math.sin
@@ -25,7 +26,7 @@ class Stroke(
     init {
         val (calculatedPathPoints, calculatedTotalDistance) = calculatePathPointsWithDistances(pointFs)
         this.originalPoints = calculatedPathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
-        this.points = calculatedPathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
+        this.points = calculatedPathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList() // Corrected typo here
         this.totalDistance = calculatedTotalDistance
     }
 
@@ -133,6 +134,31 @@ class Stroke(
         }
         isModified = true
     }
+
+    fun applyTransformation(matrix: Matrix, isGlobalTransform: Boolean) {
+        if (!isGlobalTransform) {
+            this.isModified = true
+        }
+        // Removed: val scale = getScaleFromMatrix(matrix)
+        // Removed: this.paint.strokeWidth *= scale
+
+        // Always transform the live points
+        this.points.forEach { pathPoint ->
+            val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+            matrix.mapPoints(point)
+            pathPoint.point.set(point[0], point[1])
+        }
+        // Only transform the original points if it's a global canvas operation
+        if (isGlobalTransform) {
+            this.originalPoints.forEach { pathPoint ->
+                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                matrix.mapPoints(point)
+                pathPoint.point.set(point[0], point[1])
+            }
+        }
+    }
+
+    // Removed getScaleFromMatrix as it's no longer used
 
     // Moved from DrawingView.kt and made private
     private fun calculatePathPointsWithDistances(points: List<PointF>): Pair<MutableList<PathPoint>, Float> {

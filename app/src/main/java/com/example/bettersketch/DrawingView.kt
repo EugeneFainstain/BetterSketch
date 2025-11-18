@@ -5,7 +5,6 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -139,41 +138,12 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    private fun transformStroke(stroke: Stroke, matrix: Matrix, isGlobalTransform: Boolean) {
-        if (!isGlobalTransform) {
-            stroke.isModified = true
-            listener?.onStateChanged()
-        }
-        val scale = getScaleFromMatrix(matrix)
-        stroke.paint.strokeWidth *= scale
-
-        // Always transform the live points
-        stroke.points.forEach { pathPoint ->
-            val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-            matrix.mapPoints(point)
-            pathPoint.point.set(point[0], point[1])
-        }
-        // Only transform the original points if it's a global canvas operation
-        if (isGlobalTransform) {
-            stroke.originalPoints.forEach { pathPoint ->
-                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                matrix.mapPoints(point)
-                pathPoint.point.set(point[0], point[1])
-            }
+    private fun transformAllStrokes(matrix: Matrix, scale: Float) { // Added scale parameter
+        strokes.forEach { stroke ->
+            stroke.paint.strokeWidth *= scale // Apply scale to stroke width
+            stroke.applyTransformation(matrix, isGlobalTransform = true)
         }
         redrawHistory()
-    }
-
-    private fun transformAllStrokes(matrix: Matrix) {
-        strokes.forEach { stroke ->
-            transformStroke(stroke, matrix, isGlobalTransform = true)
-        }
-    }
-
-    private fun getScaleFromMatrix(matrix: Matrix): Float {
-        val values = FloatArray(9)
-        matrix.getValues(values)
-        return values[Matrix.MSCALE_X]
     }
 
     private fun touchStart(x: Float, y: Float) {
@@ -573,7 +543,7 @@ class DrawingView @JvmOverloads constructor(
         deltaMatrix.postTranslate(dx, dy)
         deltaMatrix.postScale(scale, scale, mid.x, mid.y)
         deltaMatrix.postRotate(rotate, mid.x, mid.y)
-        transformAllStrokes(deltaMatrix)
+        transformAllStrokes(deltaMatrix, scale) // Pass scale to transformAllStrokes
         return true
     }
 
@@ -586,7 +556,10 @@ class DrawingView @JvmOverloads constructor(
             deltaMatrix.postScale(scale, scale, centerX, centerY)
             deltaMatrix.postRotate(rotate, centerX, centerY)
             deltaMatrix.postTranslate(dx, dy)
-            transformStroke(it, deltaMatrix, isGlobalTransform = false)
+            it.paint.strokeWidth *= scale // Apply scale to stroke width
+            it.applyTransformation(deltaMatrix, isGlobalTransform = false)
+            listener?.onStateChanged()
+            redrawHistory()
         }
         return true
     }
