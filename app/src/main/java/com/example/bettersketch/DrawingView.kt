@@ -60,6 +60,9 @@ class DrawingView @JvmOverloads constructor(
     private val customGestureDetector: CustomGestureDetector
     private val haloPaint: Paint
     private val haloOffset: Float
+    private val selectionPaint: Paint
+    private var selectionCircle: Triple<PointF, Float, Path>? = null
+
 
     init {
         customGestureDetector = CustomGestureDetector(context, this)
@@ -71,6 +74,13 @@ class DrawingView @JvmOverloads constructor(
             strokeJoin = Paint.Join.ROUND
             strokeCap = Paint.Cap.ROUND
             color = Color.LTGRAY
+        }
+        selectionPaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.BLUE
+            style = Paint.Style.STROKE
+            strokeWidth = 5f
+            pathEffect = DashPathEffect(floatArrayOf(15f, 15f), 0f)
         }
     }
 
@@ -145,6 +155,10 @@ class DrawingView @JvmOverloads constructor(
         // 2. Draw the "live" part (the new stroke being created) on top.
         if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
             drawStroke(canvas, strokeInProgress!!)
+        }
+
+        selectionCircle?.let {
+            canvas.drawPath(it.third, selectionPaint)
         }
 
         canvas.restore()
@@ -569,6 +583,7 @@ class DrawingView @JvmOverloads constructor(
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
         twoFingerGestureOccured = false
         threeFingerGestureOccured = false
+        selectionCircle = null
 
         when (currentState) {
             State.NORMAL_DRAWING -> {
@@ -633,13 +648,58 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
+    private fun calculateCircle(p1: PointF, p2: PointF, p3: PointF): Triple<PointF, Float, Path>? {
+        val mid1 = PointF((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
+        val mid2 = PointF((p2.x + p3.x) / 2, (p2.y + p3.y) / 2)
+
+        val slope1 = if (p2.y - p1.y != 0f) -(p2.x - p1.x) / (p2.y - p1.y) else Float.MAX_VALUE
+        val slope2 = if (p3.y - p2.y != 0f) -(p3.x - p2.x) / (p3.y - p2.y) else Float.MAX_VALUE
+
+        if (slope1 == slope2) return null
+
+        val centerX = (mid2.y - mid1.y + slope1 * mid1.x - slope2 * mid2.x) / (slope1 - slope2)
+        val centerY = mid1.y + slope1 * (centerX - mid1.x)
+
+        val center = PointF(centerX, centerY)
+        val radius = distance(center, p1)
+        val path = Path().apply { addCircle(centerX, centerY, radius, Path.Direction.CW) }
+
+        return Triple(center, radius, path)
+    }
+
+    private fun isPointInCircle(point: PointF, circleCenter: PointF, circleRadius: Float): Boolean {
+        return distance(point, circleCenter) < circleRadius
+    }
+
     override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
-        val deltaMatrix = Matrix()
-        val mid = midpoint(event)
-        deltaMatrix.postTranslate(dx, dy)
-        deltaMatrix.postScale(scale, scale, mid.x, mid.y)
-        deltaMatrix.postRotate(rotate, mid.x, mid.y)
-        transformAllStrokes(deltaMatrix) // Canvas transformation
+        if (currentState == State.NORMAL_DRAWING) {
+            if (event.pointerCount >= 3) {
+                val p1 = PointF(event.getX(0), event.getY(0))
+                val p2 = PointF(event.getX(1), event.getY(1))
+                val p3 = PointF(event.getX(2), event.getY(2))
+
+                selectionCircle = calculateCircle(p1, p2, p3)
+                selectionCircle?.let { (center, radius, _) ->
+                    strokes.forEach { stroke ->
+                        var strokeInCircle = false
+                        stroke.forEachStroke { s ->
+                            if (s.points.any { isPointInCircle(it.point, center, radius) }) {
+                                strokeInCircle = true
+                            }
+                        }
+                        stroke.setHighlightedRecursively(strokeInCircle)
+                    }
+                }
+                redrawHistory()
+            }
+        } else {
+            val deltaMatrix = Matrix()
+            val mid = midpoint(event)
+            deltaMatrix.postTranslate(dx, dy)
+            deltaMatrix.postScale(scale, scale, mid.x, mid.y)
+            deltaMatrix.postRotate(rotate, mid.x, mid.y)
+            transformAllStrokes(deltaMatrix) // Canvas transformation
+        }
         return true
     }
 }
