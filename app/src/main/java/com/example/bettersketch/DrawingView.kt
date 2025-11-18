@@ -266,12 +266,12 @@ class DrawingView @JvmOverloads constructor(
 
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         val stroke = currentStroke ?: return false
-        if (stroke.unsmoothedPoints.isEmpty()) return false
+        if (stroke.points.isEmpty()) return false
 
-        // Find the index of the point on the unsmoothed stroke physically closest to the tap
+        // Find the index of the point on the smoothed stroke physically closest to the tap
         var closestDist = Float.MAX_VALUE
         var closestPointIndex = -1
-        stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
+        stroke.points.forEachIndexed { index, pathPoint ->
             val d = distance(pathPoint.point, tapPoint)
             if (d < closestDist) {
                 closestDist = d
