@@ -217,7 +217,7 @@ class DrawingView @JvmOverloads constructor(
     private fun applySmoothing(stroke: Stroke) {
         if (stroke.smoothness == 0) {
             stroke.points.clear()
-            stroke.points.addAll(stroke.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+            stroke.points.addAll(stroke.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
             return
         }
 
@@ -403,17 +403,17 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun drawStrokeWithEndpoints(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
-        if (points.isEmpty()) return
+    private fun drawStrokeWithEndpoints(canvas: Canvas, stroke: Stroke) {
+        if (stroke.points.isEmpty()) return
 
         if ((twoFingerGestureOccured && !threeFingerGestureOccured) || strokeImplicitlySelectedForTransform) {
-            drawPoints(canvas, points, paint)
+            drawPoints(canvas, stroke.points, stroke.paint)
             return
         }
 
-        val radius = paint.strokeWidth * 2f
-        val startPoint = points.first().point
-        val endPoint = points.last().point
+        val radius = stroke.paint.strokeWidth * 2f
+        val startPoint = stroke.points.first().point
+        val endPoint = stroke.points.last().point
 
         val endpointPaint = Paint().apply {
             style = Paint.Style.FILL
@@ -421,7 +421,7 @@ class DrawingView @JvmOverloads constructor(
         }
 
         if (threeFingerGestureOccured) {
-            val middlePoint = getPointAtRelativeDistance(currentStroke!!, 0.5f)?.point
+            val middlePoint = getPointAtRelativeDistance(stroke, 0.5f)?.point
             canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
             canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
             middlePoint?.let { canvas.drawCircle(it.x, it.y, radius, endpointPaint) }
@@ -430,14 +430,14 @@ class DrawingView @JvmOverloads constructor(
                 SelectedEnd.START -> canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
                 SelectedEnd.END -> canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
                 SelectedEnd.MIDDLE -> {
-                    val middlePoint = getPointAtRelativeDistance(currentStroke!!, middlePointRelativeDistance)?.point
+                    val middlePoint = getPointAtRelativeDistance(stroke, middlePointRelativeDistance)?.point
                     middlePoint?.let { canvas.drawCircle(it.x, it.y, radius, endpointPaint) }
                 }
                 else -> {}
             }
         }
 
-        drawPoints(canvas, points, paint)
+        drawPoints(canvas, stroke.points, stroke.paint)
     }
 
     fun setStrokeSmoothness(smoothness: Int) {
@@ -498,7 +498,7 @@ class DrawingView @JvmOverloads constructor(
 
         if (currentState == State.STROKE_EDITING) {
             currentStroke?.let {
-                drawStrokeWithEndpoints(c, it.points, it.paint)
+                drawStrokeWithEndpoints(c, it)
             }
         }
 
