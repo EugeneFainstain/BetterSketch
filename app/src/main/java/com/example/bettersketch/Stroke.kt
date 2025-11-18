@@ -9,12 +9,12 @@ data class PathPoint(var point: PointF, val distance: Float) // Changed 'val poi
 class Stroke(
     incomingPoints: List<PathPoint>,
     val paint: Paint,
-    val totalDistance: Float,
+    var totalDistance: Float, // Changed from val to var
     var smoothness: Int
 ) {
     val points: MutableList<PathPoint>
     // This is mutable ONLY so that global canvas transformations can be applied to it.
-    // It should not be structurally changed (add/remove points) after initialization.
+    // It should not be structurally changed (add/remove points)after initialization.
     val originalPoints: MutableList<PathPoint>
     var isModified: Boolean = false
 

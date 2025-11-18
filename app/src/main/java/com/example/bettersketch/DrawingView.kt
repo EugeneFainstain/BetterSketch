@@ -50,7 +50,7 @@ class DrawingView @JvmOverloads constructor(
     // Data
     private val strokes = mutableListOf<Stroke>()
     private var selectedStrokeIdx: Int = -1
-    private var middlePointRelativeDistance: Float = 0.5f
+    private var middlePointRelativeDistance = 0.5f
 
     // Transformation state
     private var twoFingerGestureOccured = false
@@ -213,20 +213,8 @@ class DrawingView @JvmOverloads constructor(
 
         // If points were added, we need to recalculate distances and total distance
         if (currentPoints.size != points.size) {
-            var totalDistance = 0f
-            val finalPoints = mutableListOf<PathPoint>()
-            if (currentPoints.isNotEmpty()) {
-                finalPoints.add(PathPoint(currentPoints.first().point, 0f))
-
-                for (i in 1 until currentPoints.size) {
-                    val p1 = finalPoints.last().point
-                    val p2 = currentPoints[i].point
-                    val dx = p2.x - p1.x
-                    val dy = p2.y - p1.y
-                    totalDistance += sqrt(dx * dx + dy * dy)
-                    finalPoints.add(PathPoint(p2, totalDistance))
-                }
-            }
+            val pointFs = currentPoints.map { it.point }
+            val (finalPoints, _) = calculatePathPointsWithDistances(pointFs)
             return finalPoints
         }
 
@@ -264,23 +252,11 @@ class DrawingView @JvmOverloads constructor(
         }
 
         // Recalculate distances for the final smoothed points
-        var totalDistance = 0f
-        if (smoothedPoints.isNotEmpty()) {
-            val finalPoints = mutableListOf(PathPoint(smoothedPoints.first().point, 0f))
-
-            for (i in 1 until smoothedPoints.size) {
-                val p1 = finalPoints.last().point
-                val p2 = smoothedPoints[i].point
-                val dx = p2.x - p1.x
-                val dy = p2.y - p1.y
-                totalDistance += sqrt(dx * dx + dy * dy)
-                finalPoints.add(PathPoint(p2, totalDistance))
-            }
-            stroke.points.clear()
-            stroke.points.addAll(finalPoints)
-        } else {
-            stroke.points.clear()
-        }
+        val pointFs = smoothedPoints.map { it.point }
+        val (finalPoints, totalDistance) = calculatePathPointsWithDistances(pointFs)
+        stroke.points.clear()
+        stroke.points.addAll(finalPoints)
+        stroke.totalDistance = totalDistance
     }
 
     private fun commitStrokeInProgress() {
@@ -300,6 +276,27 @@ class DrawingView @JvmOverloads constructor(
         val dx = p1.x - p2.x
         val dy = p1.y - p2.y
         return sqrt(dx * dx + dy * dy)
+    }
+
+    private fun calculatePathPointsWithDistances(points: List<PointF>): Pair<MutableList<PathPoint>, Float> {
+        if (points.isEmpty()) {
+            return Pair(mutableListOf(), 0f)
+        }
+
+        val pathPoints = mutableListOf<PathPoint>()
+        var totalDistance = 0f
+
+        pathPoints.add(PathPoint(points.first(), 0f))
+
+        for (i in 1 until points.size) {
+            val p1 = points[i - 1]
+            val p2 = points[i]
+            val dx = p2.x - p1.x
+            val dy = p2.y - p1.y
+            totalDistance += sqrt(dx * dx + dy * dy)
+            pathPoints.add(PathPoint(p2, totalDistance))
+        }
+        return Pair(pathPoints, totalDistance)
     }
 
     private fun selectStrokeAt(tapPoint: PointF): Boolean {
