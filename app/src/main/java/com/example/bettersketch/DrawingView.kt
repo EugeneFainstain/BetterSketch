@@ -214,49 +214,11 @@ class DrawingView @JvmOverloads constructor(
         return points
     }
 
-    private fun applySmoothing(stroke: Stroke) {
-        if (stroke.smoothness == 0) {
-            stroke.points.clear()
-            stroke.points.addAll(stroke.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
-            return
-        }
-
-        var smoothedPoints = stroke.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
-
-        repeat(stroke.smoothness) {
-            if (smoothedPoints.size < 3) return@repeat
-
-            val iterationResult = mutableListOf<PathPoint>()
-            iterationResult.add(smoothedPoints.first()) // Keep first point
-
-            for (i in 1 until smoothedPoints.size - 1) {
-                val prev = smoothedPoints[i - 1].point
-                val next = smoothedPoints[i + 1].point
-                val current = smoothedPoints[i]
-
-                val avgX = (prev.x + next.x) / 2f
-                val avgY = (prev.y + next.y) / 2f
-                
-                iterationResult.add(PathPoint(PointF(avgX, avgY), current.distance))
-            }
-
-            iterationResult.add(smoothedPoints.last()) // Keep last point
-            smoothedPoints = iterationResult
-        }
-
-        // Recalculate distances for the final smoothed points
-        val pointFs = smoothedPoints.map { it.point }
-        val (finalPoints, totalDistance) = Stroke.calculatePathPointsWithDistances(pointFs)
-        stroke.points.clear()
-        stroke.points.addAll(finalPoints)
-        stroke.totalDistance = totalDistance
-    }
-
     private fun commitStrokeInProgress() {
         strokeInProgress?.let {
             val processedPoints = preprocessStroke(it.points)
             val newStroke = Stroke(processedPoints, Paint(it.paint), it.totalDistance, it.smoothness)
-            applySmoothing(newStroke)
+            newStroke.applySmoothing()
             strokes.add(newStroke)
             strokeInProgress = null
             selectedStrokeIdx = -1
@@ -444,7 +406,7 @@ class DrawingView @JvmOverloads constructor(
         currentSmoothness = smoothness
         currentStroke?.let {
             it.smoothness = smoothness
-            applySmoothing(it)
+            it.applySmoothing()
             it.isModified = true
             redrawHistory()
         }
