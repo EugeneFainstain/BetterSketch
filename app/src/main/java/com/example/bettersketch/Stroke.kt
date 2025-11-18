@@ -7,7 +7,7 @@ import android.graphics.RectF
 data class PathPoint(val point: PointF, val distance: Float)
 
 class Stroke(
-    points: MutableList<PathPoint>,
+    incomingPoints: List<PathPoint>,
     val paint: Paint,
     val totalDistance: Float
 ) {
@@ -15,9 +15,9 @@ class Stroke(
     val originalPoints: List<PathPoint>
 
     init {
-        // Deep copy of the points to ensure the original data is preserved.
-        this.originalPoints = points.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }
-        this.points = points
+        // Create deep copies of the incoming points to ensure the Stroke owns its own data.
+        this.originalPoints = incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }
+        this.points = incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
     }
 
     /**
