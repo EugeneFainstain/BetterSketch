@@ -206,36 +206,10 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun preprocessStroke(points: MutableList<PathPoint>): MutableList<PathPoint> {
-        var currentPoints = points
-        while (currentPoints.size in 2..19) {
-            val newPoints = mutableListOf<PathPoint>()
-            newPoints.add(currentPoints.first())
-
-            for (i in 0 until currentPoints.size - 1) {
-                val p1 = currentPoints[i]
-                val p2 = currentPoints[i + 1]
-                val midPoint = PointF((p1.point.x + p2.point.x) / 2f, (p1.point.y + p2.point.y) / 2f)
-                newPoints.add(PathPoint(midPoint, 0f)) // placeholder distance
-                newPoints.add(p2)
-            }
-            currentPoints = newPoints
-        }
-
-        // If points were added, we need to recalculate distances and total distance
-        if (currentPoints.size != points.size) {
-            val pointFs = currentPoints.map { it.point }
-            val (finalPoints, _) = Stroke.calculatePathPointsWithDistances(pointFs)
-            return finalPoints
-        }
-
-        return points
-    }
-
     private fun commitStrokeInProgress() {
         strokeInProgress?.let { currentStrokeInProgress ->
             // Preprocess the unsmoothed points from the strokeInProgress
-            val preprocessedUnsmoothedPoints = preprocessStroke(currentStrokeInProgress.unsmoothedPoints)
+            val preprocessedUnsmoothedPoints = Stroke.preprocessStroke(currentStrokeInProgress.unsmoothedPoints)
 
             // Calculate total distance for the preprocessed unsmoothed points
             val (finalUnsmoothedPoints, totalDistanceForNewStroke) = Stroke.calculatePathPointsWithDistances(preprocessedUnsmoothedPoints.map { it.point })
