@@ -17,6 +17,8 @@ class Stroke(
     var totalDistance: Float = 0f
     var isModified: Boolean = false
     var originalStrokeWidth: Float = paint.strokeWidth // Store original stroke width
+    val childStrokes: MutableList<Stroke> = mutableListOf()
+    val isGroup: Boolean get() = childStrokes.isNotEmpty()
 
     // Secondary constructor for creating a stroke from existing points (like the original constructor)
     constructor(incomingPoints: List<PathPoint>, paint: Paint, totalDistance: Float, smoothness: Int) : this(paint, smoothness) {
@@ -81,18 +83,41 @@ class Stroke(
         this.totalDistance = newTotalDistance // Update totalDistance based on smoothed points
     }
 
-    /**
-     * Calculates the bounding box of the stroke.
-     * This is essential for finding the center point of the stroke, which is used as a pivot
-     * for scaling and rotation transformations.
-     */
+    fun forEachStroke(action: (Stroke) -> Unit) {
+        if (isGroup) {
+            childStrokes.forEach { it.forEachStroke(action) }
+        } else {
+            action(this)
+        }
+    }
+
     fun getBounds(): RectF {
-        if (points.isEmpty()) return RectF()
-        val bounds = RectF(points.first().point.x, points.first().point.y, points.first().point.x, points.first().point.y)
-        for (i in 1 until points.size) {
-            bounds.union(points[i].point.x, points[i].point.y)
+        val bounds = RectF()
+        forEachStroke { stroke ->
+            if (stroke.points.isNotEmpty()) {
+                val strokeBounds = RectF(stroke.points.first().point.x, stroke.points.first().point.y, stroke.points.first().point.x, stroke.points.first().point.y)
+                for (i in 1 until stroke.points.size) {
+                    strokeBounds.union(stroke.points[i].point.x, stroke.points[i].point.y)
+                }
+                bounds.union(strokeBounds)
+            }
         }
         return bounds
+    }
+
+    fun deepCopy(): Stroke {
+        val newPaint = Paint(this.paint)
+        val newStroke = Stroke(newPaint, this.smoothness)
+        newStroke.totalDistance = this.totalDistance
+        newStroke.isModified = this.isModified
+        newStroke.originalStrokeWidth = this.originalStrokeWidth
+        newStroke.points.addAll(this.points.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        newStroke.originalPoints.addAll(this.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        newStroke.unsmoothedPoints.addAll(this.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        this.childStrokes.forEach { child ->
+            newStroke.childStrokes.add(child.deepCopy())
+        }
+        return newStroke
     }
 
     companion object {

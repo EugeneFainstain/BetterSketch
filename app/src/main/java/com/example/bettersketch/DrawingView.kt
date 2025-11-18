@@ -94,20 +94,19 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun undoStrokeModifications() {
-        currentStroke?.let {
+        currentStroke?.forEachStroke {
             it.unsmoothedPoints.clear()
             it.unsmoothedPoints.addAll(it.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
-            // Recalculate distances for unsmoothedPoints after modification
             val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(it.unsmoothedPoints.map { p -> p.point })
             it.unsmoothedPoints.clear()
             it.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-            it.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
-            it.paint.strokeWidth = it.originalStrokeWidth // Restore original stroke width
-            it.applySmoothing() // Re-smooth from the restored unsmoothed points
+            it.totalDistance = newTotalDistance
+            it.paint.strokeWidth = it.originalStrokeWidth
+            it.applySmoothing()
             it.isModified = false
-            redrawHistory()
-            listener?.onStateChanged()
         }
+        redrawHistory()
+        listener?.onStateChanged()
     }
 
     fun exportBitmap(): Bitmap {
@@ -143,7 +142,7 @@ class DrawingView @JvmOverloads constructor(
         backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
 
         // 2. Draw the "live" part (the new stroke being created) on top.
-        if (currentState == State.NORMAL_DRAWING && strokeInProgress != null && strokeInProgress!!.points.isNotEmpty()) {
+        if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
             drawStroke(canvas, strokeInProgress!!)
         }
 
@@ -158,44 +157,43 @@ class DrawingView @JvmOverloads constructor(
 
     private fun transformStroke(stroke: Stroke, matrix: Matrix, isGlobalTransform: Boolean) {
         val scale = getScaleFromMatrix(matrix)
+        stroke.forEachStroke { s ->
+            if (isGlobalTransform) {
+                s.paint.strokeWidth *= scale
+                s.originalStrokeWidth *= scale
+                s.totalDistance *= scale
 
-        if (isGlobalTransform) {
-            // Optimized path for global canvas transformations
-            stroke.paint.strokeWidth *= scale
-            stroke.originalStrokeWidth *= scale
-            stroke.totalDistance *= scale
+                val transformPoint = { pathPoint: PathPoint ->
+                    val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                    matrix.mapPoints(point)
+                    pathPoint.point.set(point[0], point[1])
+                    pathPoint.distance *= scale
+                }
 
-            val transformPoint = { pathPoint: PathPoint ->
-                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                matrix.mapPoints(point)
-                pathPoint.point.set(point[0], point[1])
-                pathPoint.distance *= scale
+                s.points.forEach(transformPoint)
+                s.unsmoothedPoints.forEach(transformPoint)
+                s.originalPoints.forEach(transformPoint)
+
+            } else {
+                s.isModified = true
+                s.paint.strokeWidth *= scale
+
+                s.unsmoothedPoints.forEach { pathPoint ->
+                    val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                    matrix.mapPoints(point)
+                    pathPoint.point.set(point[0], point[1])
+                }
+                val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(s.unsmoothedPoints.map { it.point })
+                s.unsmoothedPoints.clear()
+                s.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+                s.totalDistance = newTotalDistance
+
+                s.applySmoothing()
             }
-
-            stroke.points.forEach(transformPoint)
-            stroke.unsmoothedPoints.forEach(transformPoint)
-            stroke.originalPoints.forEach(transformPoint)
-
-        } else {
-            // Path for individual stroke editing (non-global)
-            stroke.isModified = true
+        }
+        if (!isGlobalTransform) {
             listener?.onStateChanged()
-            stroke.paint.strokeWidth *= scale
-
-            // Transform unsmoothedPoints
-            stroke.unsmoothedPoints.forEach { pathPoint ->
-                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                matrix.mapPoints(point)
-                pathPoint.point.set(point[0], point[1])
-            }
-            // Recalculate distances for unsmoothedPoints after transformation
-            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { it.point })
-            stroke.unsmoothedPoints.clear()
-            stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-            stroke.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
-
-            stroke.applySmoothing() // Re-smooth points and update totalDistance based on the new unsmoothedPoints
-            redrawHistory() // Redraw after individual stroke transformation
+            redrawHistory()
         }
     }
 
@@ -230,16 +228,9 @@ class DrawingView @JvmOverloads constructor(
 
     private fun commitStrokeInProgress() {
         strokeInProgress?.let { currentStrokeInProgress ->
-            // Preprocess the unsmoothed points from the strokeInProgress
             val preprocessedUnsmoothedPoints = Stroke.preprocessStroke(currentStrokeInProgress.unsmoothedPoints)
-
-            // Calculate total distance for the preprocessed unsmoothed points
             val (finalUnsmoothedPoints, totalDistanceForNewStroke) = Stroke.calculatePathPointsWithDistances(preprocessedUnsmoothedPoints.map { it.point })
-
-            // Create the new Stroke using the preprocessed unsmoothed points
             val newStroke = Stroke(finalUnsmoothedPoints, Paint(currentStrokeInProgress.paint), totalDistanceForNewStroke, currentStrokeInProgress.smoothness)
-            // The constructor now calls applySmoothing internally, so no need for explicit call here.
-
             strokes.add(newStroke)
             strokeInProgress = null
             selectedStrokeIdx = -1
@@ -255,21 +246,23 @@ class DrawingView @JvmOverloads constructor(
 
     private fun selectStrokeAt(tapPoint: PointF): Boolean {
         var minDistance = Float.MAX_VALUE
-        var closestIndex = -1
+        var closestStrokeIndex = -1
 
         strokes.forEachIndexed { index, stroke ->
-            for (pathPoint in stroke.points) {
-                val d = distance(pathPoint.point, tapPoint)
-                if (d < minDistance) {
-                    minDistance = d
-                    closestIndex = index
+            stroke.forEachStroke { s ->
+                for (pathPoint in s.points) {
+                    val d = distance(pathPoint.point, tapPoint)
+                    if (d < minDistance) {
+                        minDistance = d
+                        closestStrokeIndex = index
+                    }
                 }
             }
         }
 
-        if (closestIndex != -1) {
-            selectedStrokeIdx = closestIndex
-            currentPaint = Paint(strokes[closestIndex].paint)
+        if (closestStrokeIndex != -1) {
+            selectedStrokeIdx = closestStrokeIndex
+            currentPaint = Paint(strokes[closestStrokeIndex].paint)
             return true
         }
         return false
@@ -277,9 +270,8 @@ class DrawingView @JvmOverloads constructor(
 
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         val stroke = currentStroke ?: return false
-        if (stroke.points.isEmpty()) return false
+        if (stroke.isGroup) return false // Don't allow endpoint selection for groups
 
-        // Find the index of the point on the smoothed stroke physically closest to the tap
         var closestDist = Float.MAX_VALUE
         var closestPointIndex = -1
         stroke.points.forEachIndexed { index, pathPoint ->
@@ -298,7 +290,6 @@ class DrawingView @JvmOverloads constructor(
         editingPointIndex = closestPointIndex
         val totalPoints = stroke.unsmoothedPoints.size
 
-        // Snap to endpoints if close enough (within first or last 5% of indices)
         if (editingPointIndex < totalPoints * 0.05f) {
             selectedEnd = SelectedEnd.START
             editingPointIndex = 0
@@ -307,7 +298,6 @@ class DrawingView @JvmOverloads constructor(
             editingPointIndex = totalPoints - 1
         } else {
             selectedEnd = SelectedEnd.MIDDLE
-            // Pre-calculate the weight curve for the drag
             val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.last().distance
             val middlePointRelativeDistance = stroke.unsmoothedPoints[editingPointIndex].distance / totalDistanceOfUnsmoothed
             editingPointInitialWeights = stroke.unsmoothedPoints.map {
@@ -336,30 +326,15 @@ class DrawingView @JvmOverloads constructor(
 
     fun duplicateCurrentStroke() {
         currentStroke?.let { originalStroke ->
-            // Create a deep copy of the unsmoothed points
-            val duplicatedUnsmoothedPoints = originalStroke.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
-
-            // Calculate offset: half the bounding box height upwards
+            val duplicatedStroke = originalStroke.deepCopy()
             val bounds = originalStroke.getBounds()
             val offsetY = -bounds.height() / 2f
-
-            // Apply offset to the duplicated unsmoothed points
-            duplicatedUnsmoothedPoints.forEach { it.point.offset(0f, offsetY) }
-
-            // Recalculate distances for the duplicated unsmoothed points after offset
-            val (finalDuplicatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(duplicatedUnsmoothedPoints.map { it.point })
-
-            // Create a new Stroke object with the duplicated and offset points
-            val duplicatedStroke = Stroke(
-                finalDuplicatedUnsmoothedPoints,
-                Paint(originalStroke.paint), // Deep copy of the paint
-                newTotalDistance,
-                originalStroke.smoothness
-            )
+            val matrix = Matrix().apply { postTranslate(0f, offsetY) }
+            transformStroke(duplicatedStroke, matrix, isGlobalTransform = true)
 
             strokes.add(duplicatedStroke)
-            selectedStrokeIdx = strokes.lastIndex // Select the new duplicated stroke
-            setState(State.CHOSEN_STROKE) // Enter chosen stroke mode for the new stroke
+            selectedStrokeIdx = strokes.lastIndex
+            setState(State.CHOSEN_STROKE)
             redrawHistory()
             listener?.onStateChanged()
         }
@@ -374,26 +349,23 @@ class DrawingView @JvmOverloads constructor(
         currentStroke?.let { stroke ->
             val weights = editingPointInitialWeights
             if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
-                // Middle point drag with pre-calculated weights
                 stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
                     pathPoint.point.offset(dx * weights[index], dy * weights[index])
                 }
             } else {
-                // Start/End point drag (calculate weights on the fly)
                 val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
                 if (totalDistanceOfUnsmoothed == 0f) return
 
                 stroke.unsmoothedPoints.forEach { pathPoint ->
                     val weight = if (selectedEnd == SelectedEnd.START) {
                         1.0f - (pathPoint.distance / totalDistanceOfUnsmoothed)
-                    } else { // END
+                    } else {
                         pathPoint.distance / totalDistanceOfUnsmoothed
                     }
                     pathPoint.point.offset(dx * weight, dy * weight)
                 }
             }
 
-            // Recalculate distances for the entire unsmoothed stroke
             val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { p -> p.point })
             stroke.unsmoothedPoints.clear()
             stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
@@ -405,6 +377,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun drawStrokeWithEndpoints(canvas: Canvas, stroke: Stroke) {
+        if (stroke.isGroup) return
         if (stroke.points.isEmpty()) return
 
         if (twoFingerGestureOccured || threeFingerGestureOccured) {
@@ -425,36 +398,36 @@ class DrawingView @JvmOverloads constructor(
 
     fun setStrokeSmoothness(smoothness: Int) {
         currentSmoothness = smoothness
-        currentStroke?.let {
+        currentStroke?.forEachStroke {
             it.smoothness = smoothness
             it.applySmoothing()
             it.isModified = true
-            redrawHistory()
         }
+        redrawHistory()
     }
 
     fun setColor(color: Int, applyToSelected: Boolean) {
         if (applyToSelected) {
-            currentStroke?.isModified = true
-        }
-        currentPaint.color = color
-        if (applyToSelected && selectedStrokeIdx != -1) {
-            currentStroke?.paint?.color = color
+            currentStroke?.forEachStroke {
+                it.isModified = true
+                it.paint.color = color
+            }
             redrawHistory()
         }
+        currentPaint.color = color
         listener?.onStateChanged()
     }
 
     fun setStrokeWidth(px: Float, applyToSelected: Boolean) {
         if (applyToSelected) {
-            currentStroke?.isModified = true
-        }
-        val w = max(1f, min(120f, px))
-        currentPaint.strokeWidth = w
-        if (applyToSelected && selectedStrokeIdx != -1) {
-            currentStroke?.paint?.strokeWidth = w
+            val w = max(1f, min(120f, px))
+            currentStroke?.forEachStroke {
+                it.isModified = true
+                it.paint.strokeWidth = w
+            }
             redrawHistory()
         }
+        currentPaint.strokeWidth = max(1f, min(120f, px))
         listener?.onStateChanged()
     }
 
@@ -472,10 +445,12 @@ class DrawingView @JvmOverloads constructor(
 
         for ((index, s) in strokes.withIndex()) {
             if (isEditing() && index == selectedStrokeIdx) {
-                haloPaint.strokeWidth = s.paint.strokeWidth + haloOffset
-                drawStroke(c, s, haloPaint)
+                s.forEachStroke {
+                    haloPaint.strokeWidth = it.paint.strokeWidth + haloOffset
+                    drawStroke(c, it, haloPaint)
+                }
             }
-            val paintToDraw = Paint(s.paint) // Create a copy to modify alpha
+            val paintToDraw = Paint(s.paint)
             if (selectedStrokeIdx != -1 && index != selectedStrokeIdx) {
                 paintToDraw.alpha = (paintToDraw.alpha * 0.25f).toInt()
             }
@@ -492,13 +467,16 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun drawStroke(canvas: Canvas?, stroke: Stroke, paint: Paint? = null) {
-        if (canvas == null || stroke.points.size < 2) return
-        val path = Path()
-        path.moveTo(stroke.points.first().point.x, stroke.points.first().point.y)
-        for (i in 1 until stroke.points.size) {
-            path.lineTo(stroke.points[i].point.x, stroke.points[i].point.y)
+        stroke.forEachStroke { s ->
+            if (s.points.size >= 2) {
+                val path = Path()
+                path.moveTo(s.points.first().point.x, s.points.first().point.y)
+                for (i in 1 until s.points.size) {
+                    path.lineTo(s.points[i].point.x, s.points[i].point.y)
+                }
+                canvas?.drawPath(path, paint ?: s.paint)
+            }
         }
-        canvas.drawPath(path, paint ?: stroke.paint)
     }
 
     private fun defaultPaint(_color: Int, _widthPx: Float) = Paint().apply {
@@ -526,7 +504,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onDoubleTapEnd(event: MotionEvent): Boolean {
-        onSingleTapEnd(event) // Do the exact thing as if it was a single tap end...
+        onSingleTapEnd(event)
         return true
     }
 
