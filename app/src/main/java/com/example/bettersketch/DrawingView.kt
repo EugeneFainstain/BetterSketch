@@ -82,8 +82,9 @@ class DrawingView @JvmOverloads constructor(
 
     fun undoStrokeModifications() {
         currentStroke?.let {
-            it.points.clear()
-            it.points.addAll(it.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
+            it.unsmoothedPoints.clear()
+            it.unsmoothedPoints.addAll(it.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
+            applySmoothing(it) // Re-apply smoothing to update 'points' and 'totalDistance'
             it.isModified = false
             redrawHistory()
             listener?.onStateChanged()
@@ -144,8 +145,8 @@ class DrawingView @JvmOverloads constructor(
         val scale = getScaleFromMatrix(matrix)
         stroke.paint.strokeWidth *= scale
 
-        // Always transform the live points
-        stroke.points.forEach { pathPoint ->
+        // Transform unsmoothed points
+        stroke.unsmoothedPoints.forEach { pathPoint ->
             val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
             matrix.mapPoints(point)
             pathPoint.point.set(point[0], point[1])
@@ -158,6 +159,7 @@ class DrawingView @JvmOverloads constructor(
                 pathPoint.point.set(point[0], point[1])
             }
         }
+        applySmoothing(stroke) // Re-apply smoothing after transformation
         redrawHistory()
     }
 
@@ -223,12 +225,15 @@ class DrawingView @JvmOverloads constructor(
 
     private fun applySmoothing(stroke: Stroke) {
         if (stroke.smoothness == 0) {
+            // If no smoothing, points are just the unsmoothed points
+            val (finalPoints, totalDistance) = calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { it.point })
             stroke.points.clear()
-            stroke.points.addAll(stroke.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+            stroke.points.addAll(finalPoints)
+            stroke.totalDistance = totalDistance
             return
         }
 
-        var smoothedPoints = stroke.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
+        var smoothedPoints = stroke.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
 
         repeat(stroke.smoothness) {
             if (smoothedPoints.size < 3) return@repeat
@@ -264,7 +269,7 @@ class DrawingView @JvmOverloads constructor(
             val processedPoints = preprocessStroke(strokeInProgressPoints)
             val totalDistance = if (processedPoints.isNotEmpty()) processedPoints.last().distance else 0f
             val newStroke = Stroke(processedPoints, Paint(currentPaint), totalDistance, currentSmoothness)
-            applySmoothing(newStroke)
+            applySmoothing(newStroke) // Apply smoothing to the new stroke
             strokes.add(newStroke)
             strokeInProgressPoints.clear()
             selectedStrokeIdx = -1
@@ -304,7 +309,7 @@ class DrawingView @JvmOverloads constructor(
         var closestIndex = -1
 
         strokes.forEachIndexed { index, stroke ->
-            for (pathPoint in stroke.points) {
+            for (pathPoint in stroke.points) { // Still use smoothed points for selection
                 val d = distance(pathPoint.point, tapPoint)
                 if (d < minDistance) {
                     minDistance = d
@@ -339,12 +344,12 @@ class DrawingView @JvmOverloads constructor(
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         if (selectedStrokeIdx == -1) return false
         val stroke = currentStroke ?: return false
-        if (stroke.points.isEmpty()) return false
+        if (stroke.unsmoothedPoints.isEmpty()) return false // Use unsmoothed points for endpoint selection
 
         // Find the point on the stroke physically closest to the tap
         var closestDist = Float.MAX_VALUE
         var closestPoint: PathPoint? = null
-        stroke.points.forEach { pathPoint ->
+        stroke.unsmoothedPoints.forEach { pathPoint -> // Use unsmoothed points for endpoint selection
             val d = distance(pathPoint.point, tapPoint)
             if (d < closestDist) {
                 closestDist = d
@@ -391,10 +396,11 @@ class DrawingView @JvmOverloads constructor(
         currentStroke?.let {
             val totalDistance = it.totalDistance
             if (totalDistance == 0f) return
-            for (pathPoint in it.points) {
+            for (pathPoint in it.unsmoothedPoints) { // Modify unsmoothed points
                 val weight = 1.0f - (pathPoint.distance / totalDistance)
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
+            applySmoothing(it) // Re-apply smoothing after modification
             redrawHistory()
         }
     }
@@ -404,10 +410,11 @@ class DrawingView @JvmOverloads constructor(
         currentStroke?.let {
             val totalDistance = it.totalDistance
             if (totalDistance == 0f) return
-            for (pathPoint in it.points) {
+            for (pathPoint in it.unsmoothedPoints) { // Modify unsmoothed points
                 val weight = pathPoint.distance / totalDistance
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
+            applySmoothing(it) // Re-apply smoothing after modification
             redrawHistory()
         }
     }
@@ -417,7 +424,7 @@ class DrawingView @JvmOverloads constructor(
         currentStroke?.let {
             val totalDistance = it.totalDistance
             if (totalDistance == 0f) return
-            for (pathPoint in it.points) {
+            for (pathPoint in it.unsmoothedPoints) { // Modify unsmoothed points
                 val relativeDistance = pathPoint.distance / totalDistance
 
                 val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
@@ -428,6 +435,7 @@ class DrawingView @JvmOverloads constructor(
                 val weight = sin(mappedDistance * PI / 2).toFloat()
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
+            applySmoothing(it) // Re-apply smoothing after modification
             redrawHistory()
         }
     }
