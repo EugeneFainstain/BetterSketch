@@ -81,8 +81,14 @@ class DrawingView @JvmOverloads constructor(
 
     fun undoStrokeModifications() {
         currentStroke?.let {
-            it.points.clear()
-            it.points.addAll(it.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
+            it.unsmoothedPoints.clear()
+            it.unsmoothedPoints.addAll(it.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
+            // Recalculate distances for unsmoothedPoints after modification
+            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(it.unsmoothedPoints.map { p -> p.point })
+            it.unsmoothedPoints.clear()
+            it.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+            it.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
+            it.applySmoothing() // Re-smooth from the restored unsmoothed points
             it.isModified = false
             redrawHistory()
             listener?.onStateChanged()
@@ -143,12 +149,18 @@ class DrawingView @JvmOverloads constructor(
         val scale = getScaleFromMatrix(matrix)
         stroke.paint.strokeWidth *= scale
 
-        // Always transform the live points
-        stroke.points.forEach { pathPoint ->
+        // Transform unsmoothedPoints
+        stroke.unsmoothedPoints.forEach { pathPoint ->
             val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
             matrix.mapPoints(point)
             pathPoint.point.set(point[0], point[1])
         }
+        // Recalculate distances for unsmoothedPoints after transformation
+        val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { it.point })
+        stroke.unsmoothedPoints.clear()
+        stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+        stroke.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
+
         // Only transform the original points if it's a global canvas operation
         if (isGlobalTransform) {
             stroke.originalPoints.forEach { pathPoint ->
@@ -156,7 +168,13 @@ class DrawingView @JvmOverloads constructor(
                 matrix.mapPoints(point)
                 pathPoint.point.set(point[0], point[1])
             }
+            // Recalculate distances for originalPoints after transformation
+            val (recalculatedOriginalPoints, _) = Stroke.calculatePathPointsWithDistances(stroke.originalPoints.map { it.point })
+            stroke.originalPoints.clear()
+            stroke.originalPoints.addAll(recalculatedOriginalPoints)
         }
+
+        stroke.applySmoothing() // Re-smooth points and update totalDistance based on the new unsmoothedPoints
         redrawHistory()
     }
 
@@ -215,10 +233,17 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun commitStrokeInProgress() {
-        strokeInProgress?.let {
-            val processedPoints = preprocessStroke(it.points)
-            val newStroke = Stroke(processedPoints, Paint(it.paint), it.totalDistance, it.smoothness)
-            newStroke.applySmoothing()
+        strokeInProgress?.let { currentStrokeInProgress ->
+            // Preprocess the unsmoothed points from the strokeInProgress
+            val preprocessedUnsmoothedPoints = preprocessStroke(currentStrokeInProgress.unsmoothedPoints)
+
+            // Calculate total distance for the preprocessed unsmoothed points
+            val (finalUnsmoothedPoints, totalDistanceForNewStroke) = Stroke.calculatePathPointsWithDistances(preprocessedUnsmoothedPoints.map { it.point })
+
+            // Create the new Stroke using the preprocessed unsmoothed points
+            val newStroke = Stroke(finalUnsmoothedPoints, Paint(currentStrokeInProgress.paint), totalDistanceForNewStroke, currentStrokeInProgress.smoothness)
+            // The constructor now calls applySmoothing internally, so no need for explicit call here.
+
             strokes.add(newStroke)
             strokeInProgress = null
             selectedStrokeIdx = -1
@@ -322,12 +347,21 @@ class DrawingView @JvmOverloads constructor(
     fun moveStartPoint(dx: Float, dy: Float) {
         currentStroke?.isModified = true
         currentStroke?.let {
-            val totalDistance = it.totalDistance
-            if (totalDistance == 0f) return
-            for (pathPoint in it.points) {
-                val weight = 1.0f - (pathPoint.distance / totalDistance)
+            // Operate on unsmoothedPoints
+            val totalDistanceOfUnsmoothed = it.unsmoothedPoints.lastOrNull()?.distance ?: 0f
+            if (totalDistanceOfUnsmoothed == 0f) return
+
+            for (pathPoint in it.unsmoothedPoints) {
+                val weight = 1.0f - (pathPoint.distance / totalDistanceOfUnsmoothed)
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
+            // Recalculate distances for unsmoothedPoints after modification
+            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(it.unsmoothedPoints.map { p -> p.point })
+            it.unsmoothedPoints.clear()
+            it.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+            it.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
+
+            it.applySmoothing() // Re-smooth points after modification
             redrawHistory()
         }
     }
@@ -335,12 +369,21 @@ class DrawingView @JvmOverloads constructor(
     fun moveEndPoint(dx: Float, dy: Float) {
         currentStroke?.isModified = true
         currentStroke?.let {
-            val totalDistance = it.totalDistance
-            if (totalDistance == 0f) return
-            for (pathPoint in it.points) {
-                val weight = pathPoint.distance / totalDistance
+            // Operate on unsmoothedPoints
+            val totalDistanceOfUnsmoothed = it.unsmoothedPoints.lastOrNull()?.distance ?: 0f
+            if (totalDistanceOfUnsmoothed == 0f) return
+
+            for (pathPoint in it.unsmoothedPoints) {
+                val weight = pathPoint.distance / totalDistanceOfUnsmoothed
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
+            // Recalculate distances for unsmoothedPoints after modification
+            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(it.unsmoothedPoints.map { p -> p.point })
+            it.unsmoothedPoints.clear()
+            it.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+            it.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
+
+            it.applySmoothing() // Re-smooth points after modification
             redrawHistory()
         }
     }
@@ -348,10 +391,12 @@ class DrawingView @JvmOverloads constructor(
     fun moveMiddlePoint(dx: Float, dy: Float) {
         currentStroke?.isModified = true
         currentStroke?.let {
-            val totalDistance = it.totalDistance
-            if (totalDistance == 0f) return
-            for (pathPoint in it.points) {
-                val relativeDistance = pathPoint.distance / totalDistance
+            // Operate on unsmoothedPoints
+            val totalDistanceOfUnsmoothed = it.unsmoothedPoints.lastOrNull()?.distance ?: 0f
+            if (totalDistanceOfUnsmoothed == 0f) return
+
+            for (pathPoint in it.unsmoothedPoints) {
+                val relativeDistance = pathPoint.distance / totalDistanceOfUnsmoothed
 
                 val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
                     relativeDistance / middlePointRelativeDistance
@@ -361,6 +406,13 @@ class DrawingView @JvmOverloads constructor(
                 val weight = sin(mappedDistance * PI / 2).toFloat()
                 pathPoint.point.offset(dx * weight, dy * weight)
             }
+            // Recalculate distances for unsmoothedPoints after modification
+            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(it.unsmoothedPoints.map { p -> p.point })
+            it.unsmoothedPoints.clear()
+            it.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+            it.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
+
+            it.applySmoothing() // Re-smooth points after modification
             redrawHistory()
         }
     }

@@ -11,40 +11,45 @@ class Stroke(
     val paint: Paint,
     var smoothness: Int
 ) {
-    val points: MutableList<PathPoint> = mutableListOf()
-    val originalPoints: MutableList<PathPoint> = mutableListOf()
+    val points: MutableList<PathPoint> = mutableListOf() // Smoothed points for drawing
+    val originalPoints: MutableList<PathPoint> = mutableListOf() // Original points for undo/reset
+    val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
     var totalDistance: Float = 0f
     var isModified: Boolean = false
 
     // Secondary constructor for creating a stroke from existing points (like the original constructor)
     constructor(incomingPoints: List<PathPoint>, paint: Paint, totalDistance: Float, smoothness: Int) : this(paint, smoothness) {
+        // incomingPoints are considered the initial unsmoothed points
         this.originalPoints.addAll(incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-        this.points.addAll(incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-        this.totalDistance = totalDistance
+        this.unsmoothedPoints.addAll(incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        this.totalDistance = totalDistance // This totalDistance is based on incomingPoints
+        applySmoothing() // Apply smoothing to generate 'points' from 'unsmoothedPoints'
     }
 
     fun addPoint(newPoint: PointF) {
-        val lastPoint = points.lastOrNull()?.point
-        val currentSegmentDistance = if (lastPoint != null) {
-            val dx = newPoint.x - lastPoint.x
-            val dy = newPoint.y - lastPoint.y
+        val lastUnsmoothedPoint = unsmoothedPoints.lastOrNull()?.point
+        val currentSegmentDistance = if (lastUnsmoothedPoint != null) {
+            val dx = newPoint.x - lastUnsmoothedPoint.x
+            val dy = newPoint.y - lastUnsmoothedPoint.y
             sqrt(dx * dx + dy * dy)
         } else 0f
 
         totalDistance += currentSegmentDistance
         val pathPoint = PathPoint(newPoint, totalDistance)
-        points.add(pathPoint)
+        unsmoothedPoints.add(pathPoint)
         originalPoints.add(PathPoint(PointF(newPoint.x, newPoint.y), totalDistance)) // Deep copy for originalPoints
+
+        applySmoothing() // Re-smooth every time a point is added
     }
 
     fun applySmoothing() {
         if (this.smoothness == 0) {
             this.points.clear()
-            this.points.addAll(this.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
+            this.points.addAll(this.unsmoothedPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
             return
         }
 
-        var smoothedPoints = this.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
+        var smoothedPoints = this.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
 
         repeat(this.smoothness) {
             if (smoothedPoints.size < 3) return@repeat
@@ -69,10 +74,10 @@ class Stroke(
 
         // Recalculate distances for the final smoothed points
         val pointFs = smoothedPoints.map { it.point }
-        val (finalPoints, totalDistance) = Stroke.calculatePathPointsWithDistances(pointFs)
+        val (finalPoints, newTotalDistance) = calculatePathPointsWithDistances(pointFs)
         this.points.clear()
         this.points.addAll(finalPoints)
-        this.totalDistance = totalDistance
+        this.totalDistance = newTotalDistance // Update totalDistance based on smoothed points
     }
 
     /**
