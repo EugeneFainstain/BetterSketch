@@ -655,6 +655,7 @@ class DrawingView @JvmOverloads constructor(
         var maxDist = 0f
         var pt1 = p1
         var pt2 = p2
+        var pt3 = p3
 
         for (i in 0..2) {
             for (j in i + 1..2) {
@@ -666,10 +667,11 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
         }
+        pt3 = points.first { it != pt1 && it != pt2 }
 
-        val diameter = maxDist
-        val radius = diameter / 2f
-        val center = PointF((pt1.x + pt2.x) / 2, (pt1.y + pt2.y) / 2)
+        val midPoint = PointF((pt1.x + pt2.x) / 2, (pt1.y + pt2.y) / 2)
+        val center = PointF((midPoint.x * 2/3) + (pt3.x * 1/3), (midPoint.y * 2/3) + (pt3.y * 1/3))
+        val radius = maxDist / 2f
         val path = Path().apply { addCircle(center.x, center.y, radius, Path.Direction.CW) }
         return Triple(center, radius, path)
     }
