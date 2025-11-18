@@ -88,6 +88,7 @@ class DrawingView @JvmOverloads constructor(
             it.unsmoothedPoints.clear()
             it.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             it.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
+            it.paint.strokeWidth = it.originalStrokeWidth // Restore original stroke width
             it.applySmoothing() // Re-smooth from the restored unsmoothed points
             it.isModified = false
             redrawHistory()
@@ -163,6 +164,7 @@ class DrawingView @JvmOverloads constructor(
 
         // Only transform the original points if it's a global canvas operation
         if (isGlobalTransform) {
+            stroke.originalStrokeWidth *= scale
             stroke.originalPoints.forEach { pathPoint ->
                 val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
                 matrix.mapPoints(point)

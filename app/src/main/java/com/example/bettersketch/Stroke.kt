@@ -16,6 +16,7 @@ class Stroke(
     val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
     var totalDistance: Float = 0f
     var isModified: Boolean = false
+    var originalStrokeWidth: Float = paint.strokeWidth // Store original stroke width
 
     // Secondary constructor for creating a stroke from existing points (like the original constructor)
     constructor(incomingPoints: List<PathPoint>, paint: Paint, totalDistance: Float, smoothness: Int) : this(paint, smoothness) {
