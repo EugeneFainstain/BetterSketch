@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var drawingView: DrawingView
     private lateinit var widthSlider: WidthSlider
     private lateinit var colorSlider: ColorSlider
+    private lateinit var smoothingSlider: SmoothingSlider
     private lateinit var btnExitEditing: Button
 
     private val colors = intArrayOf(
@@ -47,6 +48,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         widthSlider = findViewById(R.id.widthSlider)
         colorSlider = findViewById(R.id.colorSlider)
+        smoothingSlider = findViewById(R.id.smoothingSlider)
         btnExitEditing = findViewById(R.id.btnExitEditing)
         
         findViewById<View>(R.id.seekProgress).visibility = View.GONE
@@ -98,6 +100,18 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
                 val color = colors[colorIndex]
                 drawingView.setColor(color, applyToSelected = true)
                 widthSlider.color = color
+            }
+
+            override fun onValueEditEnd() {}
+        }
+
+        smoothingSlider.listener = object : MySlider.OnSliderValueChangedListener {
+            override fun onValueChanged(value: Float) {
+                // TODO: Implement smoothing logic
+            }
+
+            override fun onValueEdit(value: Float) {
+                // TODO: Implement smoothing logic
             }
 
             override fun onValueEditEnd() {}
