@@ -617,26 +617,33 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
+        when (currentState) {
+            State.NORMAL_DRAWING -> {
+                // Do nothing
+            }
+            State.CHOSEN_STROKE, State.STROKE_EDITING -> {
+                currentStroke?.let {
+                    val deltaMatrix = Matrix()
+                    val bounds = it.getBounds()
+                    val centerX = bounds.centerX()
+                    val centerY = bounds.centerY()
+                    deltaMatrix.postScale(scale, scale, centerX, centerY)
+                    deltaMatrix.postRotate(rotate, centerX, centerY)
+                    deltaMatrix.postTranslate(dx, dy)
+                    transformStroke(it, deltaMatrix, isGlobalTransform = false) // Stroke transformation
+                }
+            }
+        }
+        return true
+    }
+
+    override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
         val deltaMatrix = Matrix()
         val mid = midpoint(event)
         deltaMatrix.postTranslate(dx, dy)
         deltaMatrix.postScale(scale, scale, mid.x, mid.y)
         deltaMatrix.postRotate(rotate, mid.x, mid.y)
-        transformAllStrokes(deltaMatrix)
-        return true
-    }
-
-    override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
-        currentStroke?.let {
-            val deltaMatrix = Matrix()
-            val bounds = it.getBounds()
-            val centerX = bounds.centerX()
-            val centerY = bounds.centerY()
-            deltaMatrix.postScale(scale, scale, centerX, centerY)
-            deltaMatrix.postRotate(rotate, centerX, centerY)
-            deltaMatrix.postTranslate(dx, dy)
-            transformStroke(it, deltaMatrix, isGlobalTransform = false)
-        }
+        transformAllStrokes(deltaMatrix) // Canvas transformation
         return true
     }
 
