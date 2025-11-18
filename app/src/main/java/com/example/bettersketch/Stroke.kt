@@ -9,7 +9,8 @@ data class PathPoint(val point: PointF, val distance: Float)
 class Stroke(
     incomingPoints: List<PathPoint>,
     val paint: Paint,
-    val totalDistance: Float
+    val totalDistance: Float,
+    val smoothness: Int
 ) {
     val points: MutableList<PathPoint>
     val originalPoints: List<PathPoint>

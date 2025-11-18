@@ -45,6 +45,7 @@ class DrawingView @JvmOverloads constructor(
     private val strokeInProgressPoints = mutableListOf<PathPoint>()
     private var strokeInProgressDistance = 0f
     var currentPaint = defaultPaint(Color.BLACK, 12f)
+    var currentSmoothness: Int = 0
 
     // Data
     private val strokes = mutableListOf<Stroke>()
@@ -239,7 +240,7 @@ class DrawingView @JvmOverloads constructor(
         if (strokeInProgressPoints.isNotEmpty()) {
             val processedPoints = preprocessStroke(strokeInProgressPoints)
             val totalDistance = if (processedPoints.isNotEmpty()) processedPoints.last().distance else 0f
-            val newStroke = Stroke(processedPoints, Paint(currentPaint), totalDistance)
+            val newStroke = Stroke(processedPoints, Paint(currentPaint), totalDistance, currentSmoothness)
             strokes.add(newStroke)
             strokeInProgressPoints.clear()
             selectedStrokeIdx = -1
