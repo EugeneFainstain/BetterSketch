@@ -29,7 +29,7 @@ class SmoothingSlider @JvmOverloads constructor(
     override fun drawBackground(canvas: Canvas) {
         paint.color = color
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 4f
+        paint.strokeWidth = 8f
         paint.isAntiAlias = true
 
         path.reset()
@@ -37,6 +37,7 @@ class SmoothingSlider @JvmOverloads constructor(
         val w = width.toFloat()
         val h = height.toFloat()
         val halfHeight = h / 2f
+        val amplitude = halfHeight * 0.9f
 
         path.moveTo(0f, halfHeight)
 
@@ -45,7 +46,7 @@ class SmoothingSlider @JvmOverloads constructor(
             // Calculate the angle for the sine wave, mapping x from [0, width] to [0, 2*PI]
             val angle = (xFloat / w) * (2 * PI)
             // Calculate the y-coordinate, ensuring all math is done with Floats after the sin() call
-            val y = halfHeight + (sin(angle).toFloat() * halfHeight)
+            val y = halfHeight + (sin(angle).toFloat() * amplitude)
             path.lineTo(xFloat, y)
         }
         canvas.drawPath(path, paint)

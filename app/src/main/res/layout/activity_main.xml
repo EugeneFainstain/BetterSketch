@@ -117,7 +117,7 @@
     <com.example.bettersketch.SmoothingSlider
         android:id="@+id/smoothingSlider"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
         android:padding="16dp"/>
 
 </LinearLayout>
