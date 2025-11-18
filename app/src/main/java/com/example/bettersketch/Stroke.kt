@@ -6,6 +6,7 @@ import android.graphics.RectF
 import kotlin.math.sqrt
 import kotlin.math.PI
 import kotlin.math.sin
+import kotlin.math.abs
 
 data class PathPoint(var point: PointF, val distance: Float)
 
@@ -82,6 +83,55 @@ class Stroke(
         // Use the new updatePointsFromPointFs method
         val pointFs = smoothedPoints.map { it.point }
         updatePointsFromPointFs(pointFs)
+    }
+
+    fun getPointAtRelativeDistance(relativeDist: Float): PathPoint? {
+        if (points.isEmpty()) return null
+        val targetDist = totalDistance * relativeDist
+        var closestPoint = points.first()
+        var smallestDist = Float.MAX_VALUE
+        for (p in points) {
+            val dist = abs(p.distance - targetDist)
+            if (dist < smallestDist) {
+                smallestDist = dist
+                closestPoint = p
+            }
+        }
+        return closestPoint
+    }
+
+    fun moveStartPoint(dx: Float, dy: Float) {
+        if (totalDistance == 0f) return
+        for (pathPoint in points) {
+            val weight = 1.0f - (pathPoint.distance / totalDistance)
+            pathPoint.point.offset(dx * weight, dy * weight)
+        }
+        isModified = true
+    }
+
+    fun moveEndPoint(dx: Float, dy: Float) {
+        if (totalDistance == 0f) return
+        for (pathPoint in points) {
+            val weight = pathPoint.distance / totalDistance
+            pathPoint.point.offset(dx * weight, dy * weight)
+        }
+        isModified = true
+    }
+
+    fun moveMiddlePoint(dx: Float, dy: Float, middlePointRelativeDistance: Float) {
+        if (totalDistance == 0f) return
+        for (pathPoint in points) {
+            val relativeDistance = pathPoint.distance / totalDistance
+
+            val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
+                relativeDistance / middlePointRelativeDistance
+            } else {
+                1 - ((relativeDistance - middlePointRelativeDistance) / (1 - middlePointRelativeDistance))
+            }
+            val weight = sin(mappedDistance * PI / 2).toFloat()
+            pathPoint.point.offset(dx * weight, dy * weight)
+        }
+        isModified = true
     }
 
     // Moved from DrawingView.kt and made private

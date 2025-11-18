@@ -9,8 +9,6 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
-import kotlin.math.PI
-import kotlin.math.sin
 
 interface DrawingViewListener {
     fun onStateChanged()
@@ -262,21 +260,6 @@ class DrawingView @JvmOverloads constructor(
         return false
     }
 
-    private fun getPointAtRelativeDistance(stroke: Stroke, relativeDist: Float): PathPoint? {
-        if (stroke.points.isEmpty()) return null
-        val targetDist = stroke.totalDistance * relativeDist
-        var closestPoint = stroke.points.first()
-        var smallestDist = Float.MAX_VALUE
-        for (p in stroke.points) {
-            val dist = abs(p.distance - targetDist)
-            if (dist < smallestDist) {
-                smallestDist = dist
-                closestPoint = p
-            }
-        }
-        return closestPoint
-    }
-
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         if (selectedStrokeIdx == -1) return false
         val stroke = currentStroke ?: return false
@@ -327,52 +310,6 @@ class DrawingView @JvmOverloads constructor(
         return strokes.map { it.paint.color }.toIntArray()
     }
 
-    fun moveStartPoint(dx: Float, dy: Float) {
-        currentStroke?.isModified = true
-        currentStroke?.let {
-            val totalDistance = it.totalDistance
-            if (totalDistance == 0f) return
-            for (pathPoint in it.points) {
-                val weight = 1.0f - (pathPoint.distance / totalDistance)
-                pathPoint.point.offset(dx * weight, dy * weight)
-            }
-            redrawHistory()
-        }
-    }
-
-    fun moveEndPoint(dx: Float, dy: Float) {
-        currentStroke?.isModified = true
-        currentStroke?.let {
-            val totalDistance = it.totalDistance
-            if (totalDistance == 0f) return
-            for (pathPoint in it.points) {
-                val weight = pathPoint.distance / totalDistance
-                pathPoint.point.offset(dx * weight, dy * weight)
-            }
-            redrawHistory()
-        }
-    }
-
-    fun moveMiddlePoint(dx: Float, dy: Float) {
-        currentStroke?.isModified = true
-        currentStroke?.let {
-            val totalDistance = it.totalDistance
-            if (totalDistance == 0f) return
-            for (pathPoint in it.points) {
-                val relativeDistance = pathPoint.distance / totalDistance
-
-                val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
-                    relativeDistance / middlePointRelativeDistance
-                } else {
-                    1 - ((relativeDistance - middlePointRelativeDistance) / (1 - middlePointRelativeDistance))
-                }
-                val weight = sin(mappedDistance * PI / 2).toFloat()
-                pathPoint.point.offset(dx * weight, dy * weight)
-            }
-            redrawHistory()
-        }
-    }
-
     private fun drawStrokeWithEndpoints(canvas: Canvas, points: List<PathPoint>, paint: Paint) {
         if (points.isEmpty()) return
 
@@ -391,7 +328,7 @@ class DrawingView @JvmOverloads constructor(
         }
 
         if (threeFingerGestureOccured) {
-            val middlePoint = getPointAtRelativeDistance(currentStroke!!, 0.5f)?.point
+            val middlePoint = currentStroke?.getPointAtRelativeDistance(0.5f)?.point
             canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
             canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
             middlePoint?.let { canvas.drawCircle(it.x, it.y, radius, endpointPaint) }
@@ -400,7 +337,7 @@ class DrawingView @JvmOverloads constructor(
                 SelectedEnd.START -> canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
                 SelectedEnd.END -> canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
                 SelectedEnd.MIDDLE -> {
-                    val middlePoint = getPointAtRelativeDistance(currentStroke!!, middlePointRelativeDistance)?.point
+                    val middlePoint = currentStroke?.getPointAtRelativeDistance(middlePointRelativeDistance)?.point
                     middlePoint?.let { canvas.drawCircle(it.x, it.y, radius, endpointPaint) }
                 }
                 else -> {}
@@ -606,11 +543,16 @@ class DrawingView @JvmOverloads constructor(
         when (currentState) {
             State.NORMAL_DRAWING -> touchMove(event.x, event.y)
             State.STROKE_EDITING -> {
-                when (selectedEnd) {
-                    SelectedEnd.START -> moveStartPoint(dx, dy)
-                    SelectedEnd.END -> moveEndPoint(dx, dy)
-                    SelectedEnd.MIDDLE -> moveMiddlePoint(dx, dy)
-                    else -> {}
+                currentStroke?.let {
+                    when (selectedEnd) {
+                        SelectedEnd.START -> it.moveStartPoint(dx, dy)
+                        SelectedEnd.END -> it.moveEndPoint(dx, dy)
+                        SelectedEnd.MIDDLE -> it.moveMiddlePoint(dx, dy, middlePointRelativeDistance)
+                        else -> {}
+                    }
+                    it.isModified = true
+                    listener?.onStateChanged()
+                    redrawHistory()
                 }
             }
             else -> {}
