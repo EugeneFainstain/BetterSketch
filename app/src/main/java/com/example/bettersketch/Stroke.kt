@@ -5,24 +5,36 @@ import android.graphics.PointF
 import android.graphics.RectF
 import kotlin.math.sqrt
 
-data class PathPoint(var point: PointF, val distance: Float) // Changed 'val point' to 'var point'
+data class PathPoint(var point: PointF, val distance: Float)
 
 class Stroke(
-    incomingPoints: List<PathPoint>,
     val paint: Paint,
-    var totalDistance: Float, // Changed from val to var
     var smoothness: Int
 ) {
-    val points: MutableList<PathPoint>
-    // This is mutable ONLY so that global canvas transformations can be applied to it.
-    // It should not be structurally changed (add/remove points)after initialization.
-    val originalPoints: MutableList<PathPoint>
+    val points: MutableList<PathPoint> = mutableListOf()
+    val originalPoints: MutableList<PathPoint> = mutableListOf()
+    var totalDistance: Float = 0f
     var isModified: Boolean = false
 
-    init {
-        // Create deep copies of the incoming points to ensure the Stroke owns its own data.
-        this.originalPoints = incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
-        this.points = incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
+    // Secondary constructor for creating a stroke from existing points (like the original constructor)
+    constructor(incomingPoints: List<PathPoint>, paint: Paint, totalDistance: Float, smoothness: Int) : this(paint, smoothness) {
+        this.originalPoints.addAll(incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        this.points.addAll(incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        this.totalDistance = totalDistance
+    }
+
+    fun addPoint(newPoint: PointF) {
+        val lastPoint = points.lastOrNull()?.point
+        val currentSegmentDistance = if (lastPoint != null) {
+            val dx = newPoint.x - lastPoint.x
+            val dy = newPoint.y - lastPoint.y
+            sqrt(dx * dx + dy * dy)
+        } else 0f
+
+        totalDistance += currentSegmentDistance
+        val pathPoint = PathPoint(newPoint, totalDistance)
+        points.add(pathPoint)
+        originalPoints.add(PathPoint(PointF(newPoint.x, newPoint.y), totalDistance)) // Deep copy for originalPoints
     }
 
     /**

@@ -42,8 +42,7 @@ class DrawingView @JvmOverloads constructor(
     private var backingCanvas: Canvas? = null
 
     // Stroke in progress
-    private val strokeInProgressPoints = mutableListOf<PathPoint>()
-    private var strokeInProgressDistance = 0f
+    private var strokeInProgress: Stroke? = null
     var currentPaint = defaultPaint(Color.BLACK, 12f)
     var currentSmoothness: Int = 0
 
@@ -123,8 +122,8 @@ class DrawingView @JvmOverloads constructor(
         backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
 
         // 2. Draw the "live" part (the new stroke being created) on top.
-        if (currentState == State.NORMAL_DRAWING && strokeInProgressPoints.isNotEmpty()) {
-            drawPoints(canvas, strokeInProgressPoints, currentPaint)
+        if (currentState == State.NORMAL_DRAWING && strokeInProgress != null && strokeInProgress!!.points.isNotEmpty()) {
+            drawPoints(canvas, strokeInProgress!!.points, strokeInProgress!!.paint)
         }
 
         canvas.restore()
@@ -174,23 +173,17 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun touchStart(x: Float, y: Float) {
-        strokeInProgressPoints.clear()
-        strokeInProgressDistance = 0f
-        strokeInProgressPoints.add(PathPoint(PointF(x, y), 0f))
+        strokeInProgress = Stroke(Paint(currentPaint), currentSmoothness)
+        strokeInProgress?.addPoint(PointF(x, y))
     }
 
     private fun touchMove(x: Float, y: Float) {
-        if (strokeInProgressPoints.isEmpty()) return
-        val lastPoint = strokeInProgressPoints.last().point
-        val dx = x - lastPoint.x
-        val dy = y - lastPoint.y
-        strokeInProgressDistance += sqrt(dx * dx + dy * dy)
-        strokeInProgressPoints.add(PathPoint(PointF(x, y), strokeInProgressDistance))
+        strokeInProgress?.addPoint(PointF(x, y))
         invalidate() // Redraw the live stroke
     }
 
     private fun touchUp() {
-        if (strokeInProgressPoints.isNotEmpty()) {
+        strokeInProgress?.let {
             commitStrokeInProgress()
         }
     }
@@ -260,13 +253,12 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun commitStrokeInProgress() {
-        if (strokeInProgressPoints.isNotEmpty()) {
-            val processedPoints = preprocessStroke(strokeInProgressPoints)
-            val totalDistance = if (processedPoints.isNotEmpty()) processedPoints.last().distance else 0f
-            val newStroke = Stroke(processedPoints, Paint(currentPaint), totalDistance, currentSmoothness)
+        strokeInProgress?.let {
+            val processedPoints = preprocessStroke(it.points)
+            val newStroke = Stroke(processedPoints, Paint(it.paint), it.totalDistance, it.smoothness)
             applySmoothing(newStroke)
             strokes.add(newStroke)
-            strokeInProgressPoints.clear()
+            strokeInProgress = null
             selectedStrokeIdx = -1
             setState(State.NORMAL_DRAWING)
         }
@@ -578,11 +570,11 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSecondFingerDown(event: MotionEvent): Boolean {
-        if (strokeInProgressPoints.isNotEmpty()) {
-            if (strokeInProgressPoints.size > 5) {
+        if (strokeInProgress != null && strokeInProgress!!.points.isNotEmpty()) {
+            if (strokeInProgress!!.points.size > 5) {
                 commitStrokeInProgress()
             } else {
-                strokeInProgressPoints.clear()
+                strokeInProgress = null
             }
         }
         twoFingerGestureOccured = true
@@ -591,11 +583,11 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onThirdFingerDown(event: MotionEvent): Boolean {
-        if (strokeInProgressPoints.isNotEmpty()) {
-            if (strokeInProgressPoints.size > 5) {
+        if (strokeInProgress != null && strokeInProgress!!.points.isNotEmpty()) {
+            if (strokeInProgress!!.points.size > 5) {
                 commitStrokeInProgress()
             } else {
-                strokeInProgressPoints.clear()
+                strokeInProgress = null
             }
         }
         threeFingerGestureOccured = true
@@ -624,7 +616,7 @@ class DrawingView @JvmOverloads constructor(
         } else {
             when (currentState) {
                 State.NORMAL_DRAWING -> {
-                    if (strokeInProgressPoints.isNotEmpty()) {
+                    strokeInProgress?.let {
                         touchUp()
                     }
                 }
