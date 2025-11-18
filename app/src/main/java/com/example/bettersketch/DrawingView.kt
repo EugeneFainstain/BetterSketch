@@ -142,11 +142,20 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    private fun transformStroke(stroke: Stroke, matrix: Matrix) {
-        isStrokeModified = true
+    private fun transformStroke(stroke: Stroke, matrix: Matrix, isGlobalTransform: Boolean = false) {
+        if (!isGlobalTransform) {
+            isStrokeModified = true
+        }
         val scale = getScaleFromMatrix(matrix)
         stroke.paint.strokeWidth *= scale
+
+        // Transform both the live and original points
         stroke.points.forEach { pathPoint ->
+            val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+            matrix.mapPoints(point)
+            pathPoint.point.set(point[0], point[1])
+        }
+        stroke.originalPoints.forEach { pathPoint ->
             val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
             matrix.mapPoints(point)
             pathPoint.point.set(point[0], point[1])
@@ -155,9 +164,8 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun transformAllStrokes(matrix: Matrix) {
-        isStrokeModified = true
         strokes.forEach { stroke ->
-            transformStroke(stroke, matrix)
+            transformStroke(stroke, matrix, isGlobalTransform = true)
         }
     }
 
@@ -598,7 +606,7 @@ class DrawingView @JvmOverloads constructor(
             deltaMatrix.postScale(scale, scale, centerX, centerY)
             deltaMatrix.postRotate(rotate, centerX, centerY)
             deltaMatrix.postTranslate(dx, dy)
-            transformStroke(it, deltaMatrix)
+            transformStroke(it, deltaMatrix, isGlobalTransform = false)
         }
         return true
     }
