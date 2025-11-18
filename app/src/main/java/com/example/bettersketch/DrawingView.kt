@@ -3,6 +3,7 @@ package com.example.bettersketch
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import kotlin.math.*
@@ -57,9 +58,20 @@ class DrawingView @JvmOverloads constructor(
     private var threeFingerGestureOccured = false
 
     private val customGestureDetector: CustomGestureDetector
+    private val haloPaint: Paint
+    private val haloOffset: Float
 
     init {
         customGestureDetector = CustomGestureDetector(context, this)
+        haloOffset = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 16f, context.resources.displayMetrics)
+        haloPaint = Paint().apply {
+            isAntiAlias = true
+            isDither = true
+            style = Paint.Style.STROKE
+            strokeJoin = Paint.Join.ROUND
+            strokeCap = Paint.Cap.ROUND
+            color = Color.LTGRAY
+        }
     }
 
     // Public properties
@@ -396,7 +408,6 @@ class DrawingView @JvmOverloads constructor(
         if (stroke.points.isEmpty()) return
 
         if (twoFingerGestureOccured || threeFingerGestureOccured) {
-            drawStroke(canvas, stroke)
             return
         }
 
@@ -410,8 +421,6 @@ class DrawingView @JvmOverloads constructor(
             val pointToHighlight = stroke.points[editingPointIndex].point
             canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointPaint)
         }
-
-        drawStroke(canvas, stroke)
     }
 
     fun setStrokeSmoothness(smoothness: Int) {
@@ -462,6 +471,10 @@ class DrawingView @JvmOverloads constructor(
         }
 
         for ((index, s) in strokes.withIndex()) {
+            if (isEditing() && index == selectedStrokeIdx) {
+                haloPaint.strokeWidth = s.paint.strokeWidth + haloOffset
+                drawStroke(c, s, haloPaint)
+            }
             val paintToDraw = Paint(s.paint) // Create a copy to modify alpha
             if (selectedStrokeIdx != -1 && index != selectedStrokeIdx) {
                 paintToDraw.alpha = (paintToDraw.alpha * 0.25f).toInt()
