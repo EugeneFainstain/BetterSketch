@@ -267,6 +267,9 @@ class DrawingView @JvmOverloads constructor(
         var minDistance = Float.MAX_VALUE
         var closestStrokeIndex = -1
 
+        // Clear all current highlights before selecting a new stroke
+        strokes.forEach { it.setHighlightedRecursively(false) }
+
         strokes.forEachIndexed { index, stroke ->
             stroke.forEachStroke { s ->
                 for (pathPoint in s.points) {
@@ -280,7 +283,6 @@ class DrawingView @JvmOverloads constructor(
         }
 
         if (closestStrokeIndex != -1) {
-            setStrokeHighlighted(currentStroke, false)
             selectedStrokeIdx = closestStrokeIndex
             setStrokeHighlighted(currentStroke, true)
             currentPaint = Paint(strokes[closestStrokeIndex].paint)
@@ -648,22 +650,27 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    private fun calculateCircle(p1: PointF, p2: PointF, p3: PointF): Triple<PointF, Float, Path>? {
-        val mid1 = PointF((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
-        val mid2 = PointF((p2.x + p3.x) / 2, (p2.y + p3.y) / 2)
+    private fun calculateCircle(p1: PointF, p2: PointF, p3: PointF): Triple<PointF, Float, Path> {
+        val points = listOf(p1, p2, p3)
+        var maxDist = 0f
+        var pt1 = p1
+        var pt2 = p2
 
-        val slope1 = if (p2.y - p1.y != 0f) -(p2.x - p1.x) / (p2.y - p1.y) else Float.MAX_VALUE
-        val slope2 = if (p3.y - p2.y != 0f) -(p3.x - p2.x) / (p3.y - p2.y) else Float.MAX_VALUE
+        for (i in 0..2) {
+            for (j in i + 1..2) {
+                val d = distance(points[i], points[j])
+                if (d > maxDist) {
+                    maxDist = d
+                    pt1 = points[i]
+                    pt2 = points[j]
+                }
+            }
+        }
 
-        if (slope1 == slope2) return null
-
-        val centerX = (mid2.y - mid1.y + slope1 * mid1.x - slope2 * mid2.x) / (slope1 - slope2)
-        val centerY = mid1.y + slope1 * (centerX - mid1.x)
-
-        val center = PointF(centerX, centerY)
-        val radius = distance(center, p1)
-        val path = Path().apply { addCircle(centerX, centerY, radius, Path.Direction.CW) }
-
+        val diameter = maxDist
+        val radius = diameter / 2f
+        val center = PointF((pt1.x + pt2.x) / 2, (pt1.y + pt2.y) / 2)
+        val path = Path().apply { addCircle(center.x, center.y, radius, Path.Direction.CW) }
         return Triple(center, radius, path)
     }
 
