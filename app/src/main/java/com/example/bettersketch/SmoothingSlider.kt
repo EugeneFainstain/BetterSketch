@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.util.AttributeSet
 import kotlin.math.PI
+import kotlin.math.pow
 import kotlin.math.sin
 
 class SmoothingSlider @JvmOverloads constructor(
@@ -43,9 +44,13 @@ class SmoothingSlider @JvmOverloads constructor(
 
         for (x in 0..width) {
             val xFloat = x.toFloat()
-            // Calculate the angle for the sine wave, mapping x from [0, width] to [0, 2*PI]
-            val angle = (xFloat / w) * (2 * PI)
-            // Calculate the y-coordinate, ensuring all math is done with Floats after the sin() call
+            // Normalize x to [0, 1]
+            val normX = xFloat / w
+            // Apply pow(0.1) to change the frequency.
+            val phase = normX.pow(0.1f)
+            // Calculate the angle for the sine wave, mapping the phase from [0, 1] to [0, 20 * 2*PI]
+            val angle = phase * (20 * 2 * PI)
+            // Calculate the y-coordinate
             val y = halfHeight + (sin(angle).toFloat() * amplitude)
             path.lineTo(xFloat, y)
         }
