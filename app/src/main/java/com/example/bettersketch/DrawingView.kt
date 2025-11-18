@@ -671,7 +671,12 @@ class DrawingView @JvmOverloads constructor(
     override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
         when (currentState) {
             State.NORMAL_DRAWING -> {
-                // Do nothing
+                val deltaMatrix = Matrix()
+                val mid = midpoint(event)
+                deltaMatrix.postTranslate(dx, dy)
+                deltaMatrix.postScale(scale, scale, mid.x, mid.y)
+                deltaMatrix.postRotate(rotate, mid.x, mid.y)
+                transformAllStrokes(deltaMatrix) // Canvas transformation
             }
             State.CHOSEN_STROKE, State.STROKE_EDITING -> {
                 currentStroke?.let {
