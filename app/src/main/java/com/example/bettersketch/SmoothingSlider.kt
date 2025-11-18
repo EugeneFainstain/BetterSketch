@@ -6,6 +6,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.util.AttributeSet
+import kotlin.math.PI
+import kotlin.math.sin
 
 class SmoothingSlider @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -26,19 +28,25 @@ class SmoothingSlider @JvmOverloads constructor(
 
     override fun drawBackground(canvas: Canvas) {
         paint.color = color
-        paint.style = Paint.Style.FILL
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 4f
+        paint.isAntiAlias = true
 
         path.reset()
-        if (isVertical) {
-            path.moveTo(width / 2f, 0f)
-            path.lineTo(0f, height.toFloat())
-            path.lineTo(width.toFloat(), height.toFloat())
-            path.close()
-        } else {
-            path.moveTo(0f, height / 2f)
-            path.lineTo(width.toFloat(), 0f)
-            path.lineTo(width.toFloat(), height.toFloat())
-            path.close()
+
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val halfHeight = h / 2f
+
+        path.moveTo(0f, halfHeight)
+
+        for (x in 0..width) {
+            val xFloat = x.toFloat()
+            // Calculate the angle for the sine wave, mapping x from [0, width] to [0, 2*PI]
+            val angle = (xFloat / w) * (2 * PI)
+            // Calculate the y-coordinate, ensuring all math is done with Floats after the sin() call
+            val y = halfHeight + (sin(angle).toFloat() * halfHeight)
+            path.lineTo(xFloat, y)
         }
         canvas.drawPath(path, paint)
     }
