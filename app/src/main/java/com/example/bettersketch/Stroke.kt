@@ -14,6 +14,7 @@ class Stroke(
 ) {
     val points: MutableList<PathPoint>
     val originalPoints: List<PathPoint>
+    var isModified: Boolean = false
 
     init {
         // Create deep copies of the incoming points to ensure the Stroke owns its own data.
