@@ -123,7 +123,7 @@ class DrawingView @JvmOverloads constructor(
 
         // 2. Draw the "live" part (the new stroke being created) on top.
         if (currentState == State.NORMAL_DRAWING && strokeInProgress != null && strokeInProgress!!.points.isNotEmpty()) {
-            drawPoints(canvas, strokeInProgress!!.points, strokeInProgress!!.paint)
+            drawStroke(canvas, strokeInProgress!!)
         }
 
         canvas.restore()
@@ -407,7 +407,7 @@ class DrawingView @JvmOverloads constructor(
         if (stroke.points.isEmpty()) return
 
         if ((twoFingerGestureOccured && !threeFingerGestureOccured) || strokeImplicitlySelectedForTransform) {
-            drawPoints(canvas, stroke.points, stroke.paint)
+            drawStroke(canvas, stroke)
             return
         }
 
@@ -437,7 +437,7 @@ class DrawingView @JvmOverloads constructor(
             }
         }
 
-        drawPoints(canvas, stroke.points, stroke.paint)
+        drawStroke(canvas, stroke)
     }
 
     fun setStrokeSmoothness(smoothness: Int) {
@@ -487,13 +487,12 @@ class DrawingView @JvmOverloads constructor(
             c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
         }
 
-        val tempPaint = Paint()
         for ((index, s) in strokes.withIndex()) {
-            tempPaint.set(s.paint)
+            val paintToDraw = Paint(s.paint) // Create a copy to modify alpha
             if (selectedStrokeIdx != -1 && index != selectedStrokeIdx && !strokeImplicitlySelectedForTransform) {
-                tempPaint.alpha = (tempPaint.alpha * 0.25f).toInt()
+                paintToDraw.alpha = (paintToDraw.alpha * 0.25f).toInt()
             }
-            drawPoints(c, s.points, tempPaint)
+            drawStroke(c, s, paintToDraw)
         }
 
         if (currentState == State.STROKE_EDITING) {
@@ -505,14 +504,14 @@ class DrawingView @JvmOverloads constructor(
         if (canvas == null) invalidate()
     }
 
-    private fun drawPoints(canvas: Canvas?, points: List<PathPoint>, paint: Paint) {
-        if (canvas == null || points.size < 2) return
+    private fun drawStroke(canvas: Canvas?, stroke: Stroke, paint: Paint? = null) {
+        if (canvas == null || stroke.points.size < 2) return
         val path = Path()
-        path.moveTo(points.first().point.x, points.first().point.y)
-        for (i in 1 until points.size) {
-            path.lineTo(points[i].point.x, points[i].point.y)
+        path.moveTo(stroke.points.first().point.x, stroke.points.first().point.y)
+        for (i in 1 until stroke.points.size) {
+            path.lineTo(stroke.points[i].point.x, stroke.points[i].point.y)
         }
-        canvas.drawPath(path, paint)
+        canvas.drawPath(path, paint ?: stroke.paint)
     }
 
     private fun defaultPaint(_color: Int, _widthPx: Float) = Paint().apply {
