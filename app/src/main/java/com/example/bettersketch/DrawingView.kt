@@ -314,6 +314,37 @@ class DrawingView @JvmOverloads constructor(
         redrawHistory()
     }
 
+    fun duplicateCurrentStroke() {
+        currentStroke?.let { originalStroke ->
+            // Create a deep copy of the unsmoothed points
+            val duplicatedUnsmoothedPoints = originalStroke.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
+
+            // Calculate offset: half the bounding box height upwards
+            val bounds = originalStroke.getBounds()
+            val offsetY = -bounds.height() / 2f
+
+            // Apply offset to the duplicated unsmoothed points
+            duplicatedUnsmoothedPoints.forEach { it.point.offset(0f, offsetY) }
+
+            // Recalculate distances for the duplicated unsmoothed points after offset
+            val (finalDuplicatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(duplicatedUnsmoothedPoints.map { it.point })
+
+            // Create a new Stroke object with the duplicated and offset points
+            val duplicatedStroke = Stroke(
+                finalDuplicatedUnsmoothedPoints,
+                Paint(originalStroke.paint), // Deep copy of the paint
+                newTotalDistance,
+                originalStroke.smoothness
+            )
+
+            strokes.add(duplicatedStroke)
+            selectedStrokeIdx = strokes.lastIndex // Select the new duplicated stroke
+            setState(State.CHOSEN_STROKE) // Enter chosen stroke mode for the new stroke
+            redrawHistory()
+            listener?.onStateChanged()
+        }
+    }
+
     fun getStrokeColors(): IntArray {
         return strokes.map { it.paint.color }.toIntArray()
     }
