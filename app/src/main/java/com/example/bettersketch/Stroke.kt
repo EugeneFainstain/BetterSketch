@@ -5,7 +5,7 @@ import android.graphics.PointF
 import android.graphics.RectF
 import kotlin.math.sqrt
 
-data class PathPoint(var point: PointF, val distance: Float)
+data class PathPoint(var point: PointF, var distance: Float)
 
 class Stroke(
     val paint: Paint,

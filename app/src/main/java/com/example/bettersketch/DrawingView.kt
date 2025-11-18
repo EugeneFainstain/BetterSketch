@@ -143,47 +143,52 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun transformStroke(stroke: Stroke, matrix: Matrix, isGlobalTransform: Boolean) {
-        if (!isGlobalTransform) {
+        val scale = getScaleFromMatrix(matrix)
+
+        if (isGlobalTransform) {
+            // Optimized path for global canvas transformations
+            stroke.paint.strokeWidth *= scale
+            stroke.originalStrokeWidth *= scale
+            stroke.totalDistance *= scale
+
+            val transformPoint = { pathPoint: PathPoint ->
+                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                matrix.mapPoints(point)
+                pathPoint.point.set(point[0], point[1])
+                pathPoint.distance *= scale
+            }
+
+            stroke.points.forEach(transformPoint)
+            stroke.unsmoothedPoints.forEach(transformPoint)
+            stroke.originalPoints.forEach(transformPoint)
+
+        } else {
+            // Path for individual stroke editing (non-global)
             stroke.isModified = true
             listener?.onStateChanged()
-        }
-        val scale = getScaleFromMatrix(matrix)
-        stroke.paint.strokeWidth *= scale
+            stroke.paint.strokeWidth *= scale
 
-        // Transform unsmoothedPoints
-        stroke.unsmoothedPoints.forEach { pathPoint ->
-            val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-            matrix.mapPoints(point)
-            pathPoint.point.set(point[0], point[1])
-        }
-        // Recalculate distances for unsmoothedPoints after transformation
-        val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { it.point })
-        stroke.unsmoothedPoints.clear()
-        stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-        stroke.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
-
-        // Only transform the original points if it's a global canvas operation
-        if (isGlobalTransform) {
-            stroke.originalStrokeWidth *= scale
-            stroke.originalPoints.forEach { pathPoint ->
+            // Transform unsmoothedPoints
+            stroke.unsmoothedPoints.forEach { pathPoint ->
                 val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
                 matrix.mapPoints(point)
                 pathPoint.point.set(point[0], point[1])
             }
-            // Recalculate distances for originalPoints after transformation
-            val (recalculatedOriginalPoints, _) = Stroke.calculatePathPointsWithDistances(stroke.originalPoints.map { it.point })
-            stroke.originalPoints.clear()
-            stroke.originalPoints.addAll(recalculatedOriginalPoints)
-        }
+            // Recalculate distances for unsmoothedPoints after transformation
+            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { it.point })
+            stroke.unsmoothedPoints.clear()
+            stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+            stroke.totalDistance = newTotalDistance // Update totalDistance based on unsmoothed points
 
-        stroke.applySmoothing() // Re-smooth points and update totalDistance based on the new unsmoothedPoints
-        redrawHistory()
+            stroke.applySmoothing() // Re-smooth points and update totalDistance based on the new unsmoothedPoints
+        }
     }
 
     private fun transformAllStrokes(matrix: Matrix) {
         strokes.forEach { stroke ->
             transformStroke(stroke, matrix, isGlobalTransform = true)
         }
+        redrawHistory() // Redraw only once after all strokes are transformed
     }
 
     private fun getScaleFromMatrix(matrix: Matrix): Float {
