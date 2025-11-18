@@ -5,7 +5,12 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import kotlin.math.*
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sqrt
+import kotlin.math.PI
+import kotlin.math.sin
 
 interface DrawingViewListener {
     fun onStateChanged()
@@ -215,48 +220,13 @@ class DrawingView @JvmOverloads constructor(
         return currentPoints
     }
 
-    private fun applySmoothing(stroke: Stroke) {
-        if (stroke.smoothness == 0) {
-            // Use updatePointsFromPointFs to ensure totalDistance is also reset
-            stroke.updatePointsFromPointFs(stroke.originalPoints.map { it.point })
-            return
-        }
-
-        var smoothedPoints = stroke.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
-
-        repeat(stroke.smoothness) {
-            if (smoothedPoints.size < 3) return@repeat
-
-            val iterationResult = mutableListOf<PathPoint>()
-            iterationResult.add(smoothedPoints.first()) // Keep first point
-
-            for (i in 1 until smoothedPoints.size - 1) {
-                val prev = smoothedPoints[i - 1].point
-                val next = smoothedPoints[i + 1].point
-                val current = smoothedPoints[i]
-
-                val avgX = (prev.x + next.x) / 2f
-                val avgY = (prev.y + next.y) / 2f
-                
-                iterationResult.add(PathPoint(PointF(avgX, avgY), current.distance)) // current.distance is a placeholder, will be recalculated
-            }
-
-            iterationResult.add(smoothedPoints.last()) // Keep last point
-            smoothedPoints = iterationResult
-        }
-
-        // Use the new updatePointsFromPointFs method
-        val pointFs = smoothedPoints.map { it.point }
-        stroke.updatePointsFromPointFs(pointFs)
-    }
-
     private fun commitStrokeInProgress() {
         if (strokeInProgressPoints.isNotEmpty()) {
             val processedPoints = preprocessStroke(strokeInProgressPoints)
             // Convert PathPoint list to PointF list for the Stroke constructor
             val pointFs = processedPoints.map { it.point }
             val newStroke = Stroke(pointFs, Paint(currentPaint), currentSmoothness) // Updated constructor call
-            applySmoothing(newStroke)
+            newStroke.applySmoothing() // Call the new method on the Stroke object
             strokes.add(newStroke)
             strokeInProgressPoints.clear()
             selectedStrokeIdx = -1
@@ -269,8 +239,6 @@ class DrawingView @JvmOverloads constructor(
         val dy = p1.y - p2.y
         return sqrt(dx * dx + dy * dy)
     }
-
-    // Removed calculatePathPointsWithDistances from here
 
     private fun selectStrokeAt(tapPoint: PointF): Boolean {
         var minDistance = Float.MAX_VALUE
@@ -446,7 +414,7 @@ class DrawingView @JvmOverloads constructor(
         currentSmoothness = smoothness
         currentStroke?.let {
             it.smoothness = smoothness
-            applySmoothing(it)
+            it.applySmoothing() // Call the new method on the Stroke object
             it.isModified = true
             redrawHistory()
         }

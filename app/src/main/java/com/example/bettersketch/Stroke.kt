@@ -4,6 +4,8 @@ import android.graphics.Paint
 import android.graphics.PointF
 import android.graphics.RectF
 import kotlin.math.sqrt
+import kotlin.math.PI
+import kotlin.math.sin
 
 data class PathPoint(var point: PointF, val distance: Float)
 
@@ -45,6 +47,41 @@ class Stroke(
         this.points.clear()
         this.points.addAll(calculatedPathPoints)
         this.totalDistance = calculatedTotalDistance
+    }
+
+    fun applySmoothing() {
+        if (this.smoothness == 0) {
+            // Use updatePointsFromPointFs to ensure totalDistance is also reset
+            updatePointsFromPointFs(this.originalPoints.map { it.point })
+            return
+        }
+
+        var smoothedPoints = this.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
+
+        repeat(this.smoothness) {
+            if (smoothedPoints.size < 3) return@repeat
+
+            val iterationResult = mutableListOf<PathPoint>()
+            iterationResult.add(smoothedPoints.first()) // Keep first point
+
+            for (i in 1 until smoothedPoints.size - 1) {
+                val prev = smoothedPoints[i - 1].point
+                val next = smoothedPoints[i + 1].point
+                val current = smoothedPoints[i]
+
+                val avgX = (prev.x + next.x) / 2f
+                val avgY = (prev.y + next.y) / 2f
+                
+                iterationResult.add(PathPoint(PointF(avgX, avgY), current.distance)) // current.distance is a placeholder, will be recalculated
+            }
+
+            iterationResult.add(smoothedPoints.last()) // Keep last point
+            smoothedPoints = iterationResult
+        }
+
+        // Use the new updatePointsFromPointFs method
+        val pointFs = smoothedPoints.map { it.point }
+        updatePointsFromPointFs(pointFs)
     }
 
     // Moved from DrawingView.kt and made private
