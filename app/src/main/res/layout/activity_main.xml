@@ -110,7 +110,7 @@
             android:layout_gravity="bottom|center_horizontal"
             android:layout_marginBottom="24dp"
             android:backgroundTint="@android:color/holo_red_light"
-            android:text="Exit Editing Mode"
+            android:text="Done Editing"
             android:visibility="gone" />
 
         <Button

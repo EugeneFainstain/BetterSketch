@@ -55,7 +55,6 @@ class DrawingView @JvmOverloads constructor(
     // Transformation state
     private var twoFingerGestureOccured = false
     private var threeFingerGestureOccured = false
-    private var strokeImplicitlySelectedForTransform = false
 
     private val customGestureDetector: CustomGestureDetector
 
@@ -396,7 +395,7 @@ class DrawingView @JvmOverloads constructor(
     private fun drawStrokeWithEndpoints(canvas: Canvas, stroke: Stroke) {
         if (stroke.points.isEmpty()) return
 
-        if ((twoFingerGestureOccured && !threeFingerGestureOccured) || strokeImplicitlySelectedForTransform) {
+        if (twoFingerGestureOccured || threeFingerGestureOccured) {
             drawStroke(canvas, stroke)
             return
         }
@@ -407,11 +406,9 @@ class DrawingView @JvmOverloads constructor(
             color = Color.GREEN
         }
 
-        if (!threeFingerGestureOccured) {
-            if (editingPointIndex != -1) {
-                val pointToHighlight = stroke.points[editingPointIndex].point
-                canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointPaint)
-            }
+        if (editingPointIndex != -1) {
+            val pointToHighlight = stroke.points[editingPointIndex].point
+            canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointPaint)
         }
 
         drawStroke(canvas, stroke)
@@ -466,7 +463,7 @@ class DrawingView @JvmOverloads constructor(
 
         for ((index, s) in strokes.withIndex()) {
             val paintToDraw = Paint(s.paint) // Create a copy to modify alpha
-            if (selectedStrokeIdx != -1 && index != selectedStrokeIdx && !strokeImplicitlySelectedForTransform) {
+            if (selectedStrokeIdx != -1 && index != selectedStrokeIdx) {
                 paintToDraw.alpha = (paintToDraw.alpha * 0.25f).toInt()
             }
             drawStroke(c, s, paintToDraw)
@@ -569,13 +566,7 @@ class DrawingView @JvmOverloads constructor(
             }
         }
         threeFingerGestureOccured = true
-        if (selectedStrokeIdx == -1 && strokes.isNotEmpty()) {
-            selectedStrokeIdx = strokes.lastIndex
-            strokeImplicitlySelectedForTransform = true
-            setState(State.STROKE_EDITING)
-        } else {
-            redrawHistory() // Redraw to show endpoints on already-selected stroke
-        }
+        redrawHistory()
         return true
     }
 
@@ -587,24 +578,18 @@ class DrawingView @JvmOverloads constructor(
         twoFingerGestureOccured = false
         threeFingerGestureOccured = false
 
-        if (strokeImplicitlySelectedForTransform) {
-            selectedStrokeIdx = -1
-            strokeImplicitlySelectedForTransform = false
-            setState(State.NORMAL_DRAWING)
-        } else {
-            when (currentState) {
-                State.NORMAL_DRAWING -> {
-                    strokeInProgress?.let {
-                        touchUp()
-                    }
+        when (currentState) {
+            State.NORMAL_DRAWING -> {
+                strokeInProgress?.let {
+                    touchUp()
                 }
-                State.STROKE_EDITING -> {
-                    setState(State.CHOSEN_STROKE)
-                    editingPointIndex = -1
-                    editingPointInitialWeights = null
-                }
-                else -> {}
             }
+            State.STROKE_EDITING -> {
+                setState(State.CHOSEN_STROKE)
+                editingPointIndex = -1
+                editingPointInitialWeights = null
+            }
+            else -> {}
         }
         redrawHistory()
         return true
