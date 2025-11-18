@@ -19,6 +19,7 @@ class Stroke(
     var originalStrokeWidth: Float = paint.strokeWidth // Store original stroke width
     val childStrokes: MutableList<Stroke> = mutableListOf()
     val isGroup: Boolean get() = childStrokes.isNotEmpty()
+    var isHighlighted: Boolean = false
 
     // Secondary constructor for creating a stroke from existing points (like the original constructor)
     constructor(incomingPoints: List<PathPoint>, paint: Paint, totalDistance: Float, smoothness: Int) : this(paint, smoothness) {
@@ -88,6 +89,13 @@ class Stroke(
             childStrokes.forEach { it.forEachStroke(action) }
         } else {
             action(this)
+        }
+    }
+
+    fun setHighlightedRecursively(highlight: Boolean) {
+        this.isHighlighted = highlight
+        if (isGroup) {
+            childStrokes.forEach { it.setHighlightedRecursively(highlight) }
         }
     }
 

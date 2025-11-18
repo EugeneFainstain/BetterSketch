@@ -87,6 +87,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun exitEditingMode() {
+        currentStroke?.setHighlightedRecursively(false)
         selectedStrokeIdx = -1
         editingPointIndex = -1
         editingPointInitialWeights = null
@@ -244,6 +245,10 @@ class DrawingView @JvmOverloads constructor(
         return sqrt(dx * dx + dy * dy)
     }
 
+    private fun setStrokeHighlighted(stroke: Stroke?, highlighted: Boolean) {
+        stroke?.setHighlightedRecursively(highlighted)
+    }
+
     private fun selectStrokeAt(tapPoint: PointF): Boolean {
         var minDistance = Float.MAX_VALUE
         var closestStrokeIndex = -1
@@ -261,7 +266,9 @@ class DrawingView @JvmOverloads constructor(
         }
 
         if (closestStrokeIndex != -1) {
+            setStrokeHighlighted(currentStroke, false)
             selectedStrokeIdx = closestStrokeIndex
+            setStrokeHighlighted(currentStroke, true)
             currentPaint = Paint(strokes[closestStrokeIndex].paint)
             return true
         }
@@ -444,7 +451,7 @@ class DrawingView @JvmOverloads constructor(
         }
 
         for ((index, s) in strokes.withIndex()) {
-            if (isEditing() && index == selectedStrokeIdx) {
+            if (s.isHighlighted) {
                 s.forEachStroke {
                     haloPaint.strokeWidth = it.paint.strokeWidth + haloOffset
                     drawStroke(c, it, haloPaint)
