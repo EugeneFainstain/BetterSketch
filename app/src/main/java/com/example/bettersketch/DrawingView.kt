@@ -500,26 +500,20 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onSingleTapEnd(event: MotionEvent): Boolean {
         when (currentState) {
-            State.NORMAL_DRAWING, State.CHOSEN_STROKE, State.STROKE_EDITING -> {
+            State.NORMAL_DRAWING -> {
                 if (selectStrokeAt(PointF(event.x, event.y))) {
                     setState(State.CHOSEN_STROKE)
                 }
+            }
+            State.CHOSEN_STROKE, State.STROKE_EDITING -> {
+                exitEditingMode()
             }
         }
         return true
     }
 
     override fun onDoubleTapEnd(event: MotionEvent): Boolean {
-        when (currentState) {
-            State.CHOSEN_STROKE, State.STROKE_EDITING -> {
-                selectedStrokeIdx = -1
-                selectedEnd = SelectedEnd.NONE
-                editingPointIndex = -1
-                editingPointInitialWeights = null
-                setState(State.NORMAL_DRAWING)
-            }
-            else -> {}
-        }
+        // Double tap no longer exits editing mode, but we can keep it for other potential actions.
         return true
     }
 

@@ -19,9 +19,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var widthSlider: WidthSlider
     private lateinit var colorSlider: ColorSlider
     private lateinit var smoothingSlider: SmoothingSlider
-    private lateinit var btnExitEditing: Button
     private lateinit var btnUndoStrokeEdit: Button
-    private lateinit var btnDuplicateStroke: Button // Declaring the new button
+    private lateinit var btnDuplicateStroke: Button
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -51,9 +50,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         widthSlider = findViewById(R.id.widthSlider)
         colorSlider = findViewById(R.id.colorSlider)
         smoothingSlider = findViewById(R.id.smoothingSlider)
-        btnExitEditing = findViewById(R.id.btnExitEditing)
         btnUndoStrokeEdit = findViewById(R.id.btnUndoStrokeEdit)
-        btnDuplicateStroke = findViewById(R.id.btnDuplicateStroke) // Initializing the new button
+        btnDuplicateStroke = findViewById(R.id.btnDuplicateStroke)
         
         findViewById<View>(R.id.seekProgress).visibility = View.GONE
         findViewById<View>(R.id.btnUndo).visibility = View.GONE
@@ -68,15 +66,11 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         
         findViewById<View>(R.id.btnToggleMode).visibility = View.GONE
 
-        btnExitEditing.setOnClickListener {
-            drawingView.exitEditingMode()
-        }
-
         btnUndoStrokeEdit.setOnClickListener {
             drawingView.undoStrokeModifications()
         }
 
-        btnDuplicateStroke.setOnClickListener { // Setting OnClickListener for DUP button
+        btnDuplicateStroke.setOnClickListener {
             drawingView.duplicateCurrentStroke()
         }
 
@@ -147,10 +141,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         widthSlider.color = currentPaint.color
 
         val isEditing = drawingView.isEditing()
-        btnExitEditing.visibility = if (isEditing) View.VISIBLE else View.GONE
         btnUndoStrokeEdit.visibility = if (isEditing) View.VISIBLE else View.GONE
         btnUndoStrokeEdit.isEnabled = drawingView.isCurrentStrokeModified()
-        btnDuplicateStroke.visibility = if (isEditing) View.VISIBLE else View.GONE // Control visibility of DUP button
+        btnDuplicateStroke.visibility = if (isEditing) View.VISIBLE else View.GONE
     }
 
     private fun saveToGallery() {
