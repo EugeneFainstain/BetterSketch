@@ -7,10 +7,19 @@ import android.graphics.RectF
 data class PathPoint(val point: PointF, val distance: Float)
 
 class Stroke(
-    val points: MutableList<PathPoint>,
+    points: MutableList<PathPoint>,
     val paint: Paint,
     val totalDistance: Float
 ) {
+    val points: MutableList<PathPoint>
+    val originalPoints: List<PathPoint>
+
+    init {
+        // Deep copy of the points to ensure the original data is preserved.
+        this.originalPoints = points.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }
+        this.points = points
+    }
+
     /**
      * Calculates the bounding box of the stroke.
      * This is essential for finding the center point of the stroke, which is used as a pivot
