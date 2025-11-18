@@ -3,6 +3,7 @@ package com.example.bettersketch
 import android.graphics.Paint
 import android.graphics.PointF
 import android.graphics.RectF
+import kotlin.math.sqrt
 
 data class PathPoint(var point: PointF, val distance: Float) // Changed 'val point' to 'var point'
 
@@ -36,5 +37,28 @@ class Stroke(
             bounds.union(points[i].point.x, points[i].point.y)
         }
         return bounds
+    }
+
+    companion object {
+        fun calculatePathPointsWithDistances(points: List<PointF>): Pair<MutableList<PathPoint>, Float> {
+            if (points.isEmpty()) {
+                return Pair(mutableListOf(), 0f)
+            }
+
+            val pathPoints = mutableListOf<PathPoint>()
+            var totalDistance = 0f
+
+            pathPoints.add(PathPoint(points.first(), 0f))
+
+            for (i in 1 until points.size) {
+                val p1 = points[i - 1]
+                val p2 = points[i]
+                val dx = p2.x - p1.x
+                val dy = p2.y - p1.y
+                totalDistance += sqrt(dx * dx + dy * dy)
+                pathPoints.add(PathPoint(p2, totalDistance))
+            }
+            return Pair(pathPoints, totalDistance)
+        }
     }
 }
