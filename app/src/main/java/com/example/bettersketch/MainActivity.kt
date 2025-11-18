@@ -20,6 +20,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var colorSlider: ColorSlider
     private lateinit var smoothingSlider: SmoothingSlider
     private lateinit var btnExitEditing: Button
+    private lateinit var btnUndoStrokeEdit: Button
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -50,6 +51,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         colorSlider = findViewById(R.id.colorSlider)
         smoothingSlider = findViewById(R.id.smoothingSlider)
         btnExitEditing = findViewById(R.id.btnExitEditing)
+        btnUndoStrokeEdit = findViewById(R.id.btnUndoStrokeEdit)
         
         findViewById<View>(R.id.seekProgress).visibility = View.GONE
         findViewById<View>(R.id.btnUndo).visibility = View.GONE
@@ -66,6 +68,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         btnExitEditing.setOnClickListener {
             drawingView.exitEditingMode()
+        }
+
+        btnUndoStrokeEdit.setOnClickListener {
+            drawingView.undoStrokeModifications()
         }
 
         drawingView.post { updateUi() }
@@ -134,7 +140,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         widthSlider.color = currentPaint.color
 
-        btnExitEditing.visibility = if (drawingView.isEditing()) View.VISIBLE else View.GONE
+        val isEditing = drawingView.isEditing()
+        btnExitEditing.visibility = if (isEditing) View.VISIBLE else View.GONE
+        btnUndoStrokeEdit.visibility = if (isEditing) View.VISIBLE else View.GONE
+        btnUndoStrokeEdit.isEnabled = drawingView.isCurrentStrokeModified()
     }
 
     private fun saveToGallery() {

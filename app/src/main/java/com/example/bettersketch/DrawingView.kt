@@ -50,6 +50,13 @@ class DrawingView @JvmOverloads constructor(
     private val strokes = mutableListOf<Stroke>()
     private var selectedStrokeIdx: Int = -1
     private var middlePointRelativeDistance: Float = 0.5f
+    private var isStrokeModified = false
+        set(value) {
+            if (field != value) {
+                field = value
+                listener?.onStateChanged()
+            }
+        }
 
     // Transformation state
     private var twoFingerGestureOccured = false
@@ -70,9 +77,23 @@ class DrawingView @JvmOverloads constructor(
         return currentState != State.NORMAL_DRAWING
     }
 
+    fun isCurrentStrokeModified(): Boolean {
+        return isStrokeModified
+    }
+
     fun exitEditingMode() {
         selectedStrokeIdx = -1
+        isStrokeModified = false
         setState(State.NORMAL_DRAWING)
+    }
+
+    fun undoStrokeModifications() {
+        currentStroke?.let {
+            it.points.clear()
+            it.points.addAll(it.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
+            isStrokeModified = false
+            redrawHistory()
+        }
     }
 
     fun exportBitmap(): Bitmap {
@@ -122,6 +143,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun transformStroke(stroke: Stroke, matrix: Matrix) {
+        isStrokeModified = true
         val scale = getScaleFromMatrix(matrix)
         stroke.paint.strokeWidth *= scale
         stroke.points.forEach { pathPoint ->
@@ -133,6 +155,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun transformAllStrokes(matrix: Matrix) {
+        isStrokeModified = true
         strokes.forEach { stroke ->
             transformStroke(stroke, matrix)
         }
@@ -197,6 +220,7 @@ class DrawingView @JvmOverloads constructor(
         if (closestIndex != -1) {
             selectedStrokeIdx = closestIndex
             currentPaint = Paint(strokes[closestIndex].paint)
+            isStrokeModified = false
             return true
         }
         return false
@@ -268,6 +292,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun moveStartPoint(dx: Float, dy: Float) {
+        isStrokeModified = true
         currentStroke?.let {
             val totalDistance = it.totalDistance
             if (totalDistance == 0f) return
@@ -280,6 +305,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun moveEndPoint(dx: Float, dy: Float) {
+        isStrokeModified = true
         currentStroke?.let {
             val totalDistance = it.totalDistance
             if (totalDistance == 0f) return
@@ -292,6 +318,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun moveMiddlePoint(dx: Float, dy: Float) {
+        isStrokeModified = true
         currentStroke?.let {
             val totalDistance = it.totalDistance
             if (totalDistance == 0f) return
@@ -348,6 +375,9 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun setColor(color: Int, applyToSelected: Boolean) {
+        if (applyToSelected) {
+            isStrokeModified = true
+        }
         currentPaint.color = color
         if (applyToSelected && selectedStrokeIdx != -1) {
             currentStroke?.paint?.color = color
@@ -357,6 +387,9 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun setStrokeWidth(px: Float, applyToSelected: Boolean) {
+        if (applyToSelected) {
+            isStrokeModified = true
+        }
         val w = max(1f, min(120f, px))
         currentPaint.strokeWidth = w
         if (applyToSelected && selectedStrokeIdx != -1) {
