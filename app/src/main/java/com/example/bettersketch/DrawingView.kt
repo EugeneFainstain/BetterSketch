@@ -407,19 +407,11 @@ class DrawingView @JvmOverloads constructor(
             color = Color.GREEN
         }
 
-        if (threeFingerGestureOccured) {
-            val startPoint = stroke.points.first().point
-            val endPoint = stroke.points.last().point
-            val middleIndex = if (stroke.points.size > 2) stroke.points.size / 2 else -1
-            canvas.drawCircle(startPoint.x, startPoint.y, radius, endpointPaint)
-            canvas.drawCircle(endPoint.x, endPoint.y, radius, endpointPaint)
-            if (middleIndex != -1) {
-                val middlePoint = stroke.points[middleIndex].point
-                canvas.drawCircle(middlePoint.x, middlePoint.y, radius, endpointPaint)
+        if (!threeFingerGestureOccured) {
+            if (editingPointIndex != -1) {
+                val pointToHighlight = stroke.points[editingPointIndex].point
+                canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointPaint)
             }
-        } else if (editingPointIndex != -1) {
-            val pointToHighlight = stroke.points[editingPointIndex].point
-            canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointPaint)
         }
 
         drawStroke(canvas, stroke)
