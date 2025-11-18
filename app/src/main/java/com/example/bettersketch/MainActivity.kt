@@ -113,11 +113,11 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         smoothingSlider.listener = object : MySlider.OnSliderValueChangedListener {
             override fun onValueChanged(value: Float) {
-                drawingView.currentSmoothness = (value * 100).roundToInt()
+                drawingView.setStrokeSmoothness((value * 100).roundToInt())
             }
 
             override fun onValueEdit(value: Float) {
-                drawingView.currentSmoothness = (value * 100).roundToInt()
+                drawingView.setStrokeSmoothness((value * 100).roundToInt())
             }
 
             override fun onValueEditEnd() {}

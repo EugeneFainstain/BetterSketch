@@ -136,23 +136,34 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    private fun transformStroke(stroke: Stroke, matrix: Matrix) {
-        stroke.isModified = true
-        listener?.onStateChanged()
+    private fun transformStroke(stroke: Stroke, matrix: Matrix, isGlobalTransform: Boolean) {
+        if (!isGlobalTransform) {
+            stroke.isModified = true
+            listener?.onStateChanged()
+        }
         val scale = getScaleFromMatrix(matrix)
         stroke.paint.strokeWidth *= scale
 
+        // Always transform the live points
         stroke.points.forEach { pathPoint ->
             val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
             matrix.mapPoints(point)
             pathPoint.point.set(point[0], point[1])
+        }
+        // Only transform the original points if it's a global canvas operation
+        if (isGlobalTransform) {
+            stroke.originalPoints.forEach { pathPoint ->
+                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                matrix.mapPoints(point)
+                pathPoint.point.set(point[0], point[1])
+            }
         }
         redrawHistory()
     }
 
     private fun transformAllStrokes(matrix: Matrix) {
         strokes.forEach { stroke ->
-            transformStroke(stroke, matrix)
+            transformStroke(stroke, matrix, isGlobalTransform = true)
         }
     }
 
@@ -222,11 +233,62 @@ class DrawingView @JvmOverloads constructor(
         return points
     }
 
+    private fun applySmoothing(stroke: Stroke) {
+        if (stroke.smoothness == 0) {
+            stroke.points.clear()
+            stroke.points.addAll(stroke.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+            return
+        }
+
+        var smoothedPoints = stroke.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
+
+        repeat(stroke.smoothness) {
+            if (smoothedPoints.size < 3) return@repeat
+
+            val iterationResult = mutableListOf<PathPoint>()
+            iterationResult.add(smoothedPoints.first()) // Keep first point
+
+            for (i in 1 until smoothedPoints.size - 1) {
+                val prev = smoothedPoints[i - 1].point
+                val next = smoothedPoints[i + 1].point
+                val current = smoothedPoints[i]
+
+                val avgX = (prev.x + next.x) / 2f
+                val avgY = (prev.y + next.y) / 2f
+                
+                iterationResult.add(PathPoint(PointF(avgX, avgY), current.distance))
+            }
+
+            iterationResult.add(smoothedPoints.last()) // Keep last point
+            smoothedPoints = iterationResult
+        }
+
+        // Recalculate distances for the final smoothed points
+        var totalDistance = 0f
+        if (smoothedPoints.isNotEmpty()) {
+            val finalPoints = mutableListOf(PathPoint(smoothedPoints.first().point, 0f))
+
+            for (i in 1 until smoothedPoints.size) {
+                val p1 = finalPoints.last().point
+                val p2 = smoothedPoints[i].point
+                val dx = p2.x - p1.x
+                val dy = p2.y - p1.y
+                totalDistance += sqrt(dx * dx + dy * dy)
+                finalPoints.add(PathPoint(p2, totalDistance))
+            }
+            stroke.points.clear()
+            stroke.points.addAll(finalPoints)
+        } else {
+            stroke.points.clear()
+        }
+    }
+
     private fun commitStrokeInProgress() {
         if (strokeInProgressPoints.isNotEmpty()) {
             val processedPoints = preprocessStroke(strokeInProgressPoints)
             val totalDistance = if (processedPoints.isNotEmpty()) processedPoints.last().distance else 0f
             val newStroke = Stroke(processedPoints, Paint(currentPaint), totalDistance, currentSmoothness)
+            applySmoothing(newStroke)
             strokes.add(newStroke)
             strokeInProgressPoints.clear()
             selectedStrokeIdx = -1
@@ -408,6 +470,16 @@ class DrawingView @JvmOverloads constructor(
         }
 
         drawPoints(canvas, points, paint)
+    }
+
+    fun setStrokeSmoothness(smoothness: Int) {
+        currentSmoothness = smoothness
+        currentStroke?.let {
+            it.smoothness = smoothness
+            applySmoothing(it)
+            it.isModified = true
+            redrawHistory()
+        }
     }
 
     fun setColor(color: Int, applyToSelected: Boolean) {
@@ -634,7 +706,7 @@ class DrawingView @JvmOverloads constructor(
             deltaMatrix.postScale(scale, scale, centerX, centerY)
             deltaMatrix.postRotate(rotate, centerX, centerY)
             deltaMatrix.postTranslate(dx, dy)
-            transformStroke(it, deltaMatrix)
+            transformStroke(it, deltaMatrix, isGlobalTransform = false)
         }
         return true
     }
