@@ -159,6 +159,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         btnUndoStrokeEdit.visibility = if (isEditing) View.VISIBLE else View.GONE
         btnUndoStrokeEdit.isEnabled = drawingView.isCurrentStrokeModified()
         btnDuplicateStroke.visibility = if (isEditing) View.VISIBLE else View.GONE
+        btnDuplicateStroke.isEnabled = highlightedStrokeCount == 1
 
         // Show Group button if more than 1 stroke is highlighted AND the current stroke is NOT a group
         btnGroupStrokes.visibility = if (highlightedStrokeCount > 1 && !isCurrentStrokeGroup) View.VISIBLE else View.GONE

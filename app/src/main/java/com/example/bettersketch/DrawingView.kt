@@ -662,6 +662,7 @@ class DrawingView @JvmOverloads constructor(
                 setState(State.CHOSEN_STROKE)
             }
             threeFingerGestureOccured = false // Reset after checking
+            listener?.onStateChanged() // Trigger UI update for multi-selection
         }
 
 
