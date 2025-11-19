@@ -137,6 +137,25 @@ class Stroke(
         return newStroke
     }
 
+    fun copyFrom(other: Stroke) {
+        this.paint.set(other.paint)
+        this.smoothness = other.smoothness
+        this.points.clear()
+        this.points.addAll(other.points.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        this.originalPoints.clear()
+        this.originalPoints.addAll(other.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        this.unsmoothedPoints.clear()
+        this.unsmoothedPoints.addAll(other.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        this.totalDistance = other.totalDistance
+        this.isModified = other.isModified
+        this.originalStrokeWidth = other.originalStrokeWidth
+        this.childStrokes.clear()
+        other.childStrokes.forEach { child ->
+            this.childStrokes.add(child.deepCopy())
+        }
+        this.isHighlighted = other.isHighlighted
+    }
+
     companion object {
         fun calculatePathPointsWithDistances(points: List<PointF>): Pair<MutableList<PathPoint>, Float> {
             if (points.isEmpty()) {

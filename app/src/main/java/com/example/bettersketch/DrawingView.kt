@@ -58,6 +58,9 @@ class DrawingView @JvmOverloads constructor(
     // Transformation state
     private var twoFingerGestureOccured = false
     private var threeFingerGestureOccured = false
+    private var backedUpGroupStroke: Stroke? = null
+    private var initialTouchX: Float = 0f
+    private var initialTouchY: Float = 0f
 
     private val customGestureDetector = CustomGestureDetector(context, this)
     private val haloPaint: Paint
@@ -588,6 +591,14 @@ class DrawingView @JvmOverloads constructor(
             State.CHOSEN_STROKE -> {
                 if (selectEndpointOfCurrentStroke(downPoint)) {
                     setState(State.STROKE_EDITING)
+                } else {
+                    currentStroke?.let {
+                        if (it.isGroup) {
+                            backedUpGroupStroke = it.deepCopy()
+                            initialTouchX = event.x
+                            initialTouchY = event.y
+                        }
+                    }
                 }
             }
             State.STROKE_EDITING -> {
@@ -625,6 +636,7 @@ class DrawingView @JvmOverloads constructor(
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
         twoFingerGestureOccured = false
         selectionCircle = null
+        backedUpGroupStroke = null // Reset backed up stroke
 
         if (threeFingerGestureOccured) {
             val highlightedStrokes = strokes.filter { it.isHighlighted }
@@ -669,22 +681,30 @@ class DrawingView @JvmOverloads constructor(
                 moveEditingPoint(dx, dy)
             }
             State.CHOSEN_STROKE -> {
-                currentStroke?.let {
-                    if (it.isGroup) {
-                        val bounds = it.getBounds()
-                        val centerX = bounds.centerX()
-                        val centerY = bounds.centerY()
-                        val initialHeight = bounds.height()
+                currentStroke?.let { current ->
+                    if (current.isGroup) {
+                        backedUpGroupStroke?.let { backup ->
+                            // Reset current stroke to its backed-up state
+                            current.copyFrom(backup)
 
-                        val matrix = Matrix()
-                        matrix.postTranslate(dx, 0f) // Horizontal translation
+                            val bounds = backup.getBounds() // Use bounds of the backup stroke
+                            val centerX = bounds.centerX()
+                            val centerY = bounds.centerY()
+                            val initialHeight = bounds.height()
 
-                        if (initialHeight != 0f) {
-                            val newHeight = initialHeight - dy
-                            val scaleY = newHeight / initialHeight
-                            matrix.postScale(1.0f, scaleY, centerX, centerY) // Vertical scaling around center
+                            val totalDx = event.x - initialTouchX
+                            val totalDy = event.y - initialTouchY
+
+                            val matrix = Matrix()
+                            matrix.postTranslate(totalDx, 0f) // Horizontal translation
+
+                            if (initialHeight != 0f) {
+                                val newHeight = initialHeight - totalDy
+                                val scaleY = newHeight / initialHeight
+                                matrix.postScale(1.0f, scaleY, centerX, centerY) // Vertical scaling around center
+                            }
+                            transformStroke(current, matrix, isGlobalTransform = false)
                         }
-                        transformStroke(it, matrix, isGlobalTransform = false)
                     }
                 }
             }
