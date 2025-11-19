@@ -387,8 +387,29 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
+    fun ungroupSelectedStrokes() {
+        currentStroke?.let { groupStroke ->
+            if (groupStroke.isGroup) {
+                val index = strokes.indexOf(groupStroke)
+                if (index != -1) {
+                    strokes.removeAt(index)
+                    strokes.addAll(index, groupStroke.childStrokes) // Insert children at the group's position
+                    groupStroke.childStrokes.forEach { it.setHighlightedRecursively(true) } // Highlight children
+                    selectedStrokeIdx = -1 // No single stroke selected after ungrouping
+                    setState(State.CHOSEN_STROKE) // Stay in chosen stroke mode as multiple are highlighted
+                    redrawHistory()
+                    listener?.onStateChanged()
+                }
+            }
+        }
+    }
+
     fun getSelectedStrokeCount(): Int {
         return strokes.count { it.isHighlighted }
+    }
+
+    fun isCurrentStrokeGroup(): Boolean {
+        return currentStroke?.isGroup ?: false
     }
 
     private fun moveEditingPoint(dx: Float, dy: Float) {

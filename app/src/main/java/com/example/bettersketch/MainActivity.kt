@@ -22,6 +22,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var btnUndoStrokeEdit: Button
     private lateinit var btnDuplicateStroke: Button
     private lateinit var btnGroupStrokes: Button
+    private lateinit var btnUnGroupStrokes: Button
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -54,6 +55,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         btnUndoStrokeEdit = findViewById(R.id.btnUndoStrokeEdit)
         btnDuplicateStroke = findViewById(R.id.btnDuplicateStroke)
         btnGroupStrokes = findViewById(R.id.btnGroupStrokes)
+        btnUnGroupStrokes = findViewById(R.id.btnUnGroupStrokes)
         
         findViewById<View>(R.id.seekProgress).visibility = View.GONE
         findViewById<View>(R.id.btnUndo).visibility = View.GONE
@@ -78,6 +80,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         btnGroupStrokes.setOnClickListener {
             drawingView.groupSelectedStrokes()
+        }
+
+        btnUnGroupStrokes.setOnClickListener {
+            drawingView.ungroupSelectedStrokes()
         }
 
         drawingView.post { updateUi() }
@@ -147,10 +153,17 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         widthSlider.color = currentPaint.color
 
         val isEditing = drawingView.isEditing()
+        val selectedStrokeCount = drawingView.getSelectedStrokeCount()
+        val isCurrentStrokeGroup = drawingView.isCurrentStrokeGroup()
+
         btnUndoStrokeEdit.visibility = if (isEditing) View.VISIBLE else View.GONE
         btnUndoStrokeEdit.isEnabled = drawingView.isCurrentStrokeModified()
         btnDuplicateStroke.visibility = if (isEditing) View.VISIBLE else View.GONE
-        btnGroupStrokes.visibility = if (drawingView.getSelectedStrokeCount() > 1) View.VISIBLE else View.GONE
+
+        // Show Group button if more than 1 stroke is highlighted AND the current stroke is NOT a group
+        btnGroupStrokes.visibility = if (selectedStrokeCount > 1 && !isCurrentStrokeGroup) View.VISIBLE else View.GONE
+        // Show UnGroup button if exactly 1 stroke is highlighted AND that stroke IS a group
+        btnUnGroupStrokes.visibility = if (selectedStrokeCount == 1 && isCurrentStrokeGroup) View.VISIBLE else View.GONE
     }
 
     private fun saveToGallery() {
