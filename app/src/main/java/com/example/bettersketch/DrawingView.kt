@@ -157,7 +157,7 @@ class DrawingView @JvmOverloads constructor(
 
             // 2. Draw the "live" part (the new stroke being created) on top.
             if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
-                drawStroke(this, strokeInProgress!!, null, 1.0f)
+                drawStroke(this, strokeInProgress!!, 1.0f, 1.0f)
             }
 
             selectionCircle?.let {
@@ -518,18 +518,13 @@ class DrawingView @JvmOverloads constructor(
 
         for ((index, s) in strokes.withIndex()) {
             // 2. Determine dimming for the current stroke 's' (or its children if it's a group)
-            val shouldDim = when (currentState) {
-                State.NORMAL_DRAWING -> false
-                State.CHOSEN_STROKE, State.STROKE_EDITING -> index != selectedStrokeIdx
-            }
-
-            val paintForTopLevelStroke = Paint(s.paint)
-            if (shouldDim) {
-                paintForTopLevelStroke.alpha = (paintForTopLevelStroke.alpha * 0.25f).toInt()
+            val opacityMultiplier = when (currentState) {
+                State.NORMAL_DRAWING -> 1.0f
+                State.CHOSEN_STROKE, State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
             }
 
             // 3. Draw the actual stroke(s) and its halo if highlighted
-            drawStroke(c, s, paintForTopLevelStroke, 1.0f)
+            drawStroke(c, s, opacityMultiplier, 1.0f)
 
             // 4. Draw endpoints if in STROKE_EDITING mode
             if (currentState == State.STROKE_EDITING && index == selectedStrokeIdx) {
@@ -542,15 +537,14 @@ class DrawingView @JvmOverloads constructor(
         if (canvas == null) invalidate()
     }
 
-    private fun drawStroke(canvas: Canvas?, stroke: Stroke, parentPaint: Paint? = null, currentTotalWidthMultiplier: Float = 1.0f) {
+    private fun drawStroke(canvas: Canvas?, stroke: Stroke, cumulativeOpacityMultiplier: Float, cumulativeWidthMultiplier: Float) {
         if (stroke.isGroup) {
             val groupThicknessMultiplier = stroke.paint.strokeWidth / 10f
-            val newTotalWidthMultiplier = currentTotalWidthMultiplier * groupThicknessMultiplier
-
-            val groupPaint = parentPaint ?: Paint(stroke.paint)
+            val newTotalWidthMultiplier = cumulativeWidthMultiplier * groupThicknessMultiplier
+            val newCumulativeOpacityMultiplier = cumulativeOpacityMultiplier * (stroke.paint.alpha / 255f)
 
             stroke.childStrokes.forEach { childStroke ->
-                drawStroke(canvas, childStroke, groupPaint, newTotalWidthMultiplier)
+                drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier)
             }
         } else {
             // Leaf stroke
@@ -561,17 +555,18 @@ class DrawingView @JvmOverloads constructor(
                     path.lineTo(stroke.points[i].point.x, stroke.points[i].point.y)
                 }
 
-                val leafPaint = parentPaint ?: Paint(stroke.paint)
-                leafPaint.strokeWidth = stroke.paint.strokeWidth * currentTotalWidthMultiplier
+                val finalPaint = Paint(stroke.paint)
+                finalPaint.strokeWidth *= cumulativeWidthMultiplier
+                finalPaint.alpha = (finalPaint.alpha * cumulativeOpacityMultiplier).toInt()
 
                 // Draw Halo if highlighted
                 if (stroke.isHighlighted) {
                     val haloPaintToUse = Paint(haloPaint)
-                    haloPaintToUse.strokeWidth = leafPaint.strokeWidth + haloOffset
+                    haloPaintToUse.strokeWidth = finalPaint.strokeWidth + haloOffset
                     canvas?.drawPath(path, haloPaintToUse)
                 }
                 
-                canvas?.drawPath(path, leafPaint)
+                canvas?.drawPath(path, finalPaint)
             }
         }
     }
