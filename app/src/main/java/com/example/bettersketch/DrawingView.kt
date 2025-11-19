@@ -589,8 +589,16 @@ class DrawingView @JvmOverloads constructor(
         selectionCircle = null
 
         if (threeFingerGestureOccured) {
-            val anyStrokeHighlighted = strokes.any { it.isHighlighted }
-            if (anyStrokeHighlighted) {
+            val highlightedStrokes = strokes.filter { it.isHighlighted }
+            if (highlightedStrokes.size == 1) {
+                val singleHighlightedStroke = highlightedStrokes.first()
+                val index = strokes.indexOf(singleHighlightedStroke)
+                if (index != -1) {
+                    selectedStrokeIdx = index
+                    currentPaint = Paint(singleHighlightedStroke.paint)
+                    setState(State.CHOSEN_STROKE)
+                }
+            } else if (highlightedStrokes.isNotEmpty()) {
                 setState(State.CHOSEN_STROKE)
             }
             threeFingerGestureOccured = false // Reset after checking
