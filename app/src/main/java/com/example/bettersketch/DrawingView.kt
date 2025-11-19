@@ -469,21 +469,28 @@ class DrawingView @JvmOverloads constructor(
 
     fun setStrokeSmoothness(smoothness: Int) {
         currentSmoothness = smoothness
-        currentStroke?.forEachStroke {
-            it.smoothness = smoothness
-            it.applySmoothing()
-            it.isModified = true
+        val selectedStroke = currentStroke // Capture currentStroke in a local variable
+        if (selectedStroke != null && !selectedStroke.isGroup) {
+            selectedStroke.forEachStroke {
+                it.smoothness = smoothness
+                it.applySmoothing()
+                it.isModified = true
+            }
+            redrawHistory()
         }
-        redrawHistory()
+        listener?.onStateChanged()
     }
 
     fun setColor(color: Int, applyToSelected: Boolean) {
         if (applyToSelected) {
-            currentStroke?.forEachStroke {
-                it.isModified = true
-                it.paint.color = color
+            val selectedStroke = currentStroke // Capture currentStroke in a local variable
+            if (selectedStroke != null && !selectedStroke.isGroup) {
+                selectedStroke.forEachStroke {
+                    it.isModified = true
+                    it.paint.color = color
+                }
+                redrawHistory()
             }
-            redrawHistory()
         }
         currentPaint.color = color
         listener?.onStateChanged()
@@ -492,11 +499,14 @@ class DrawingView @JvmOverloads constructor(
     fun setStrokeWidth(px: Float, applyToSelected: Boolean) {
         if (applyToSelected) {
             val w = max(1f, min(120f, px))
-            currentStroke?.forEachStroke {
-                it.isModified = true
-                it.paint.strokeWidth = w
+            val selectedStroke = currentStroke // Capture currentStroke in a local variable
+            if (selectedStroke != null && !selectedStroke.isGroup) { // Add check for isGroup
+                selectedStroke.forEachStroke {
+                    it.isModified = true
+                    it.paint.strokeWidth = w
+                }
+                redrawHistory()
             }
-            redrawHistory()
         }
         currentPaint.strokeWidth = max(1f, min(120f, px))
         listener?.onStateChanged()
