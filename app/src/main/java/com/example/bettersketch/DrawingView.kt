@@ -157,7 +157,7 @@ class DrawingView @JvmOverloads constructor(
 
             // 2. Draw the "live" part (the new stroke being created) on top.
             if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
-                drawStroke(this, strokeInProgress!!, 1.0f, 1.0f)
+                drawStroke(canvas, strokeInProgress!!, 1.0f, 1.0f, false)
             }
 
             selectionCircle?.let {
@@ -447,26 +447,6 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun drawStrokeEndpoints(canvas: Canvas, stroke: Stroke) {
-        if (stroke.isGroup) return
-        if (stroke.points.isEmpty()) return
-
-        if (twoFingerGestureOccured || threeFingerGestureOccured) {
-            return
-        }
-
-        val radius = stroke.paint.strokeWidth * 2f
-        val endpointPaint = Paint().apply {
-            style = Paint.Style.FILL
-            color = Color.GREEN
-        }
-
-        if (editingPointIndex != -1) {
-            val pointToHighlight = stroke.points[editingPointIndex].point
-            canvas.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointPaint)
-        }
-    }
-
     fun setStrokeSmoothness(smoothness: Int) {
         currentSmoothness = smoothness
         val selectedStroke = currentStroke // Capture currentStroke in a local variable
@@ -517,34 +497,32 @@ class DrawingView @JvmOverloads constructor(
         }
 
         for ((index, s) in strokes.withIndex()) {
-            // 2. Determine dimming for the current stroke 's' (or its children if it's a group)
             val opacityMultiplier = when (currentState) {
                 State.NORMAL_DRAWING -> 1.0f
                 State.CHOSEN_STROKE, State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
             }
 
-            // 3. Draw the actual stroke(s) and its halo if highlighted
-            drawStroke(c, s, opacityMultiplier, 1.0f)
-
-            // 4. Draw endpoints if in STROKE_EDITING mode
-            if (currentState == State.STROKE_EDITING && index == selectedStrokeIdx) {
-                currentStroke?.let {
-                    drawStrokeEndpoints(c, it)
-                }
-            }
+            val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
+            drawStroke(c, s, opacityMultiplier, 1.0f, drawEndpoints)
         }
 
         if (canvas == null) invalidate()
     }
 
-    private fun drawStroke(canvas: Canvas?, stroke: Stroke, cumulativeOpacityMultiplier: Float, cumulativeWidthMultiplier: Float) {
+    private fun drawStroke(
+        canvas: Canvas?,
+        stroke: Stroke,
+        cumulativeOpacityMultiplier: Float,
+        cumulativeWidthMultiplier: Float,
+        drawEndpoints: Boolean
+    ) {
         if (stroke.isGroup) {
             val groupThicknessMultiplier = stroke.paint.strokeWidth / 10f
             val newTotalWidthMultiplier = cumulativeWidthMultiplier * groupThicknessMultiplier
             val newCumulativeOpacityMultiplier = cumulativeOpacityMultiplier * (stroke.paint.alpha / 255f)
 
             stroke.childStrokes.forEach { childStroke ->
-                drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier)
+                drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints)
             }
         } else {
             // Leaf stroke
@@ -565,7 +543,20 @@ class DrawingView @JvmOverloads constructor(
                     haloPaintToUse.strokeWidth = finalPaint.strokeWidth + haloOffset
                     canvas?.drawPath(path, haloPaintToUse)
                 }
-                
+
+                if (drawEndpoints && !twoFingerGestureOccured && !threeFingerGestureOccured) {
+                    val radius = finalPaint.strokeWidth * 2f
+                    val endpointPaint = Paint().apply {
+                        style = Paint.Style.FILL
+                        color = Color.GREEN
+                    }
+
+                    if (editingPointIndex != -1 && editingPointIndex < stroke.points.size) {
+                        val pointToHighlight = stroke.points[editingPointIndex].point
+                        canvas?.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointPaint)
+                    }
+                }
+
                 canvas?.drawPath(path, finalPaint)
             }
         }
