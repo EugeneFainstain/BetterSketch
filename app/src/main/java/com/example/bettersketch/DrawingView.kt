@@ -580,8 +580,16 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
         twoFingerGestureOccured = false
-        threeFingerGestureOccured = false
         selectionCircle = null
+
+        if (threeFingerGestureOccured) {
+            val anyStrokeHighlighted = strokes.any { it.isHighlighted }
+            if (anyStrokeHighlighted) {
+                setState(State.CHOSEN_STROKE)
+            }
+            threeFingerGestureOccured = false // Reset after checking
+        }
+
 
         when (currentState) {
             State.NORMAL_DRAWING -> {
