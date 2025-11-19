@@ -359,7 +359,7 @@ class DrawingView @JvmOverloads constructor(
             // De-highlight all strokes first.
             strokes.forEach { it.setHighlightedRecursively(false) }
 
-            val duplicatedStroke = originalStroke.newFrom() // isHighlighted should be false now.
+            val duplicatedStroke = originalStroke.newFrom() // Use newFrom() here
             val bounds = originalStroke.getBounds()
             val offsetY = -bounds.height() / 2f
             val matrix = Matrix().apply { postTranslate(0f, offsetY) }
@@ -509,30 +509,45 @@ class DrawingView @JvmOverloads constructor(
         }
 
         for ((index, s) in strokes.withIndex()) {
+            // 1. Draw Halo if highlighted
             if (s.isHighlighted) {
-                s.forEachStroke {
-                    haloPaint.strokeWidth = it.paint.strokeWidth + haloOffset
-                    drawStroke(c, it, haloPaint)
+                s.forEachStroke { childStrokeForHalo ->
+                    haloPaint.strokeWidth = childStrokeForHalo.paint.strokeWidth + haloOffset
+                    drawStroke(c, childStrokeForHalo, haloPaint)
                 }
             }
 
-            val paintToDraw = Paint(s.paint)
+            // 2. Determine dimming for the current stroke 's' (or its children if it's a group)
             val shouldDim = when (currentState) {
                 State.NORMAL_DRAWING -> false
                 State.CHOSEN_STROKE, State.STROKE_EDITING -> index != selectedStrokeIdx
             }
 
-            if (shouldDim) {
-                paintToDraw.alpha = (paintToDraw.alpha * 0.25f).toInt()
+            // 3. Draw the actual stroke(s)
+            if (s.isGroup) {
+                // If 's' is a group, iterate through its children and draw each with its own paint
+                s.forEachStroke { childStroke ->
+                    val childPaintToDraw = Paint(childStroke.paint) // Start with child's own paint
+                    if (shouldDim) {
+                        childPaintToDraw.alpha = (childPaintToDraw.alpha * 0.25f).toInt()
+                    }
+                    drawStroke(c, childStroke, childPaintToDraw) // Pass the modified child paint
+                }
+            } else {
+                // If 's' is a single stroke, draw it with its own paint
+                val paintToDraw = Paint(s.paint) // Start with stroke's own paint
+                if (shouldDim) {
+                    paintToDraw.alpha = (paintToDraw.alpha * 0.25f).toInt()
+                }
+                drawStroke(c, s, paintToDraw) // Pass the modified stroke paint
             }
 
+            // 4. Draw endpoints if in STROKE_EDITING mode
             if (currentState == State.STROKE_EDITING && index == selectedStrokeIdx) {
                 currentStroke?.let {
                     drawStrokeEndpoints(c, it)
                 }
             }
-
-            drawStroke(c, s, paintToDraw)
         }
 
         if (canvas == null) invalidate()
