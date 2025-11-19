@@ -404,7 +404,7 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    fun getSelectedStrokeCount(): Int {
+    fun getHighlightedStrokeCount(): Int {
         return strokes.count { it.isHighlighted }
     }
 

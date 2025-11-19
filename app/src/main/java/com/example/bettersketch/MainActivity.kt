@@ -153,7 +153,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         widthSlider.color = currentPaint.color
 
         val isEditing = drawingView.isEditing()
-        val selectedStrokeCount = drawingView.getSelectedStrokeCount()
+        val highlightedStrokeCount = drawingView.getHighlightedStrokeCount()
         val isCurrentStrokeGroup = drawingView.isCurrentStrokeGroup()
 
         btnUndoStrokeEdit.visibility = if (isEditing) View.VISIBLE else View.GONE
@@ -161,9 +161,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         btnDuplicateStroke.visibility = if (isEditing) View.VISIBLE else View.GONE
 
         // Show Group button if more than 1 stroke is highlighted AND the current stroke is NOT a group
-        btnGroupStrokes.visibility = if (selectedStrokeCount > 1 && !isCurrentStrokeGroup) View.VISIBLE else View.GONE
+        btnGroupStrokes.visibility = if (highlightedStrokeCount > 1 && !isCurrentStrokeGroup) View.VISIBLE else View.GONE
         // Show UnGroup button if exactly 1 stroke is highlighted AND that stroke IS a group
-        btnUnGroupStrokes.visibility = if (selectedStrokeCount == 1 && isCurrentStrokeGroup) View.VISIBLE else View.GONE
+        btnUnGroupStrokes.visibility = if (highlightedStrokeCount == 1 && isCurrentStrokeGroup) View.VISIBLE else View.GONE
     }
 
     private fun saveToGallery() {
