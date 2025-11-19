@@ -405,7 +405,7 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun drawStrokeWithEndpoints(canvas: Canvas, stroke: Stroke) {
+    private fun drawStrokeEndpoints(canvas: Canvas, stroke: Stroke) {
         if (stroke.isGroup) return
         if (stroke.points.isEmpty()) return
 
@@ -473,17 +473,19 @@ class DrawingView @JvmOverloads constructor(
                     drawStroke(c, it, haloPaint)
                 }
             }
+
             val paintToDraw = Paint(s.paint)
             if (selectedStrokeIdx != -1 && index != selectedStrokeIdx) {
                 paintToDraw.alpha = (paintToDraw.alpha * 0.25f).toInt()
             }
-            drawStroke(c, s, paintToDraw)
-        }
 
-        if (currentState == State.STROKE_EDITING) {
-            currentStroke?.let {
-                drawStrokeWithEndpoints(c, it)
+            if (currentState == State.STROKE_EDITING && index == selectedStrokeIdx) {
+                currentStroke?.let {
+                    drawStrokeEndpoints(c, it)
+                }
             }
+
+            drawStroke(c, s, paintToDraw)
         }
 
         if (canvas == null) invalidate()
