@@ -122,18 +122,18 @@ class Stroke(
     }
 
     fun deepCopy(): Stroke {
-        val newPaint = Paint(this.paint)
-        val newStroke = Stroke(newPaint, this.smoothness)
-        newStroke.totalDistance = this.totalDistance
-        newStroke.isModified = false // A new copy is not modified yet.
-        newStroke.originalStrokeWidth = this.originalStrokeWidth
-        newStroke.points.addAll(this.points.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-        // The new "original" is the current state of the source stroke.
-        newStroke.originalPoints.addAll(this.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-        newStroke.unsmoothedPoints.addAll(this.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-        this.childStrokes.forEach { child ->
-            newStroke.childStrokes.add(child.deepCopy())
-        }
+        val newStroke = Stroke(Paint(this.paint), this.smoothness)
+        newStroke.copyFrom(this) // Use copyFrom to transfer all properties
+
+        // For a duplicated stroke, its 'originalPoints' (for its own undo history)
+        // should be the state it had when it was duplicated, which is its current unsmoothedPoints.
+        newStroke.originalPoints.clear()
+        newStroke.originalPoints.addAll(newStroke.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+
+        newStroke.isModified = false // A new copy starts as unmodified
+        newStroke.originalStrokeWidth = newStroke.paint.strokeWidth // Set original width to its current width
+        newStroke.isHighlighted = false // A new copy should not be highlighted by default
+
         return newStroke
     }
 
