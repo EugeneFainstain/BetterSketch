@@ -693,7 +693,10 @@ class DrawingView @JvmOverloads constructor(
                             val initialHeight = bounds.height()
 
                             val totalDx = event.x - initialTouchX
-                            val totalDy = event.y - initialTouchY
+                            var totalDy = event.y - initialTouchY
+
+                            if( initialTouchY > centerY )
+                                totalDy = -totalDy
 
                             val matrix = Matrix()
                             matrix.postTranslate(totalDx, 0f) // Horizontal translation
