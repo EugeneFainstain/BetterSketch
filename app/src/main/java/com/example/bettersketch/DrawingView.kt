@@ -500,11 +500,9 @@ class DrawingView @JvmOverloads constructor(
         if (applyToSelected) {
             val w = max(1f, min(120f, px))
             val selectedStroke = currentStroke // Capture currentStroke in a local variable
-            if (selectedStroke != null && !selectedStroke.isGroup) { // Add check for isGroup
-                selectedStroke.forEachStroke {
-                    it.isModified = true
-                    it.paint.strokeWidth = w
-                }
+            if (selectedStroke != null) {
+                selectedStroke.isModified = true
+                selectedStroke.paint.strokeWidth = w
                 redrawHistory()
             }
         }
