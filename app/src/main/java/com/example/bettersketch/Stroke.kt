@@ -30,7 +30,7 @@ class Stroke(
     }
 
     // Constructor for grouping existing strokes
-    constructor(strokesToGroup: MutableList<Stroke>) : this(Paint(), 0) {
+    constructor(strokesToGroup: MutableList<Stroke>, paint: Paint) : this(Paint(paint), 0) {
         this.childStrokes.addAll(strokesToGroup)
         this.paint.strokeWidth = 10f;
     }

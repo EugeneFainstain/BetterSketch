@@ -377,7 +377,7 @@ class DrawingView @JvmOverloads constructor(
     fun groupSelectedStrokes() {
         val highlightedStrokes = strokes.filter { it.isHighlighted }
         if (highlightedStrokes.size > 1) {
-            val newGroup = Stroke(highlightedStrokes.toMutableList())
+            val newGroup = Stroke(highlightedStrokes.toMutableList(), defaultPaint())
             strokes.removeAll(highlightedStrokes)
             strokes.add(newGroup)
             selectedStrokeIdx = strokes.lastIndex
