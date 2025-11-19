@@ -610,6 +610,7 @@ class DrawingView @JvmOverloads constructor(
                     currentStroke?.let {
                         if (it.isGroup) {
                             backedUpGroupStroke = it.newFrom()
+                            backedUpGroupStroke?.setHighlightedRecursively(true)
                             initialTouchX = event.x
                             initialTouchY = event.y
                         }
