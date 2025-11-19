@@ -31,11 +31,9 @@ class Stroke(
     }
 
     // Constructor for grouping existing strokes
-    constructor(strokesToGroup: MutableList<Stroke>) : this(strokesToGroup.first().paint, strokesToGroup.first().smoothness) {
+    constructor(strokesToGroup: MutableList<Stroke>) : this(Paint(), 0) {
         this.childStrokes.addAll(strokesToGroup)
-        // A group stroke itself doesn't have points, it delegates to its children.
-        // However, we need to ensure its paint and smoothness are initialized,
-        // so we take them from the first stroke in the group.
+        this.paint.strokeWidth = 10f;
     }
 
     fun addPoint(newPoint: PointF) {
