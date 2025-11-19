@@ -6,6 +6,8 @@ import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.withSave
 import kotlin.math.*
 
 interface DrawingViewListener {
@@ -44,7 +46,7 @@ class DrawingView @JvmOverloads constructor(
 
     // Stroke in progress
     private var strokeInProgress: Stroke? = null
-    var currentPaint = defaultPaint(Color.BLACK, 12f)
+    var currentPaint = defaultPaint()
     var currentSmoothness: Int = 0
 
     // Data
@@ -57,7 +59,7 @@ class DrawingView @JvmOverloads constructor(
     private var twoFingerGestureOccured = false
     private var threeFingerGestureOccured = false
 
-    private val customGestureDetector: CustomGestureDetector
+    private val customGestureDetector = CustomGestureDetector(context, this)
     private val haloPaint: Paint
     private val haloOffset: Float
     private val selectionPaint: Paint
@@ -65,7 +67,6 @@ class DrawingView @JvmOverloads constructor(
 
 
     init {
-        customGestureDetector = CustomGestureDetector(context, this)
         haloOffset = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 16f, context.resources.displayMetrics)
         haloPaint = Paint().apply {
             isAntiAlias = true
@@ -121,7 +122,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun exportBitmap(): Bitmap {
-        val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bmp = createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         // Temporarily set to normal drawing to export all strokes as opaque
         val oldState = currentState
@@ -135,7 +136,7 @@ class DrawingView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         if (w > 0 && h > 0) {
             if (backingBitmap == null || w != backingBitmap!!.width || h != backingBitmap!!.height) {
-                backingBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                backingBitmap = createBitmap(w, h, Bitmap.Config.ARGB_8888)
                 backingCanvas = Canvas(backingBitmap!!)
             }
             redrawHistory()
@@ -147,26 +148,29 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.save()
+        canvas.withSave {
+            // 1. Draw the pre-rendered history from the bitmap
+            backingBitmap?.let { drawBitmap(it, 0f, 0f, null) }
 
-        // 1. Draw the pre-rendered history from the bitmap
-        backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
+            // 2. Draw the "live" part (the new stroke being created) on top.
+            if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
+                drawStroke(this, strokeInProgress!!)
+            }
 
-        // 2. Draw the "live" part (the new stroke being created) on top.
-        if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
-            drawStroke(canvas, strokeInProgress!!)
+            selectionCircle?.let {
+                drawPath(it.third, selectionPaint)
+            }
         }
-
-        selectionCircle?.let {
-            canvas.drawPath(it.third, selectionPaint)
-        }
-
-        canvas.restore()
     }
 
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         customGestureDetector.onTouchEvent(event)
+        return true
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
         return true
     }
 
@@ -259,8 +263,8 @@ class DrawingView @JvmOverloads constructor(
         return sqrt(dx * dx + dy * dy)
     }
 
-    private fun setStrokeHighlighted(stroke: Stroke?, highlighted: Boolean) {
-        stroke?.setHighlightedRecursively(highlighted)
+    private fun setStrokeHighlighted(stroke: Stroke?) {
+        stroke?.setHighlightedRecursively(true)
     }
 
     private fun selectStrokeAt(tapPoint: PointF): Boolean {
@@ -284,7 +288,7 @@ class DrawingView @JvmOverloads constructor(
 
         if (closestStrokeIndex != -1) {
             selectedStrokeIdx = closestStrokeIndex
-            setStrokeHighlighted(currentStroke, true)
+            setStrokeHighlighted(currentStroke)
             currentPaint = Paint(strokes[closestStrokeIndex].paint)
             return true
         }
@@ -361,10 +365,6 @@ class DrawingView @JvmOverloads constructor(
             redrawHistory()
             listener?.onStateChanged()
         }
-    }
-
-    fun getStrokeColors(): IntArray {
-        return strokes.map { it.paint.color }.toIntArray()
     }
 
     private fun moveEditingPoint(dx: Float, dy: Float) {
@@ -454,12 +454,6 @@ class DrawingView @JvmOverloads constructor(
         listener?.onStateChanged()
     }
 
-    fun clearAll() {
-        strokes.clear()
-        selectedStrokeIdx = -1
-        setState(State.NORMAL_DRAWING)
-    }
-
     private fun redrawHistory(canvas: Canvas? = null) {
         val c = canvas ?: backingCanvas ?: return
         if (canvas == null) {
@@ -502,17 +496,18 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun defaultPaint(_color: Int, _widthPx: Float) = Paint().apply {
+    private fun defaultPaint() = Paint().apply {
         isAntiAlias = true
         isDither = true
         style = Paint.Style.STROKE
         strokeJoin = Paint.Join.ROUND
         strokeCap = Paint.Cap.ROUND
-        color = _color
-        strokeWidth = _widthPx
+        color = Color.BLACK
+        strokeWidth = 12f
     }
 
     override fun onSingleTapEnd(event: MotionEvent): Boolean {
+        performClick()
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 if (selectStrokeAt(PointF(event.x, event.y))) {
@@ -648,7 +643,6 @@ class DrawingView @JvmOverloads constructor(
         var maxDist = 0f
         var pt1 = p1
         var pt2 = p2
-        var pt3 = p3
 
         for (i in 0..2) {
             for (j in i + 1..2) {
@@ -660,7 +654,7 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
         }
-        pt3 = points.first { it != pt1 && it != pt2 }
+        val pt3 = points.first { it != pt1 && it != pt2 }
 
         val midPoint = PointF((pt1.x + pt2.x) / 2, (pt1.y + pt2.y) / 2)
         val center = PointF((midPoint.x * 2/3) + (pt3.x * 1/3), (midPoint.y * 2/3) + (pt3.y * 1/3))
