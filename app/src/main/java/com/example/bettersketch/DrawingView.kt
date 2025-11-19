@@ -668,7 +668,14 @@ class DrawingView @JvmOverloads constructor(
             State.STROKE_EDITING -> {
                 moveEditingPoint(dx, dy)
             }
-            else -> {}
+            State.CHOSEN_STROKE -> {
+                currentStroke?.let {
+                    if (it.isGroup) {
+                        val deltaMatrix = Matrix().apply { postTranslate(dx, dy) }
+                        transformStroke(it, deltaMatrix, isGlobalTransform = false)
+                    }
+                }
+            }
         }
         return true
     }
