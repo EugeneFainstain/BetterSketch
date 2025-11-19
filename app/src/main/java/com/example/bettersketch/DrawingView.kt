@@ -157,7 +157,7 @@ class DrawingView @JvmOverloads constructor(
 
             // 2. Draw the "live" part (the new stroke being created) on top.
             if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
-                drawStroke(this, strokeInProgress!!)
+                drawStroke(this, strokeInProgress!!, null, 1.0f)
             }
 
             selectionCircle?.let {
@@ -519,38 +519,19 @@ class DrawingView @JvmOverloads constructor(
         }
 
         for ((index, s) in strokes.withIndex()) {
-            // 1. Draw Halo if highlighted
-            if (s.isHighlighted) {
-                s.forEachStroke { childStrokeForHalo ->
-                    haloPaint.strokeWidth = childStrokeForHalo.paint.strokeWidth + haloOffset
-                    drawStroke(c, childStrokeForHalo, haloPaint)
-                }
-            }
-
             // 2. Determine dimming for the current stroke 's' (or its children if it's a group)
             val shouldDim = when (currentState) {
                 State.NORMAL_DRAWING -> false
                 State.CHOSEN_STROKE, State.STROKE_EDITING -> index != selectedStrokeIdx
             }
 
-            // 3. Draw the actual stroke(s)
-            if (s.isGroup) {
-                // If 's' is a group, iterate through its children and draw each with its own paint
-                s.forEachStroke { childStroke ->
-                    val childPaintToDraw = Paint(childStroke.paint) // Start with child's own paint
-                    if (shouldDim) {
-                        childPaintToDraw.alpha = (childPaintToDraw.alpha * 0.25f).toInt()
-                    }
-                    drawStroke(c, childStroke, childPaintToDraw) // Pass the modified child paint
-                }
-            } else {
-                // If 's' is a single stroke, draw it with its own paint
-                val paintToDraw = Paint(s.paint) // Start with stroke's own paint
-                if (shouldDim) {
-                    paintToDraw.alpha = (paintToDraw.alpha * 0.25f).toInt()
-                }
-                drawStroke(c, s, paintToDraw) // Pass the modified stroke paint
+            val paintForTopLevelStroke = Paint(s.paint)
+            if (shouldDim) {
+                paintForTopLevelStroke.alpha = (paintForTopLevelStroke.alpha * 0.25f).toInt()
             }
+
+            // 3. Draw the actual stroke(s) and its halo if highlighted
+            drawStroke(c, s, paintForTopLevelStroke, 1.0f)
 
             // 4. Draw endpoints if in STROKE_EDITING mode
             if (currentState == State.STROKE_EDITING && index == selectedStrokeIdx) {
@@ -563,15 +544,36 @@ class DrawingView @JvmOverloads constructor(
         if (canvas == null) invalidate()
     }
 
-    private fun drawStroke(canvas: Canvas?, stroke: Stroke, paint: Paint? = null) {
-        stroke.forEachStroke { s ->
-            if (s.points.size >= 2) {
+    private fun drawStroke(canvas: Canvas?, stroke: Stroke, parentPaint: Paint? = null, currentTotalWidthMultiplier: Float = 1.0f) {
+        if (stroke.isGroup) {
+            val groupThicknessMultiplier = stroke.paint.strokeWidth / 10f
+            val newTotalWidthMultiplier = currentTotalWidthMultiplier * groupThicknessMultiplier
+
+            val groupPaint = parentPaint ?: Paint(stroke.paint)
+
+            stroke.childStrokes.forEach { childStroke ->
+                drawStroke(canvas, childStroke, groupPaint, newTotalWidthMultiplier)
+            }
+        } else {
+            // Leaf stroke
+            if (stroke.points.size >= 2) {
                 val path = Path()
-                path.moveTo(s.points.first().point.x, s.points.first().point.y)
-                for (i in 1 until s.points.size) {
-                    path.lineTo(s.points[i].point.x, s.points[i].point.y)
+                path.moveTo(stroke.points.first().point.x, stroke.points.first().point.y)
+                for (i in 1 until stroke.points.size) {
+                    path.lineTo(stroke.points[i].point.x, stroke.points[i].point.y)
                 }
-                canvas?.drawPath(path, paint ?: s.paint)
+
+                val leafPaint = parentPaint ?: Paint(stroke.paint)
+                leafPaint.strokeWidth = stroke.paint.strokeWidth * currentTotalWidthMultiplier
+
+                // Draw Halo if highlighted
+                if (stroke.isHighlighted) {
+                    val haloPaintToUse = Paint(haloPaint)
+                    haloPaintToUse.strokeWidth = leafPaint.strokeWidth + haloOffset
+                    canvas?.drawPath(path, haloPaintToUse)
+                }
+                
+                canvas?.drawPath(path, leafPaint)
             }
         }
     }
