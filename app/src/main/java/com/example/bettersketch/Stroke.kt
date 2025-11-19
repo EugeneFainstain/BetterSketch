@@ -121,39 +121,43 @@ class Stroke(
         return bounds
     }
 
-    fun deepCopy(): Stroke {
+    fun newFrom(): Stroke {
         val newStroke = Stroke(Paint(this.paint), this.smoothness)
-        newStroke.copyFrom(this) // Use copyFrom to transfer all properties
-
-        // For a duplicated stroke, its 'originalPoints' (for its own undo history)
-        // should be the state it had when it was duplicated, which is its current unsmoothedPoints.
-        newStroke.originalPoints.clear()
-        newStroke.originalPoints.addAll(newStroke.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-
-        newStroke.isModified = false // A new copy starts as unmodified
-        newStroke.originalStrokeWidth = newStroke.paint.strokeWidth // Set original width to its current width
-        newStroke.isHighlighted = false // A new copy should not be highlighted by default
-
+        newStroke.copyFrom(this, forDuplication = true) // Use copyFrom with forDuplication flag
         return newStroke
     }
 
-    fun copyFrom(other: Stroke) {
+    fun copyFrom(other: Stroke, forDuplication: Boolean = false) {
         this.paint.set(other.paint)
         this.smoothness = other.smoothness
         this.points.clear()
         this.points.addAll(other.points.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-        this.originalPoints.clear()
-        this.originalPoints.addAll(other.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+
         this.unsmoothedPoints.clear()
         this.unsmoothedPoints.addAll(other.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+
         this.totalDistance = other.totalDistance
-        this.isModified = other.isModified
-        this.originalStrokeWidth = other.originalStrokeWidth
+
+        if (forDuplication) {
+            // For duplication, the new stroke's originalPoints should be its current unsmoothedPoints
+            this.originalPoints.clear()
+            this.originalPoints.addAll(this.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+            this.isModified = false
+            this.originalStrokeWidth = this.paint.strokeWidth // New original width is its current width
+            this.isHighlighted = false // New copy is not highlighted by default
+        } else {
+            // For regular copy (e.g., restoring from backup), copy originalPoints and other flags as is
+            this.originalPoints.clear()
+            this.originalPoints.addAll(other.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+            this.isModified = other.isModified
+            this.originalStrokeWidth = other.originalStrokeWidth
+            this.isHighlighted = other.isHighlighted
+        }
+
         this.childStrokes.clear()
         other.childStrokes.forEach { child ->
-            this.childStrokes.add(child.deepCopy())
+            this.childStrokes.add(child.newFrom()) // Child strokes still need deep copies
         }
-        this.isHighlighted = other.isHighlighted
     }
 
     companion object {

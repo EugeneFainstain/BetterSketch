@@ -359,7 +359,7 @@ class DrawingView @JvmOverloads constructor(
             // De-highlight all strokes first.
             strokes.forEach { it.setHighlightedRecursively(false) }
 
-            val duplicatedStroke = originalStroke.deepCopy() // isHighlighted should be false now.
+            val duplicatedStroke = originalStroke.newFrom() // isHighlighted should be false now.
             val bounds = originalStroke.getBounds()
             val offsetY = -bounds.height() / 2f
             val matrix = Matrix().apply { postTranslate(0f, offsetY) }
@@ -594,7 +594,7 @@ class DrawingView @JvmOverloads constructor(
                 } else {
                     currentStroke?.let {
                         if (it.isGroup) {
-                            backedUpGroupStroke = it.deepCopy()
+                            backedUpGroupStroke = it.newFrom()
                             initialTouchX = event.x
                             initialTouchY = event.y
                         }
