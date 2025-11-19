@@ -353,14 +353,20 @@ class DrawingView @JvmOverloads constructor(
 
     fun duplicateCurrentStroke() {
         currentStroke?.let { originalStroke ->
-            val duplicatedStroke = originalStroke.deepCopy()
+            // De-highlight all strokes first.
+            strokes.forEach { it.setHighlightedRecursively(false) }
+
+            val duplicatedStroke = originalStroke.deepCopy() // isHighlighted should be false now.
             val bounds = originalStroke.getBounds()
             val offsetY = -bounds.height() / 2f
             val matrix = Matrix().apply { postTranslate(0f, offsetY) }
             transformStroke(duplicatedStroke, matrix, isGlobalTransform = true)
 
+            duplicatedStroke.setHighlightedRecursively(true) // Highlight the new one.
+
             strokes.add(duplicatedStroke)
             selectedStrokeIdx = strokes.lastIndex
+
             setState(State.CHOSEN_STROKE)
             redrawHistory()
             listener?.onStateChanged()

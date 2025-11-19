@@ -117,10 +117,11 @@ class Stroke(
         val newPaint = Paint(this.paint)
         val newStroke = Stroke(newPaint, this.smoothness)
         newStroke.totalDistance = this.totalDistance
-        newStroke.isModified = this.isModified
+        newStroke.isModified = false // A new copy is not modified yet.
         newStroke.originalStrokeWidth = this.originalStrokeWidth
         newStroke.points.addAll(this.points.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-        newStroke.originalPoints.addAll(this.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        // The new "original" is the current state of the source stroke.
+        newStroke.originalPoints.addAll(this.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
         newStroke.unsmoothedPoints.addAll(this.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
         this.childStrokes.forEach { child ->
             newStroke.childStrokes.add(child.deepCopy())
