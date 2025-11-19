@@ -373,6 +373,24 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
+    fun groupSelectedStrokes() {
+        val highlightedStrokes = strokes.filter { it.isHighlighted }
+        if (highlightedStrokes.size > 1) {
+            val newGroup = Stroke(highlightedStrokes.toMutableList())
+            strokes.removeAll(highlightedStrokes)
+            strokes.add(newGroup)
+            selectedStrokeIdx = strokes.lastIndex
+            newGroup.setHighlightedRecursively(true)
+            setState(State.CHOSEN_STROKE)
+            redrawHistory()
+            listener?.onStateChanged()
+        }
+    }
+
+    fun getSelectedStrokeCount(): Int {
+        return strokes.count { it.isHighlighted }
+    }
+
     private fun moveEditingPoint(dx: Float, dy: Float) {
         currentStroke?.isModified = true
         currentStroke?.let { stroke ->

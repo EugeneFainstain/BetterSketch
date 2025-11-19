@@ -115,6 +115,16 @@
             android:visibility="gone" />
 
         <Button
+            android:id="@+id/btnGroupStrokes"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="24dp"
+            android:backgroundTint="@android:color/holo_orange_light"
+            android:text="Group"
+            android:visibility="gone" />
+
+        <Button
             android:id="@+id/btnDuplicateStroke"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

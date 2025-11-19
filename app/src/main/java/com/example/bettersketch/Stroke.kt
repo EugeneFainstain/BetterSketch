@@ -30,6 +30,14 @@ class Stroke(
         applySmoothing() // Apply smoothing to generate 'points' from 'unsmoothedPoints'
     }
 
+    // Constructor for grouping existing strokes
+    constructor(strokesToGroup: MutableList<Stroke>) : this(strokesToGroup.first().paint, strokesToGroup.first().smoothness) {
+        this.childStrokes.addAll(strokesToGroup)
+        // A group stroke itself doesn't have points, it delegates to its children.
+        // However, we need to ensure its paint and smoothness are initialized,
+        // so we take them from the first stroke in the group.
+    }
+
     fun addPoint(newPoint: PointF) {
         val lastUnsmoothedPoint = unsmoothedPoints.lastOrNull()?.point
         val currentSegmentDistance = if (lastUnsmoothedPoint != null) {
