@@ -477,8 +477,7 @@ class DrawingView @JvmOverloads constructor(
             val paintToDraw = Paint(s.paint)
             val shouldDim = when (currentState) {
                 State.NORMAL_DRAWING -> false
-                State.CHOSEN_STROKE -> !s.isHighlighted
-                State.STROKE_EDITING -> index != selectedStrokeIdx
+                State.CHOSEN_STROKE, State.STROKE_EDITING -> index != selectedStrokeIdx
             }
 
             if (shouldDim) {
