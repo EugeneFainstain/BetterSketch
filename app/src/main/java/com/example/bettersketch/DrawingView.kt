@@ -520,6 +520,7 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
             State.CHOSEN_STROKE, State.STROKE_EDITING -> {
+                strokes.forEach { it.setHighlightedRecursively(false) }
                 exitEditingMode()
             }
         }
@@ -566,15 +567,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onThirdFingerDown(event: MotionEvent): Boolean {
-        if (strokeInProgress != null && strokeInProgress!!.points.isNotEmpty()) {
-            if (strokeInProgress!!.points.size > 5) {
-                commitStrokeInProgress()
-            } else {
-                strokeInProgress = null
-            }
-        }
         threeFingerGestureOccured = true
-        redrawHistory()
         return true
     }
 
@@ -681,33 +674,25 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
-        if (currentState == State.NORMAL_DRAWING) {
-            if (event.pointerCount >= 3) {
-                val p1 = PointF(event.getX(0), event.getY(0))
-                val p2 = PointF(event.getX(1), event.getY(1))
-                val p3 = PointF(event.getX(2), event.getY(2))
+        if (event.pointerCount >= 3) {
+            val p1 = PointF(event.getX(0), event.getY(0))
+            val p2 = PointF(event.getX(1), event.getY(1))
+            val p3 = PointF(event.getX(2), event.getY(2))
 
-                selectionCircle = calculateCircle(p1, p2, p3)
-                selectionCircle?.let { (center, radius, _) ->
-                    strokes.forEach { stroke ->
-                        var strokeInCircle = false
-                        stroke.forEachStroke { s ->
-                            if (s.points.any { isPointInCircle(it.point, center, radius) }) {
-                                strokeInCircle = true
-                            }
+            selectionCircle = calculateCircle(p1, p2, p3)
+            selectionCircle?.let { (center, radius, _) ->
+                strokes.forEach { stroke ->
+                    var strokeInCircle = false
+                    stroke.forEachStroke { s ->
+                        if (s.points.any { isPointInCircle(it.point, center, radius) }) {
+                            strokeInCircle = true
                         }
-                        stroke.setHighlightedRecursively(strokeInCircle)
                     }
+
+                    stroke.setHighlightedRecursively(strokeInCircle || (stroke == currentStroke))
                 }
-                redrawHistory()
             }
-        } else {
-            val deltaMatrix = Matrix()
-            val mid = midpoint(event)
-            deltaMatrix.postTranslate(dx, dy)
-            deltaMatrix.postScale(scale, scale, mid.x, mid.y)
-            deltaMatrix.postRotate(rotate, mid.x, mid.y)
-            transformAllStrokes(deltaMatrix) // Canvas transformation
+            redrawHistory()
         }
         return true
     }
