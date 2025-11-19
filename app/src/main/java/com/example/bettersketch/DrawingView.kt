@@ -475,7 +475,13 @@ class DrawingView @JvmOverloads constructor(
             }
 
             val paintToDraw = Paint(s.paint)
-            if (selectedStrokeIdx != -1 && index != selectedStrokeIdx) {
+            val shouldDim = when (currentState) {
+                State.NORMAL_DRAWING -> false
+                State.CHOSEN_STROKE -> !s.isHighlighted
+                State.STROKE_EDITING -> index != selectedStrokeIdx
+            }
+
+            if (shouldDim) {
                 paintToDraw.alpha = (paintToDraw.alpha * 0.25f).toInt()
             }
 
