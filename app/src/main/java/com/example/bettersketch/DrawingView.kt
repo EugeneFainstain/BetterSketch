@@ -116,7 +116,6 @@ class DrawingView @JvmOverloads constructor(
             it.unsmoothedPoints.clear()
             it.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             it.totalDistance = newTotalDistance
-            it.paint.strokeWidth = it.originalStrokeWidth
             it.applySmoothing()
             it.isModified = false
         }
@@ -182,7 +181,6 @@ class DrawingView @JvmOverloads constructor(
         stroke.forEachStroke { s ->
             if (isGlobalTransform) {
                 s.paint.strokeWidth *= scale
-                s.originalStrokeWidth *= scale
                 s.totalDistance *= scale
 
                 val transformPoint = { pathPoint: PathPoint ->

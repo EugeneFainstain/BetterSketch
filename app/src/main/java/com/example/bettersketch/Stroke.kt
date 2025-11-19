@@ -16,7 +16,6 @@ class Stroke(
     val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
     var totalDistance: Float = 0f
     var isModified: Boolean = false
-    var originalStrokeWidth: Float = paint.strokeWidth // Store original stroke width
     val childStrokes: MutableList<Stroke> = mutableListOf()
     val isGroup: Boolean get() = childStrokes.isNotEmpty()
     var isHighlighted: Boolean = false
@@ -141,14 +140,12 @@ class Stroke(
             this.originalPoints.clear()
             this.originalPoints.addAll(this.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
             this.isModified = false
-            this.originalStrokeWidth = this.paint.strokeWidth // New original width is its current width
             this.isHighlighted = false // New copy is not highlighted by default
         } else {
             // For regular copy (e.g., restoring from backup), copy originalPoints and other flags as is
             this.originalPoints.clear()
             this.originalPoints.addAll(other.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
             this.isModified = other.isModified
-            this.originalStrokeWidth = other.originalStrokeWidth
             this.isHighlighted = other.isHighlighted
         }
 
