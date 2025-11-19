@@ -671,8 +671,20 @@ class DrawingView @JvmOverloads constructor(
             State.CHOSEN_STROKE -> {
                 currentStroke?.let {
                     if (it.isGroup) {
-                        val deltaMatrix = Matrix().apply { postTranslate(dx, dy) }
-                        transformStroke(it, deltaMatrix, isGlobalTransform = false)
+                        val bounds = it.getBounds()
+                        val centerX = bounds.centerX()
+                        val centerY = bounds.centerY()
+                        val initialHeight = bounds.height()
+
+                        val matrix = Matrix()
+                        matrix.postTranslate(dx, 0f) // Horizontal translation
+
+                        if (initialHeight != 0f) {
+                            val newHeight = initialHeight - dy
+                            val scaleY = newHeight / initialHeight
+                            matrix.postScale(1.0f, scaleY, centerX, centerY) // Vertical scaling around center
+                        }
+                        transformStroke(it, matrix, isGlobalTransform = false)
                     }
                 }
             }
