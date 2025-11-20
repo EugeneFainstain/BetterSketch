@@ -15,8 +15,9 @@ interface DrawingViewListener {
 }
 
 sealed class ShapeFitResult {
-    data class Square(val fitResult: SquareFitter.FitResult) : ShapeFitResult()
-    data class Circle(val fitResult: CircleFitter.FitResult) : ShapeFitResult()
+    abstract val originalStroke: Stroke
+    data class Square(override val originalStroke: Stroke, val fitResult: SquareFitter.FitResult) : ShapeFitResult()
+    data class Circle(override val originalStroke: Stroke, val fitResult: CircleFitter.FitResult) : ShapeFitResult()
 }
 
 interface ShapeDetectionListener {
@@ -266,33 +267,37 @@ class DrawingView @JvmOverloads constructor(
             selectedStrokeIdx = -1
             setState(State.NORMAL_DRAWING)
 
-            SquareFitter.strokeForFitting = newStroke
-            val squareFit = SquareFitter.fitSquare(qualityThreshold = 0.2f)
-            CircleFitter.strokeForFitting = newStroke
-            val circleFit = CircleFitter.fitCircle(qualityThreshold = 0.2f)
+            detectShape(newStroke)
+        }
+    }
 
-            circleFit?.normalizedError /= 2f // Why?!!!!
+    private fun detectShape(stroke: Stroke) {
+        if (stroke.isGroup) return
 
-            if (squareFit != null && circleFit != null) {
-                if (squareFit.normalizedError < circleFit.normalizedError) {
-                    shapeDetectionListener?.onShapeDetected(ShapeFitResult.Square(squareFit))
-                } else {
-                    shapeDetectionListener?.onShapeDetected(ShapeFitResult.Circle(circleFit))
-                }
-            } else if (squareFit != null) {
-                shapeDetectionListener?.onShapeDetected(ShapeFitResult.Square(squareFit))
-            } else if (circleFit != null) {
-                shapeDetectionListener?.onShapeDetected(ShapeFitResult.Circle(circleFit))
+        SquareFitter.strokeForFitting = stroke
+        val squareFit = SquareFitter.fitSquare(qualityThreshold = 0.2f)
+        CircleFitter.strokeForFitting = stroke
+        val circleFit = CircleFitter.fitCircle(qualityThreshold = 0.2f)
+
+        if (squareFit != null && circleFit != null) {
+            if (squareFit.normalizedError < circleFit.normalizedError) {
+                shapeDetectionListener?.onShapeDetected(ShapeFitResult.Square(stroke, squareFit))
+            } else {
+                shapeDetectionListener?.onShapeDetected(ShapeFitResult.Circle(stroke, circleFit))
             }
+        } else if (squareFit != null) {
+            shapeDetectionListener?.onShapeDetected(ShapeFitResult.Square(stroke, squareFit))
+        } else if (circleFit != null) {
+            shapeDetectionListener?.onShapeDetected(ShapeFitResult.Circle(stroke, circleFit))
         }
     }
 
     fun replaceWithShape(originalStroke: Stroke, fittedStroke: Stroke) {
-//        val index = strokes.indexOf(originalStroke)
-  //      if (index != -1) {
-    //        strokes[index] = fittedStroke
-      //  }
-        strokes.add(fittedStroke)
+        val index = strokes.indexOf(originalStroke)
+        if (index != -1) {
+            strokes[index] = fittedStroke
+        }
+//        strokes.add(fittedStroke)
         redrawHistory()
     }
 
@@ -327,8 +332,14 @@ class DrawingView @JvmOverloads constructor(
 
         if (closestStrokeIndex != -1) {
             selectedStrokeIdx = closestStrokeIndex
-            setStrokeHighlighted(currentStroke)
-            currentPaint = Paint(strokes[closestStrokeIndex].paint)
+            val selected = currentStroke
+            if (selected != null) {
+                setStrokeHighlighted(selected)
+                currentPaint = Paint(selected.paint)
+                if (!selected.isGroup) {
+                    detectShape(selected)
+                }
+            }
             return true
         }
         return false
