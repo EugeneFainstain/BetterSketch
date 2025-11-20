@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">BetterSketch8</string>
-    <string name="square">Square</string>
     <string name="drawing">DRAWING</string>
     <string name="del">DEL</string>
     <string name="undo">Undo</string>

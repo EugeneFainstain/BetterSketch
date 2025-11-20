@@ -18,7 +18,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnDuplicateStroke: Button
     private lateinit var btnGroupStrokes: Button
     private lateinit var btnUnGroupStrokes: Button
-    private lateinit var btnSquare: Button
+    private lateinit var btnShape: Button
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -53,7 +53,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnDuplicateStroke = findViewById(R.id.btnDuplicateStroke)
         btnGroupStrokes = findViewById(R.id.btnGroupStrokes)
         btnUnGroupStrokes = findViewById(R.id.btnUnGroupStrokes)
-        btnSquare = findViewById(R.id.btnSquare)
+        btnShape = findViewById(R.id.btnShape)
 
         setupSliderListeners()
 
@@ -143,11 +143,11 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             }
         }
 
-        btnSquare.text = "${String.format("%.2f", percentage)}% $shapeName"
-        btnSquare.visibility = View.VISIBLE
-        btnSquare.setOnClickListener {
+        btnShape.text = "${String.format("%.2f", percentage)}% $shapeName"
+        btnShape.visibility = View.VISIBLE
+        btnShape.setOnClickListener {
             drawingView.replaceWithShape(drawingView.strokes.last(), fittedStroke)
-            btnSquare.visibility = View.GONE
+            btnShape.visibility = View.GONE
         }
     }
 

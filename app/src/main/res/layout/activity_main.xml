@@ -41,17 +41,17 @@
         </LinearLayout>
 
         <Button
-            android:id="@+id/btnSquare"
+            android:id="@+id/btnShape"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="top|center_horizontal"
-            android:text="@string/square"
+            android:text="Shape?"
             android:visibility="gone"
             tools:visibility="visible" />
 
         <Button
             android:id="@+id/btnClear"
-            android:layout_width="wrap_content"
+            android:layout_width="73dp"
             android:layout_height="wrap_content"
             android:layout_gravity="top|start"
             android:layout_marginTop="-2dp"
