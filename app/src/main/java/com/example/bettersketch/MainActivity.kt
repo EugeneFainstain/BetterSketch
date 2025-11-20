@@ -63,8 +63,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             drawingView.deleteCurrentStroke()
         }
 
-        findViewById<View>(R.id.btnToggleMode).visibility = View.GONE
-
         btnUndoStrokeEdit.setOnClickListener {
             drawingView.undoStrokeModifications()
         }
