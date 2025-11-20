@@ -55,8 +55,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnUnGroupStrokes = findViewById(R.id.btnUnGroupStrokes)
         btnSquare = findViewById(R.id.btnSquare)
 
-        findViewById<View>(R.id.seekProgress).visibility = View.GONE
-
         setupSliderListeners()
 
         findViewById<Button>(R.id.btnClear).setOnClickListener {
