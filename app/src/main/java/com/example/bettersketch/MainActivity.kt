@@ -132,23 +132,31 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     }
 
     override fun onShapeDetected(shapeFitResult: ShapeFitResult) {
-        val (percentage, shapeName, fittedStroke) = when (shapeFitResult) {
+        val (percentage, shapeName, fittedStroke, error) = when (shapeFitResult) {
             is ShapeFitResult.Square -> {
                 val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
-                Triple(p, "Square", shapeFitResult.fitResult.fittedStroke)
+                Quad(p, "Square", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
             }
             is ShapeFitResult.Circle -> {
                 val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
-                Triple(p, "Circle", shapeFitResult.fitResult.fittedStroke)
+                Quad(p, "Circle", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
             }
         }
 
-        btnShape.text = "${String.format("%.2f", percentage)}% $shapeName"
-        btnShape.visibility = View.VISIBLE
-        btnShape.setOnClickListener {
-            drawingView.replaceWithShape(shapeFitResult.originalStroke, fittedStroke)
+        if (error > 0.2f) {
             btnShape.visibility = View.GONE
+        } else {
+            btnShape.text = "${String.format("%.2f", percentage)}% $shapeName"
+            btnShape.visibility = View.VISIBLE
+            btnShape.setOnClickListener {
+                drawingView.replaceWithShape(shapeFitResult.originalStroke, fittedStroke)
+                btnShape.visibility = View.GONE
+            }
         }
+    }
+
+    override fun onNoShapeDetected() {
+        btnShape.visibility = View.GONE
     }
 
     private fun updateUi() {
@@ -176,5 +184,11 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnGroupStrokes.visibility = if (highlightedStrokeCount > 1 && !isCurrentStrokeGroup) View.VISIBLE else View.GONE
         // Show UnGroup button if exactly 1 stroke is highlighted AND that stroke IS a group
         btnUnGroupStrokes.visibility = if (highlightedStrokeCount == 1 && isCurrentStrokeGroup) View.VISIBLE else View.GONE
+
+        if (highlightedStrokeCount != 1) {
+            btnShape.visibility = View.GONE
+        }
     }
 }
+
+data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)

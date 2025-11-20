@@ -22,6 +22,7 @@ sealed class ShapeFitResult {
 
 interface ShapeDetectionListener {
     fun onShapeDetected(shapeFitResult: ShapeFitResult)
+    fun onNoShapeDetected()
 }
 
 private enum class State {
@@ -272,7 +273,10 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun detectShape(stroke: Stroke) {
-        if (stroke.isGroup) return
+        if (stroke.isGroup) {
+            shapeDetectionListener?.onNoShapeDetected()
+            return
+        }
 
         SquareFitter.strokeForFitting = stroke
         val squareFit = SquareFitter.fitSquare(qualityThreshold = 0.2f)
@@ -289,6 +293,8 @@ class DrawingView @JvmOverloads constructor(
             shapeDetectionListener?.onShapeDetected(ShapeFitResult.Square(stroke, squareFit))
         } else if (circleFit != null) {
             shapeDetectionListener?.onShapeDetected(ShapeFitResult.Circle(stroke, circleFit))
+        } else {
+            shapeDetectionListener?.onNoShapeDetected()
         }
     }
 
