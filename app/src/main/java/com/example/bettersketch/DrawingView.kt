@@ -14,6 +14,10 @@ interface DrawingViewListener {
     fun onStateChanged()
 }
 
+interface ShapeDetectionListener {
+    fun onShapeDetected(fitResult: SquareFitter.FitResult)
+}
+
 private enum class State {
     NORMAL_DRAWING,
     CHOSEN_STROKE,
@@ -29,6 +33,7 @@ class DrawingView @JvmOverloads constructor(
 ) : View(context, attrs), CustomGestureDetector.OnGestureListener {
 
     var listener: DrawingViewListener? = null
+    var shapeDetectionListener: ShapeDetectionListener? = null
     private var selectedEnd: SelectedEnd = SelectedEnd.NONE
 
     private var currentState = State.NORMAL_DRAWING
@@ -50,7 +55,7 @@ class DrawingView @JvmOverloads constructor(
     var currentSmoothness: Int = 0
 
     // Data
-    private val strokes = mutableListOf<Stroke>()
+    val strokes = mutableListOf<Stroke>()
     private var selectedStrokeIdx: Int = -1
     private var editingPointIndex: Int = -1
     private var editingPointInitialWeights: List<Float>? = null
@@ -255,7 +260,20 @@ class DrawingView @JvmOverloads constructor(
             strokeInProgress = null
             selectedStrokeIdx = -1
             setState(State.NORMAL_DRAWING)
+
+            val fitResult = SquareFitter.fitSquare(newStroke, qualityThreshold = 0.2f)
+            if (fitResult != null) {
+                shapeDetectionListener?.onShapeDetected(fitResult)
+            }
         }
+    }
+
+    fun replaceWithSquare(stroke: Stroke, fitResult: SquareFitter.FitResult) {
+        val index = strokes.indexOf(stroke)
+        if (index != -1) {
+            strokes[index] = fitResult.fittedStroke
+        }
+        redrawHistory()
     }
 
     private fun distance(p1: PointF, p2: PointF): Float {

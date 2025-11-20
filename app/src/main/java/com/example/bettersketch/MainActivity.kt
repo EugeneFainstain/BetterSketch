@@ -13,7 +13,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import kotlin.math.roundToInt
 
-class MainActivity : AppCompatActivity(), DrawingViewListener {
+class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionListener {
 
     private lateinit var drawingView: DrawingView
     private lateinit var widthSlider: WidthSlider
@@ -23,6 +23,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
     private lateinit var btnDuplicateStroke: Button
     private lateinit var btnGroupStrokes: Button
     private lateinit var btnUnGroupStrokes: Button
+    private lateinit var btnSquare: Button
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -48,6 +49,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
         drawingView = findViewById(R.id.drawingView)
         drawingView.listener = this
+        drawingView.shapeDetectionListener = this
 
         widthSlider = findViewById(R.id.widthSlider)
         colorSlider = findViewById(R.id.colorSlider)
@@ -56,7 +58,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
         btnDuplicateStroke = findViewById(R.id.btnDuplicateStroke)
         btnGroupStrokes = findViewById(R.id.btnGroupStrokes)
         btnUnGroupStrokes = findViewById(R.id.btnUnGroupStrokes)
-        
+        btnSquare = findViewById(R.id.btnSquare)
+
         findViewById<View>(R.id.seekProgress).visibility = View.GONE
         findViewById<View>(R.id.btnUndo).visibility = View.GONE
         findViewById<View>(R.id.btnRedo).visibility = View.GONE
@@ -67,7 +70,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
             drawingView.deleteCurrentStroke()
         }
         findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
-        
+
         findViewById<View>(R.id.btnToggleMode).visibility = View.GONE
 
         btnUndoStrokeEdit.setOnClickListener {
@@ -138,6 +141,15 @@ class MainActivity : AppCompatActivity(), DrawingViewListener {
 
     override fun onStateChanged() {
         updateUi()
+    }
+
+    override fun onShapeDetected(fitResult: SquareFitter.FitResult) {
+        btnSquare.text = "Square?"
+        btnSquare.visibility = View.VISIBLE
+        btnSquare.setOnClickListener {
+            drawingView.replaceWithSquare(drawingView.strokes.last(), fitResult)
+            btnSquare.visibility = View.GONE
+        }
     }
 
     private fun updateUi() {
