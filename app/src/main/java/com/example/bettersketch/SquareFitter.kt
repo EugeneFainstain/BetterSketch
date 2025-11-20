@@ -14,16 +14,16 @@ object SquareFitter {
         val sideLength: Float,
         val angle: Float // in radians
     )
-    
+
     data class FitResult(
         val params: SquareParams,
         var normalizedError: Float,
         val fittedStroke: Stroke
     )
-    
+
     /**
      * Fits a square to the given stroke using gradient descent optimization.
-     * 
+     *
      * @param stroke The input stroke to fit
      * @param qualityThreshold Maximum normalized error to accept the fit (e.g., 0.15)
      * @param maxIterations Maximum number of gradient descent iterations
@@ -31,9 +31,11 @@ object SquareFitter {
      * @return FitResult containing the fitted square parameters and stroke, or null if fit quality is poor
      */
 
+
+
     /**
-     * Fits a square using iterative angle optimization
-     * Center and side length are computed analytically, only angle is optimized
+     * Fits a square using iterative angle optimization followed by cyclic coordinate descent
+     * Optimizes each parameter (centerX, centerY, sideLength, angle) one at a time in a loop
      */
     fun fitSquare(
         qualityThreshold: Float = 0.15f
@@ -49,8 +51,8 @@ object SquareFitter {
             sumX += point.x
             sumY += point.y
         }
-        val centerX = sumX / points.size
-        val centerY = sumY / points.size
+        var centerX = sumX / points.size
+        var centerY = sumY / points.size
 
         // Step 2: Compute side length from RMS distance
         // For a perfect square, average distance² from center = (sideLength²)/6
@@ -62,7 +64,7 @@ object SquareFitter {
             sumDistanceSquared += dx * dx + dy * dy
         }
         val avgDistanceSquared = sumDistanceSquared / points.size
-        val sideLength = sqrt(3f * avgDistanceSquared)
+        var sideLength = sqrt(3f * avgDistanceSquared)
 
         // Step 3: Find best angle through iterative search
         // Try multiple starting angles and refine the best one
@@ -80,6 +82,14 @@ object SquareFitter {
             }
         }
 
+        // Step 4: Cyclic coordinate descent - optimize each parameter in sequence, 10 iterations
+        repeat(10) {
+            centerX = optimizeCenterX(centerX, centerY, sideLength, bestAngle, points)
+            centerY = optimizeCenterY(centerX, centerY, sideLength, bestAngle, points)
+            sideLength = optimizeSideLength(centerX, centerY, sideLength, bestAngle, points)
+            bestAngle = optimizeAngle(centerX, centerY, sideLength, bestAngle, points).first
+        }
+
         val params = SquareParams(
             centerX = centerX,
             centerY = centerY,
@@ -87,9 +97,9 @@ object SquareFitter {
             angle = bestAngle
         )
 
-        // Calculate quality metric
-        val avgDistance = evaluateAngle(centerX, centerY, sideLength, bestAngle, points)
-        val normalizedError = avgDistance / sideLength
+        // Calculate quality metric using maximum distance
+        val maxDistance = evaluateMaxDistance(centerX, centerY, sideLength, bestAngle, points)
+        val normalizedError = maxDistance / sideLength
 
         if (normalizedError > qualityThreshold) {
             return null
@@ -97,6 +107,129 @@ object SquareFitter {
 
         val fittedStroke = createSquareStroke(params, strokeForFitting!!.paint)
         return FitResult(params, normalizedError, fittedStroke)
+    }
+
+    /**
+     * Optimizes centerX using golden section search while keeping other parameters fixed
+     */
+    private fun optimizeCenterX(
+        initialCenterX: Float,
+        centerY: Float,
+        sideLength: Float,
+        angle: Float,
+        points: List<PointF>
+    ): Float {
+        val goldenRatio = 0.618033988749895f
+        val tolerance = 0.1f
+        val searchRange = sideLength * 0.5f // Search ±50% of side length
+
+        var a = initialCenterX - searchRange
+        var b = initialCenterX + searchRange
+        var c = b - (b - a) * goldenRatio
+        var d = a + (b - a) * goldenRatio
+
+        var fc = evaluateAngle(c, centerY, sideLength, angle, points)
+        var fd = evaluateAngle(d, centerY, sideLength, angle, points)
+
+        while (abs(b - a) > tolerance) {
+            if (fc < fd) {
+                b = d
+                d = c
+                fd = fc
+                c = b - (b - a) * goldenRatio
+                fc = evaluateAngle(c, centerY, sideLength, angle, points)
+            } else {
+                a = c
+                c = d
+                fc = fd
+                d = a + (b - a) * goldenRatio
+                fd = evaluateAngle(d, centerY, sideLength, angle, points)
+            }
+        }
+
+        return (a + b) / 2f
+    }
+
+    /**
+     * Optimizes centerY using golden section search while keeping other parameters fixed
+     */
+    private fun optimizeCenterY(
+        centerX: Float,
+        initialCenterY: Float,
+        sideLength: Float,
+        angle: Float,
+        points: List<PointF>
+    ): Float {
+        val goldenRatio = 0.618033988749895f
+        val tolerance = 0.1f
+        val searchRange = sideLength * 0.5f // Search ±50% of side length
+
+        var a = initialCenterY - searchRange
+        var b = initialCenterY + searchRange
+        var c = b - (b - a) * goldenRatio
+        var d = a + (b - a) * goldenRatio
+
+        var fc = evaluateAngle(centerX, c, sideLength, angle, points)
+        var fd = evaluateAngle(centerX, d, sideLength, angle, points)
+
+        while (abs(b - a) > tolerance) {
+            if (fc < fd) {
+                b = d
+                d = c
+                fd = fc
+                c = b - (b - a) * goldenRatio
+                fc = evaluateAngle(centerX, c, sideLength, angle, points)
+            } else {
+                a = c
+                c = d
+                fc = fd
+                d = a + (b - a) * goldenRatio
+                fd = evaluateAngle(centerX, d, sideLength, angle, points)
+            }
+        }
+
+        return (a + b) / 2f
+    }
+
+    /**
+     * Optimizes side length using golden section search while keeping other parameters fixed
+     */
+    private fun optimizeSideLength(
+        centerX: Float,
+        centerY: Float,
+        initialSideLength: Float,
+        angle: Float,
+        points: List<PointF>
+    ): Float {
+        val goldenRatio = 0.618033988749895f
+        val tolerance = 0.1f
+        val searchRange = initialSideLength * 0.5f // Search ±50% of initial side length
+
+        var a = max(1f, initialSideLength - searchRange)
+        var b = initialSideLength + searchRange
+        var c = b - (b - a) * goldenRatio
+        var d = a + (b - a) * goldenRatio
+
+        var fc = evaluateAngle(centerX, centerY, c, angle, points)
+        var fd = evaluateAngle(centerX, centerY, d, angle, points)
+
+        while (abs(b - a) > tolerance) {
+            if (fc < fd) {
+                b = d
+                d = c
+                fd = fc
+                c = b - (b - a) * goldenRatio
+                fc = evaluateAngle(centerX, centerY, c, angle, points)
+            } else {
+                a = c
+                c = d
+                fc = fd
+                d = a + (b - a) * goldenRatio
+                fd = evaluateAngle(centerX, centerY, d, angle, points)
+            }
+        }
+
+        return (a + b) / 2f
     }
 
     /**
@@ -172,6 +305,39 @@ object SquareFitter {
         }
 
         return totalDistance / points.size
+    }
+
+    /**
+     * Evaluates the maximum distance from any point to the square edges
+     * Used for quality metric (more strict than average)
+     */
+    private fun evaluateMaxDistance(
+        centerX: Float,
+        centerY: Float,
+        sideLength: Float,
+        angle: Float,
+        points: List<PointF>
+    ): Float {
+        val params = SquareParams(centerX, centerY, sideLength, angle)
+        val corners = getSquareCorners(params)
+        val sides = listOf(
+            Pair(corners[0], corners[1]),
+            Pair(corners[1], corners[2]),
+            Pair(corners[2], corners[3]),
+            Pair(corners[3], corners[0])
+        )
+
+        var maxDistance = 0f
+        for (point in points) {
+            var minDistance = Float.MAX_VALUE
+            for (side in sides) {
+                val dist = distanceToLineSegment(point, side.first, side.second)
+                minDistance = min(minDistance, dist)
+            }
+            maxDistance = max(maxDistance, minDistance)
+        }
+
+        return maxDistance
     }
 
     /**
