@@ -17,7 +17,7 @@ object SquareFitter {
     
     data class FitResult(
         val params: SquareParams,
-        val normalizedError: Float,
+        var normalizedError: Float,
         val fittedStroke: Stroke
     )
     

@@ -143,12 +143,22 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         updateUi()
     }
 
-    override fun onShapeDetected(fitResult: SquareFitter.FitResult) {
-        val percentage = (1.0f - fitResult.normalizedError) * 100
-        btnSquare.text = "${String.format("%.2f", percentage)}% Square"
+    override fun onShapeDetected(shapeFitResult: ShapeFitResult) {
+        val (percentage, shapeName, fittedStroke) = when (shapeFitResult) {
+            is ShapeFitResult.Square -> {
+                val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
+                Triple(p, "Square", shapeFitResult.fitResult.fittedStroke)
+            }
+            is ShapeFitResult.Circle -> {
+                val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
+                Triple(p, "Circle", shapeFitResult.fitResult.fittedStroke)
+            }
+        }
+
+        btnSquare.text = "${String.format("%.2f", percentage)}% $shapeName"
         btnSquare.visibility = View.VISIBLE
         btnSquare.setOnClickListener {
-            drawingView.replaceWithSquare(drawingView.strokes.last(), fitResult)
+            drawingView.replaceWithShape(drawingView.strokes.last(), fittedStroke)
             btnSquare.visibility = View.GONE
         }
     }

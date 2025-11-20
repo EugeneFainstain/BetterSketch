@@ -14,8 +14,13 @@ interface DrawingViewListener {
     fun onStateChanged()
 }
 
+sealed class ShapeFitResult {
+    data class Square(val fitResult: SquareFitter.FitResult) : ShapeFitResult()
+    data class Circle(val fitResult: CircleFitter.FitResult) : ShapeFitResult()
+}
+
 interface ShapeDetectionListener {
-    fun onShapeDetected(fitResult: SquareFitter.FitResult)
+    fun onShapeDetected(shapeFitResult: ShapeFitResult)
 }
 
 private enum class State {
@@ -261,22 +266,33 @@ class DrawingView @JvmOverloads constructor(
             selectedStrokeIdx = -1
             setState(State.NORMAL_DRAWING)
 
-            // Use uniformly sampled stroke for better shape fitting
-            SquareFitter.strokeForFitting = newStroke.generateUniformSampled(256 )
+            SquareFitter.strokeForFitting = newStroke
+            val squareFit = SquareFitter.fitSquare(qualityThreshold = 0.2f)
+            CircleFitter.strokeForFitting = newStroke
+            val circleFit = CircleFitter.fitCircle(qualityThreshold = 0.2f)
 
-            val fitResult = SquareFitter.fitSquare( qualityThreshold = 0.2f)
-            if (fitResult != null) {
-                shapeDetectionListener?.onShapeDetected(fitResult)
+            circleFit?.normalizedError /= 2f // Why?!!!!
+
+            if (squareFit != null && circleFit != null) {
+                if (squareFit.normalizedError < circleFit.normalizedError) {
+                    shapeDetectionListener?.onShapeDetected(ShapeFitResult.Square(squareFit))
+                } else {
+                    shapeDetectionListener?.onShapeDetected(ShapeFitResult.Circle(circleFit))
+                }
+            } else if (squareFit != null) {
+                shapeDetectionListener?.onShapeDetected(ShapeFitResult.Square(squareFit))
+            } else if (circleFit != null) {
+                shapeDetectionListener?.onShapeDetected(ShapeFitResult.Circle(circleFit))
             }
         }
     }
 
-    fun replaceWithSquare(stroke: Stroke, fitResult: SquareFitter.FitResult) {
-        val index = strokes.indexOf(stroke)
-        if (index != -1) {
-            strokes[index] = fitResult.fittedStroke
-        }
-//      strokes.add(SquareFitter.strokeForFitting) // for comparison
+    fun replaceWithShape(originalStroke: Stroke, fittedStroke: Stroke) {
+//        val index = strokes.indexOf(originalStroke)
+  //      if (index != -1) {
+    //        strokes[index] = fittedStroke
+      //  }
+        strokes.add(fittedStroke)
         redrawHistory()
     }
 
