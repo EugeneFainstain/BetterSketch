@@ -21,14 +21,6 @@ object CircleFitter {
 
     /**
      * Fits a circle to the given stroke using analytical solution.
-     * Center is computed as centroid, radius as average distance from center.
-     *
-     * @param qualityThreshold Maximum normalized error to accept the fit (e.g., 0.15)
-     * @return FitResult containing the fitted circle parameters and stroke, or null if fit quality is poor
-     */
-
-    /**
-     * Fits a circle to the given stroke using analytical solution.
      * Center is computed as the center of the bounding box, radius as average distance from center.
      *
      * @param qualityThreshold Maximum normalized error to accept the fit (e.g., 0.15)
@@ -72,17 +64,16 @@ object CircleFitter {
             radius = radius
         )
 
-        // Calculate quality metric: mean absolute deviation from circle (L1 norm)
-        var sumOfAbsoluteDeviations = 0f
+        // Calculate quality metric: maximum absolute deviation from circle
+        var maxDeviation = 0f
         for (point in points) {
             val dx = point.x - centerX
             val dy = point.y - centerY
             val distanceFromCenter = sqrt(dx * dx + dy * dy)
             val deviation = abs(distanceFromCenter - radius)
-            sumOfAbsoluteDeviations += deviation
+            maxDeviation = max(maxDeviation, deviation)
         }
-        val meanAbsoluteError = sumOfAbsoluteDeviations / points.size
-        val normalizedError = meanAbsoluteError / radius
+        val normalizedError = maxDeviation / (2f*radius)
 
         if (normalizedError > qualityThreshold) {
             return null
