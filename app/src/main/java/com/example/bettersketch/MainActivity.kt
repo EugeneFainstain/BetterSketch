@@ -56,8 +56,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnSquare = findViewById(R.id.btnSquare)
 
         findViewById<View>(R.id.seekProgress).visibility = View.GONE
-        findViewById<View>(R.id.btnUndo).visibility = View.GONE
-        findViewById<View>(R.id.btnRedo).visibility = View.GONE
 
         setupSliderListeners()
 

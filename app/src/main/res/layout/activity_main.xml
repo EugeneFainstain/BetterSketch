@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -58,7 +57,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="top|center_horizontal"
-            android:text="Square"
+            android:text="@string/square"
             android:visibility="gone" />
 
         <Button
@@ -67,50 +66,26 @@
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|center_horizontal"
             android:layout_marginTop="-2dp"
-            android:text="DRAWING"/>
+            android:text="@string/drawing"/>
 
         <Button
             android:id="@+id/btnClear"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="top|left"
+            android:layout_gravity="top|start"
             android:layout_marginTop="-2dp"
-            android:layout_marginLeft="32dp"
-            android:text="DEL"/>
-
-        <Button
-            android:id="@+id/btnUndo"
-            android:layout_width="90dp"
-            android:layout_height="90dp"
-            android:layout_gravity="bottom|start"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:padding="0dp"
-            android:layout_marginLeft="32dp"
-            android:textSize="12sp"
-            android:text="REW"/>
-
-        <Button
-            android:id="@+id/btnRedo"
-            android:layout_width="90dp"
-            android:layout_height="90dp"
-            android:layout_gravity="bottom|end"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:padding="0dp"
-            android:textSize="12sp"
-            android:layout_marginRight="32dp"
-            android:text="FF"/>
+            android:layout_marginStart="32dp"
+            android:text="@string/del"/>
 
         <Button
             android:id="@+id/btnUndoStrokeEdit"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom|left"
-            android:layout_marginLeft="32dp"
+            android:layout_gravity="bottom|start"
+            android:layout_marginStart="32dp"
             android:layout_marginBottom="24dp"
             android:backgroundTint="@color/undo_button_tint"
-            android:text="Undo"
+            android:text="@string/undo"
             android:visibility="gone" />
 
         <Button
@@ -120,7 +95,7 @@
             android:layout_gravity="bottom|center_horizontal"
             android:layout_marginBottom="24dp"
             android:backgroundTint="@android:color/holo_orange_light"
-            android:text="Group"
+            android:text="@string/group"
             android:visibility="gone" />
 
         <Button
@@ -130,18 +105,18 @@
             android:layout_gravity="bottom|center_horizontal"
             android:layout_marginBottom="24dp"
             android:backgroundTint="#FF00FF"
-            android:text="UnGroup"
+            android:text="@string/ungroup"
             android:visibility="gone" />
 
         <Button
             android:id="@+id/btnDuplicateStroke"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom|right"
-            android:layout_marginRight="32dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="32dp"
             android:layout_marginBottom="24dp"
             android:backgroundTint="@color/dup_button_background"
-            android:text="DUP"
+            android:text="@string/dup"
             android:visibility="gone" />
 
     </FrameLayout>
@@ -150,6 +125,6 @@
         android:id="@+id/smoothingSlider"
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android.padding="16dp"/>
+        android:padding="16dp"/>
 
 </LinearLayout>
