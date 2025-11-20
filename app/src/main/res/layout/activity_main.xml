@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -45,7 +46,8 @@
             android:layout_height="wrap_content"
             android:layout_gravity="top|center_horizontal"
             android:text="@string/square"
-            android:visibility="gone" />
+            android:visibility="gone"
+            tools:visibility="visible" />
 
         <Button
             android:id="@+id/btnClear"
@@ -65,7 +67,8 @@
             android:layout_marginBottom="24dp"
             android:backgroundTint="@color/undo_button_tint"
             android:text="@string/undo"
-            android:visibility="gone" />
+            android:visibility="gone"
+            tools:visibility="visible" />
 
         <Button
             android:id="@+id/btnGroupStrokes"
@@ -75,7 +78,8 @@
             android:layout_marginBottom="24dp"
             android:backgroundTint="@android:color/holo_orange_light"
             android:text="@string/group"
-            android:visibility="gone" />
+            android:visibility="gone"
+            tools:visibility="visible" />
 
         <Button
             android:id="@+id/btnUnGroupStrokes"
@@ -85,7 +89,8 @@
             android:layout_marginBottom="24dp"
             android:backgroundTint="#FF00FF"
             android:text="@string/ungroup"
-            android:visibility="gone" />
+            android:visibility="gone"
+            tools:visibility="visible" />
 
         <Button
             android:id="@+id/btnDuplicateStroke"
@@ -96,7 +101,8 @@
             android:layout_marginBottom="24dp"
             android:backgroundTint="@color/dup_button_background"
             android:text="@string/dup"
-            android:visibility="gone" />
+            android:visibility="gone"
+            tools:visibility="visible" />
 
     </FrameLayout>
 
