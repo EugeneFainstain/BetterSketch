@@ -128,8 +128,8 @@ object SquareFitter {
         var c = b - (b - a) * goldenRatio
         var d = a + (b - a) * goldenRatio
 
-        var fc = evaluateAngle(c, centerY, sideLength, angle, points)
-        var fd = evaluateAngle(d, centerY, sideLength, angle, points)
+        var fc = evaluateFit(c, centerY, sideLength, angle, points)
+        var fd = evaluateFit(d, centerY, sideLength, angle, points)
 
         while (abs(b - a) > tolerance) {
             if (fc < fd) {
@@ -137,13 +137,13 @@ object SquareFitter {
                 d = c
                 fd = fc
                 c = b - (b - a) * goldenRatio
-                fc = evaluateAngle(c, centerY, sideLength, angle, points)
+                fc = evaluateFit(c, centerY, sideLength, angle, points)
             } else {
                 a = c
                 c = d
                 fc = fd
                 d = a + (b - a) * goldenRatio
-                fd = evaluateAngle(d, centerY, sideLength, angle, points)
+                fd = evaluateFit(d, centerY, sideLength, angle, points)
             }
         }
 
@@ -169,8 +169,8 @@ object SquareFitter {
         var c = b - (b - a) * goldenRatio
         var d = a + (b - a) * goldenRatio
 
-        var fc = evaluateAngle(centerX, c, sideLength, angle, points)
-        var fd = evaluateAngle(centerX, d, sideLength, angle, points)
+        var fc = evaluateFit(centerX, c, sideLength, angle, points)
+        var fd = evaluateFit(centerX, d, sideLength, angle, points)
 
         while (abs(b - a) > tolerance) {
             if (fc < fd) {
@@ -178,13 +178,13 @@ object SquareFitter {
                 d = c
                 fd = fc
                 c = b - (b - a) * goldenRatio
-                fc = evaluateAngle(centerX, c, sideLength, angle, points)
+                fc = evaluateFit(centerX, c, sideLength, angle, points)
             } else {
                 a = c
                 c = d
                 fc = fd
                 d = a + (b - a) * goldenRatio
-                fd = evaluateAngle(centerX, d, sideLength, angle, points)
+                fd = evaluateFit(centerX, d, sideLength, angle, points)
             }
         }
 
@@ -210,8 +210,8 @@ object SquareFitter {
         var c = b - (b - a) * goldenRatio
         var d = a + (b - a) * goldenRatio
 
-        var fc = evaluateAngle(centerX, centerY, c, angle, points)
-        var fd = evaluateAngle(centerX, centerY, d, angle, points)
+        var fc = evaluateFit(centerX, centerY, c, angle, points)
+        var fd = evaluateFit(centerX, centerY, d, angle, points)
 
         while (abs(b - a) > tolerance) {
             if (fc < fd) {
@@ -219,13 +219,13 @@ object SquareFitter {
                 d = c
                 fd = fc
                 c = b - (b - a) * goldenRatio
-                fc = evaluateAngle(centerX, centerY, c, angle, points)
+                fc = evaluateFit(centerX, centerY, c, angle, points)
             } else {
                 a = c
                 c = d
                 fc = fd
                 d = a + (b - a) * goldenRatio
-                fd = evaluateAngle(centerX, centerY, d, angle, points)
+                fd = evaluateFit(centerX, centerY, d, angle, points)
             }
         }
 
@@ -251,8 +251,8 @@ object SquareFitter {
         var c = b - (b - a) * goldenRatio
         var d = a + (b - a) * goldenRatio
 
-        var fc = evaluateAngle(centerX, centerY, sideLength, c, points)
-        var fd = evaluateAngle(centerX, centerY, sideLength, d, points)
+        var fc = evaluateFit(centerX, centerY, sideLength, c, points)
+        var fd = evaluateFit(centerX, centerY, sideLength, d, points)
 
         while (abs(b - a) > tolerance) {
             if (fc < fd) {
@@ -260,25 +260,25 @@ object SquareFitter {
                 d = c
                 fd = fc
                 c = b - (b - a) * goldenRatio
-                fc = evaluateAngle(centerX, centerY, sideLength, c, points)
+                fc = evaluateFit(centerX, centerY, sideLength, c, points)
             } else {
                 a = c
                 c = d
                 fc = fd
                 d = a + (b - a) * goldenRatio
-                fd = evaluateAngle(centerX, centerY, sideLength, d, points)
+                fd = evaluateFit(centerX, centerY, sideLength, d, points)
             }
         }
 
         val bestAngle = (a + b) / 2f
-        val bestCost = evaluateAngle(centerX, centerY, sideLength, bestAngle, points)
+        val bestCost = evaluateFit(centerX, centerY, sideLength, bestAngle, points)
         return Pair(bestAngle, bestCost)
     }
 
     /**
      * Evaluates the cost (average distance to square edges) for a given angle
      */
-    private fun evaluateAngle(
+    private fun evaluateFit(
         centerX: Float,
         centerY: Float,
         sideLength: Float,
@@ -301,7 +301,7 @@ object SquareFitter {
                 val dist = distanceToLineSegment(point, side.first, side.second)
                 minDistance = min(minDistance, dist)
             }
-            totalDistance += minDistance
+            totalDistance += minDistance * minDistance * minDistance * minDistance
         }
 
         return totalDistance / points.size
