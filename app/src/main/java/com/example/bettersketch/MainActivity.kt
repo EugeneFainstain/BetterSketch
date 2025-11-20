@@ -144,7 +144,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     }
 
     override fun onShapeDetected(fitResult: SquareFitter.FitResult) {
-        btnSquare.text = "Square?"
+        val percentage = (1.0f - fitResult.normalizedError) * 100
+        btnSquare.text = "${String.format("%.2f", percentage)}% Square"
         btnSquare.visibility = View.VISIBLE
         btnSquare.setOnClickListener {
             drawingView.replaceWithSquare(drawingView.strokes.last(), fitResult)

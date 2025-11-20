@@ -155,6 +155,73 @@ class Stroke(
         }
     }
 
+    /**
+     * Generates a new stroke with N uniformly spaced points along the curve.
+     * The resulting stroke will look identical visually but with evenly distributed sample points.
+     *
+     * @param N The desired number of uniformly spaced points
+     * @return A new Stroke with uniformly sampled points, or null if N < 2 or stroke has no points
+     */
+    fun generateUniformSampled(N: Int): Stroke {
+        if (N < 2 || points.isEmpty()) return Stroke(mutableListOf(), Paint(), 0f, 0)
+
+        val uniformPoints = mutableListOf<PointF>()
+        val spacing = totalDistance / (N - 1)
+
+        // Always add the first point
+        uniformPoints.add(PointF(points.first().point.x, points.first().point.y))
+
+        // Generate N-2 intermediate points at uniform distances
+        for (i in 1 until N - 1) {
+            val targetDistance = i * spacing
+            val interpolatedPoint = interpolatePointAtDistance(targetDistance)
+            if (interpolatedPoint != null) {
+                uniformPoints.add(interpolatedPoint)
+            }
+        }
+
+        // Always add the last point
+        uniformPoints.add(PointF(points.last().point.x, points.last().point.y))
+
+        // Create new stroke with uniformly sampled points
+        val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(uniformPoints)
+        return Stroke(pathPoints, Paint(this.paint), newTotalDistance, 0) // smoothness = 0 to preserve exact points
+    }
+
+    /**
+     * Interpolates a point at a specific distance along the stroke path.
+     *
+     * @param targetDistance The distance along the path where the point should be interpolated
+     * @return The interpolated PointF, or null if targetDistance is out of bounds
+     */
+    private fun interpolatePointAtDistance(targetDistance: Float): PointF? {
+        if (targetDistance < 0 || targetDistance > totalDistance || points.size < 2) {
+            return null
+        }
+
+        // Find the two points that bracket the target distance
+        for (i in 1 until points.size) {
+            val prevPoint = points[i - 1]
+            val currPoint = points[i]
+
+            if (targetDistance <= currPoint.distance) {
+                // Interpolate between prevPoint and currPoint
+                val segmentLength = currPoint.distance - prevPoint.distance
+                if (segmentLength == 0f) {
+                    return PointF(prevPoint.point.x, prevPoint.point.y)
+                }
+
+                val t = (targetDistance - prevPoint.distance) / segmentLength
+                val x = prevPoint.point.x + t * (currPoint.point.x - prevPoint.point.x)
+                val y = prevPoint.point.y + t * (currPoint.point.y - prevPoint.point.y)
+                return PointF(x, y)
+            }
+        }
+
+        // If we reach here, return the last point
+        return PointF(points.last().point.x, points.last().point.y)
+    }
+
     companion object {
         fun calculatePathPointsWithDistances(points: List<PointF>): Pair<MutableList<PathPoint>, Float> {
             if (points.isEmpty()) {

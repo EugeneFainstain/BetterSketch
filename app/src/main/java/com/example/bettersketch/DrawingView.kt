@@ -261,7 +261,10 @@ class DrawingView @JvmOverloads constructor(
             selectedStrokeIdx = -1
             setState(State.NORMAL_DRAWING)
 
-            val fitResult = SquareFitter.fitSquare(newStroke, qualityThreshold = 0.2f)
+            // Use uniformly sampled stroke for better shape fitting
+            SquareFitter.strokeForFitting = newStroke.generateUniformSampled(256 )
+
+            val fitResult = SquareFitter.fitSquare( qualityThreshold = 0.2f)
             if (fitResult != null) {
                 shapeDetectionListener?.onShapeDetected(fitResult)
             }
@@ -273,6 +276,7 @@ class DrawingView @JvmOverloads constructor(
         if (index != -1) {
             strokes[index] = fitResult.fittedStroke
         }
+//      strokes.add(SquareFitter.strokeForFitting) // for comparison
         redrawHistory()
     }
 
