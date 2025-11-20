@@ -1,15 +1,10 @@
 package com.example.bettersketch
 
 import android.annotation.SuppressLint
-import android.content.ContentValues
-import android.graphics.Bitmap
 import android.graphics.Color
-import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
 import android.view.View
 import android.widget.Button
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import kotlin.math.roundToInt
 
@@ -69,7 +64,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         findViewById<Button>(R.id.btnClear).setOnClickListener {
             drawingView.deleteCurrentStroke()
         }
-        findViewById<Button>(R.id.btnSave).setOnClickListener { saveToGallery() }
 
         findViewById<View>(R.id.btnToggleMode).visibility = View.GONE
 
@@ -188,35 +182,5 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnGroupStrokes.visibility = if (highlightedStrokeCount > 1 && !isCurrentStrokeGroup) View.VISIBLE else View.GONE
         // Show UnGroup button if exactly 1 stroke is highlighted AND that stroke IS a group
         btnUnGroupStrokes.visibility = if (highlightedStrokeCount == 1 && isCurrentStrokeGroup) View.VISIBLE else View.GONE
-    }
-
-    private fun saveToGallery() {
-        val bmp: Bitmap = drawingView.exportBitmap()
-        val name = "Doodle_${System.currentTimeMillis()}.png"
-
-        val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-            put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/Doodles")
-                put(MediaStore.Images.Media.IS_PENDING, 1)
-            }
-        }
-        val resolver = contentResolver
-        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-
-        if (uri != null) {
-            resolver.openOutputStream(uri)?.use { out ->
-                bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                contentValues.clear()
-                contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-                resolver.update(uri, contentValues, null, null)
-            }
-            Toast.makeText(this, "Saved to gallery ✓", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
-        }
     }
 }
