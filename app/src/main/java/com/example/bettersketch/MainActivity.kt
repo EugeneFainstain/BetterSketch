@@ -141,10 +141,6 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
                 val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
                 Quad(p, "Circle", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
             }
-            is ShapeFitResult.Line -> {
-                val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
-                Quad(p, "Line", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
-            }
             is ShapeFitResult.Polynomial -> {
                 val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
                 Quad(p, "Poly(${shapeFitResult.fitResult.degree})", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)

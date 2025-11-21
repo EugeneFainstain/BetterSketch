@@ -22,14 +22,11 @@ class ShapeFitter {
             // We determine this by checking if the distance between the start and end points
             // is greater than 20% of the largest dimension of the stroke's bounding box.
             if (distance > maxDimension * 0.2f) {
-                LineFitter.fitLine(strokeForFitting)?.let {
-                    fits.add(ShapeFitResult.Line(strokeToReplace, it))
-                }
 
                 var bestPolyFit: ShapeFitResult.Polynomial? = null
                 var minError = Float.MAX_VALUE
 
-                for (degree in 2..15) {
+                for (degree in 1..5) {
                     PolynomFitter.fitPolynomial(strokeForFitting, degree)?.let {
                         val weightedError = it.normalizedError
                         if (weightedError < minError) {
@@ -54,7 +51,6 @@ class ShapeFitter {
                 when (it) {
                     is ShapeFitResult.Square -> it.fitResult.normalizedError
                     is ShapeFitResult.Circle -> it.fitResult.normalizedError
-                    is ShapeFitResult.Line -> it.fitResult.normalizedError
                     is ShapeFitResult.Polynomial -> it.fitResult.normalizedError
                 }
             }
