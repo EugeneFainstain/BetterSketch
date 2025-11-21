@@ -149,7 +149,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             btnShape.text = "${String.format("%.2f", percentage)}% $shapeName"
             btnShape.visibility = View.VISIBLE
             btnShape.setOnClickListener {
-                drawingView.replaceWithShape(shapeFitResult.originalStroke, fittedStroke)
+                drawingView.replaceWithShape(shapeFitResult.strokeToReplace, fittedStroke)
                 btnShape.visibility = View.GONE
             }
         }
