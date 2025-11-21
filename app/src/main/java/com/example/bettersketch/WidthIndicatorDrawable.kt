@@ -34,5 +34,6 @@ class WidthIndicatorDrawable : Drawable() {
         paint.colorFilter = colorFilter
     }
 
+    @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 }

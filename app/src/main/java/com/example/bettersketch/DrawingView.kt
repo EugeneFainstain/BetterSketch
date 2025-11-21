@@ -278,24 +278,11 @@ class DrawingView @JvmOverloads constructor(
             return
         }
 
-        // Use uniformly sampled stroke for better shape fitting
-        val strokeForFitting = stroke.generateUniformSampled(256 )
+        val strokeForFitting = stroke.generateUniformSampled(256)
+        val fitResult = ShapeFitter.fit(stroke, strokeForFitting)
 
-        SquareFitter.strokeForFitting = strokeForFitting
-        val squareFit = SquareFitter.fitSquare(qualityThreshold = 0.2f)
-        CircleFitter.strokeForFitting = strokeForFitting
-        val circleFit = CircleFitter.fitCircle(qualityThreshold = 0.2f)
-
-        if (squareFit != null && circleFit != null) {
-            if (squareFit.normalizedError < circleFit.normalizedError) {
-                shapeDetectionListener?.onShapeDetected(ShapeFitResult.Square(stroke, squareFit))
-            } else {
-                shapeDetectionListener?.onShapeDetected(ShapeFitResult.Circle(stroke, circleFit))
-            }
-        } else if (squareFit != null) {
-            shapeDetectionListener?.onShapeDetected(ShapeFitResult.Square(stroke, squareFit))
-        } else if (circleFit != null) {
-            shapeDetectionListener?.onShapeDetected(ShapeFitResult.Circle(stroke, circleFit))
+        if (fitResult != null) {
+            shapeDetectionListener?.onShapeDetected(fitResult)
         } else {
             shapeDetectionListener?.onNoShapeDetected()
         }
@@ -306,7 +293,6 @@ class DrawingView @JvmOverloads constructor(
         if (index != -1) {
             strokes[index] = fittedStroke
         }
-//        strokes.add(fittedStroke)
         redrawHistory()
     }
 
@@ -324,7 +310,6 @@ class DrawingView @JvmOverloads constructor(
         var minDistance = Float.MAX_VALUE
         var closestStrokeIndex = -1
 
-        // Clear all current highlights before selecting a new stroke
         strokes.forEach { it.setHighlightedRecursively(false) }
 
         strokes.forEachIndexed { index, stroke ->
@@ -356,7 +341,7 @@ class DrawingView @JvmOverloads constructor(
 
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         val stroke = currentStroke ?: return false
-        if (stroke.isGroup) return false // Don't allow endpoint selection for groups
+        if (stroke.isGroup) return false
 
         var closestDist = Float.MAX_VALUE
         var closestPointIndex = -1
@@ -412,16 +397,15 @@ class DrawingView @JvmOverloads constructor(
 
     fun duplicateCurrentStroke() {
         currentStroke?.let { originalStroke ->
-            // De-highlight all strokes first.
             strokes.forEach { it.setHighlightedRecursively(false) }
 
-            val duplicatedStroke = originalStroke.newFrom() // Use newFrom() here
+            val duplicatedStroke = originalStroke.newFrom()
             val bounds = originalStroke.getBounds()
             val offsetY = -bounds.height() / 2f
             val matrix = Matrix().apply { postTranslate(0f, offsetY) }
             transformStroke(duplicatedStroke, matrix, isGlobalTransform = true)
 
-            duplicatedStroke.setHighlightedRecursively(true) // Highlight the new one.
+            duplicatedStroke.setHighlightedRecursively(true)
 
             strokes.add(duplicatedStroke)
             selectedStrokeIdx = strokes.lastIndex
@@ -452,10 +436,10 @@ class DrawingView @JvmOverloads constructor(
                 val index = strokes.indexOf(groupStroke)
                 if (index != -1) {
                     strokes.removeAt(index)
-                    strokes.addAll(index, groupStroke.childStrokes) // Insert children at the group's position
-                    groupStroke.childStrokes.forEach { it.setHighlightedRecursively(true) } // Highlight children
-                    selectedStrokeIdx = -1 // No single stroke selected after ungrouping
-                    setState(State.CHOSEN_STROKE) // Stay in chosen stroke mode as multiple are highlighted
+                    strokes.addAll(index, groupStroke.childStrokes)
+                    groupStroke.childStrokes.forEach { it.setHighlightedRecursively(true) }
+                    selectedStrokeIdx = -1
+                    setState(State.CHOSEN_STROKE)
                     redrawHistory()
                     listener?.onStateChanged()
                 }
@@ -505,7 +489,7 @@ class DrawingView @JvmOverloads constructor(
 
     fun setStrokeSmoothness(smoothness: Int) {
         currentSmoothness = smoothness
-        val selectedStroke = currentStroke // Capture currentStroke in a local variable
+        val selectedStroke = currentStroke
         if (selectedStroke != null && !selectedStroke.isGroup) {
             selectedStroke.forEachStroke {
                 it.smoothness = smoothness
@@ -519,7 +503,7 @@ class DrawingView @JvmOverloads constructor(
 
     fun setColor(color: Int, applyToSelected: Boolean) {
         if (applyToSelected) {
-            val selectedStroke = currentStroke // Capture currentStroke in a local variable
+            val selectedStroke = currentStroke
             if (selectedStroke != null && !selectedStroke.isGroup) {
                 selectedStroke.forEachStroke {
                     it.isModified = true
@@ -535,7 +519,7 @@ class DrawingView @JvmOverloads constructor(
     fun setStrokeWidth(px: Float, applyToSelected: Boolean) {
         if (applyToSelected) {
             val w = max(1f, min(120f, px))
-            val selectedStroke = currentStroke // Capture currentStroke in a local variable
+            val selectedStroke = currentStroke
             if (selectedStroke != null) {
                 selectedStroke.isModified = true
                 selectedStroke.paint.strokeWidth = w
@@ -581,7 +565,6 @@ class DrawingView @JvmOverloads constructor(
                 drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints)
             }
         } else {
-            // Leaf stroke
             if (stroke.points.size >= 2) {
                 val path = Path()
                 path.moveTo(stroke.points.first().point.x, stroke.points.first().point.y)
@@ -593,7 +576,6 @@ class DrawingView @JvmOverloads constructor(
                 finalPaint.strokeWidth *= cumulativeWidthMultiplier
                 finalPaint.alpha = (finalPaint.alpha * cumulativeOpacityMultiplier).toInt()
 
-                // Draw Halo if highlighted
                 if (stroke.isHighlighted) {
                     val haloPaintToUse = Paint(haloPaint)
                     haloPaintToUse.strokeWidth = finalPaint.strokeWidth + haloOffset
@@ -704,7 +686,7 @@ class DrawingView @JvmOverloads constructor(
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
         twoFingerGestureOccured = false
         selectionCircle = null
-        backedUpGroupStroke = null // Reset backed up stroke
+        backedUpGroupStroke = null
 
         if (threeFingerGestureOccured) {
             val highlightedStrokes = strokes.filter { it.isHighlighted }
@@ -719,8 +701,8 @@ class DrawingView @JvmOverloads constructor(
             } else if (highlightedStrokes.isNotEmpty()) {
                 setState(State.CHOSEN_STROKE)
             }
-            threeFingerGestureOccured = false // Reset after checking
-            listener?.onStateChanged() // Trigger UI update for multi-selection
+            threeFingerGestureOccured = false
+            listener?.onStateChanged()
         }
 
 
@@ -753,10 +735,9 @@ class DrawingView @JvmOverloads constructor(
                 currentStroke?.let { current ->
                     if (current.isGroup) {
                         backedUpGroupStroke?.let { backup ->
-                            // Reset current stroke to its backed-up state
                             current.copyFrom(backup)
 
-                            val bounds = backup.getBounds() // Use bounds of the backup stroke
+                            val bounds = backup.getBounds()
                             val centerX = bounds.centerX()
                             val centerY = bounds.centerY()
                             val initialHeight = bounds.height()
@@ -768,12 +749,12 @@ class DrawingView @JvmOverloads constructor(
                                 totalDy = -totalDy
 
                             val matrix = Matrix()
-                            matrix.postTranslate(totalDx, 0f) // Horizontal translation
+                            matrix.postTranslate(totalDx, 0f)
 
                             if (initialHeight != 0f) {
                                 val newHeight = initialHeight - totalDy
                                 val scaleY = newHeight / initialHeight
-                                matrix.postScale(1.0f, scaleY, centerX, centerY) // Vertical scaling around center
+                                matrix.postScale(1.0f, scaleY, centerX, centerY)
                             }
                             transformStroke(current, matrix, isGlobalTransform = false)
                         }
@@ -799,7 +780,7 @@ class DrawingView @JvmOverloads constructor(
                 deltaMatrix.postTranslate(dx, dy)
                 deltaMatrix.postScale(scale, scale, mid.x, mid.y)
                 deltaMatrix.postRotate(rotate, mid.x, mid.y)
-                transformAllStrokes(deltaMatrix) // Canvas transformation
+                transformAllStrokes(deltaMatrix)
             }
             State.CHOSEN_STROKE, State.STROKE_EDITING -> {
                 currentStroke?.let {
@@ -810,7 +791,7 @@ class DrawingView @JvmOverloads constructor(
                     deltaMatrix.postScale(scale, scale, centerX, centerY)
                     deltaMatrix.postRotate(rotate, centerX, centerY)
                     deltaMatrix.postTranslate(dx, dy)
-                    transformStroke(it, deltaMatrix, isGlobalTransform = false) // Stroke transformation
+                    transformStroke(it, deltaMatrix, isGlobalTransform = false)
                 }
             }
         }

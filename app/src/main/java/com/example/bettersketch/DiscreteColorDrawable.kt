@@ -65,6 +65,7 @@ class DiscreteColorDrawable(private val colors: IntArray) : Drawable() {
         borderPaint.colorFilter = colorFilter
     }
 
+    @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int {
         return PixelFormat.TRANSLUCENT
     }

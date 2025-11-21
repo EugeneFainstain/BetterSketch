@@ -2,12 +2,9 @@ package com.example.bettersketch
 
 import android.graphics.Paint
 import android.graphics.PointF
-import android.graphics.RectF
 import kotlin.math.*
 
 object SquareFitter {
-    public var strokeForFitting: Stroke = Stroke(mutableListOf(), Paint(), 0f, 0)
-
     data class SquareParams(
         val centerX: Float,
         val centerY: Float,
@@ -21,28 +18,13 @@ object SquareFitter {
         val fittedStroke: Stroke
     )
 
-    /**
-     * Fits a square to the given stroke using gradient descent optimization.
-     *
-     * @param stroke The input stroke to fit
-     * @param qualityThreshold Maximum normalized error to accept the fit (e.g., 0.15)
-     * @param maxIterations Maximum number of gradient descent iterations
-     * @param learningRate Initial learning rate for gradient descent
-     * @return FitResult containing the fitted square parameters and stroke, or null if fit quality is poor
-     */
-
-
-
-    /**
-     * Fits a square using iterative angle optimization followed by cyclic coordinate descent
-     * Optimizes each parameter (centerX, centerY, sideLength, angle) one at a time in a loop
-     */
     fun fitSquare(
+        stroke: Stroke,
         qualityThreshold: Float = 0.15f
     ): FitResult? {
-        if (strokeForFitting == null || strokeForFitting!!.points.size < 4) return null
+        if (stroke.points.size < 4) return null
 
-        val points = strokeForFitting!!.points.map { it.point }
+        val points = stroke.points.map { it.point }
 
         // Step 1: Compute centroid (center)
         var sumX = 0f
@@ -55,8 +37,6 @@ object SquareFitter {
         var centerY = sumY / points.size
 
         // Step 2: Compute side length from RMS distance
-        // For a perfect square, average distance² from center = (sideLength²)/6
-        // So sideLength = sqrt(6 * avgDistance²)
         var sumDistanceSquared = 0f
         for (point in points) {
             val dx = point.x - centerX
@@ -67,7 +47,6 @@ object SquareFitter {
         var sideLength = sqrt(3f * avgDistanceSquared)
 
         // Step 3: Find best angle through iterative search
-        // Try multiple starting angles and refine the best one
         val candidateAngles = listOf(0f, PI / 4f, PI / 2f, 3f * PI / 4f)
         var bestAngle = 0f
         var bestCost = Float.MAX_VALUE
@@ -82,7 +61,7 @@ object SquareFitter {
             }
         }
 
-        // Step 4: Cyclic coordinate descent - optimize each parameter in sequence, 10 iterations
+        // Step 4: Cyclic coordinate descent
         repeat(10) {
             centerX = optimizeCenterX(centerX, centerY, sideLength, bestAngle, points)
             centerY = optimizeCenterY(centerX, centerY, sideLength, bestAngle, points)
@@ -97,7 +76,6 @@ object SquareFitter {
             angle = bestAngle
         )
 
-        // Calculate quality metric using maximum distance
         val maxDistance = evaluateMaxDistance(centerX, centerY, sideLength, bestAngle, points)
         val normalizedError = maxDistance / sideLength
 
@@ -105,13 +83,10 @@ object SquareFitter {
             return null
         }
 
-        val fittedStroke = createSquareStroke(params, strokeForFitting!!.paint)
+        val fittedStroke = createSquareStroke(params, stroke.paint)
         return FitResult(params, normalizedError, fittedStroke)
     }
 
-    /**
-     * Optimizes centerX using golden section search while keeping other parameters fixed
-     */
     private fun optimizeCenterX(
         initialCenterX: Float,
         centerY: Float,
@@ -121,7 +96,7 @@ object SquareFitter {
     ): Float {
         val goldenRatio = 0.618033988749895f
         val tolerance = 0.1f
-        val searchRange = sideLength * 0.5f // Search ±50% of side length
+        val searchRange = sideLength * 0.5f
 
         var a = initialCenterX - searchRange
         var b = initialCenterX + searchRange
@@ -150,9 +125,6 @@ object SquareFitter {
         return (a + b) / 2f
     }
 
-    /**
-     * Optimizes centerY using golden section search while keeping other parameters fixed
-     */
     private fun optimizeCenterY(
         centerX: Float,
         initialCenterY: Float,
@@ -162,7 +134,7 @@ object SquareFitter {
     ): Float {
         val goldenRatio = 0.618033988749895f
         val tolerance = 0.1f
-        val searchRange = sideLength * 0.5f // Search ±50% of side length
+        val searchRange = sideLength * 0.5f
 
         var a = initialCenterY - searchRange
         var b = initialCenterY + searchRange
@@ -191,9 +163,6 @@ object SquareFitter {
         return (a + b) / 2f
     }
 
-    /**
-     * Optimizes side length using golden section search while keeping other parameters fixed
-     */
     private fun optimizeSideLength(
         centerX: Float,
         centerY: Float,
@@ -203,7 +172,7 @@ object SquareFitter {
     ): Float {
         val goldenRatio = 0.618033988749895f
         val tolerance = 0.1f
-        val searchRange = initialSideLength * 0.5f // Search ±50% of initial side length
+        val searchRange = initialSideLength * 0.5f
 
         var a = max(1f, initialSideLength - searchRange)
         var b = initialSideLength + searchRange
@@ -232,9 +201,6 @@ object SquareFitter {
         return (a + b) / 2f
     }
 
-    /**
-     * Optimizes the angle using golden section search
-     */
     private fun optimizeAngle(
         centerX: Float,
         centerY: Float,
@@ -243,8 +209,8 @@ object SquareFitter {
         points: List<PointF>
     ): Pair<Float, Float> {
         val goldenRatio = 0.618033988749895f
-        val tolerance = 0.001f // ~0.057 degrees
-        val searchRange = PI.toFloat() / 4f // Search ±45° from start angle
+        val tolerance = 0.001f
+        val searchRange = PI.toFloat() / 4f
 
         var a = startAngle - searchRange
         var b = startAngle + searchRange
@@ -275,9 +241,6 @@ object SquareFitter {
         return Pair(bestAngle, bestCost)
     }
 
-    /**
-     * Evaluates the cost (average distance to square edges) for a given angle
-     */
     private fun evaluateFit(
         centerX: Float,
         centerY: Float,
@@ -307,10 +270,6 @@ object SquareFitter {
         return totalDistance / points.size
     }
 
-    /**
-     * Evaluates the maximum distance from any point to the square edges
-     * Used for quality metric (more strict than average)
-     */
     private fun evaluateMaxDistance(
         centerX: Float,
         centerY: Float,
@@ -340,15 +299,11 @@ object SquareFitter {
         return maxDistance
     }
 
-    /**
-     * Gets the four corners of the square given parameters
-     */
     private fun getSquareCorners(params: SquareParams): List<PointF> {
         val halfSide = params.sideLength / 2f
         val cos = cos(params.angle)
         val sin = sin(params.angle)
 
-        // Corners before rotation (centered at origin)
         val localCorners = listOf(
             PointF(-halfSide, -halfSide),
             PointF(halfSide, -halfSide),
@@ -356,7 +311,6 @@ object SquareFitter {
             PointF(-halfSide, halfSide)
         )
 
-        // Rotate and translate to final position
         return localCorners.map { corner ->
             val rotatedX = corner.x * cos - corner.y * sin
             val rotatedY = corner.x * sin + corner.y * cos
@@ -367,27 +321,21 @@ object SquareFitter {
         }
     }
 
-    /**
-     * Calculates the minimum distance from a point to a line segment
-     */
     private fun distanceToLineSegment(point: PointF, segmentStart: PointF, segmentEnd: PointF): Float {
         val dx = segmentEnd.x - segmentStart.x
         val dy = segmentEnd.y - segmentStart.y
         val lengthSquared = dx * dx + dy * dy
 
         if (lengthSquared == 0f) {
-            // Degenerate segment (point)
             return distance(point, segmentStart)
         }
 
-        // Calculate projection parameter t
         val t = ((point.x - segmentStart.x) * dx + (point.y - segmentStart.y) * dy) / lengthSquared
 
         return when {
-            t < 0f -> distance(point, segmentStart) // Beyond start
-            t > 1f -> distance(point, segmentEnd)   // Beyond end
+            t < 0f -> distance(point, segmentStart)
+            t > 1f -> distance(point, segmentEnd)
             else -> {
-                // Perpendicular distance to segment
                 val projectionX = segmentStart.x + t * dx
                 val projectionY = segmentStart.y + t * dy
                 distance(point, PointF(projectionX, projectionY))
@@ -395,19 +343,14 @@ object SquareFitter {
         }
     }
 
-    /**
-     * Creates a Stroke object representing the fitted square
-     */
     private fun createSquareStroke(params: SquareParams, paint: Paint): Stroke {
         val corners = getSquareCorners(params)
-
-        // Create closed path (5 points: 4 corners + first corner again)
         val squarePoints = mutableListOf<PointF>()
         squarePoints.addAll(corners)
-        squarePoints.add(corners[0]) // Close the square
+        squarePoints.add(corners[0])
 
         val (pathPoints, totalDistance) = Stroke.calculatePathPointsWithDistances(squarePoints)
-        return Stroke(pathPoints, Paint(paint), totalDistance, 0) // smoothness = 0 for geometric shapes
+        return Stroke(pathPoints, Paint(paint), totalDistance, 0)
     }
 
     private fun distance(p1: PointF, p2: PointF): Float {
