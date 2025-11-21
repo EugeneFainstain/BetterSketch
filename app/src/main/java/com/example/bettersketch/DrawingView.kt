@@ -278,9 +278,12 @@ class DrawingView @JvmOverloads constructor(
             return
         }
 
-        SquareFitter.strokeForFitting = stroke
+        // Use uniformly sampled stroke for better shape fitting
+        val strokeForFitting = stroke.generateUniformSampled(256 )
+
+        SquareFitter.strokeForFitting = strokeForFitting
         val squareFit = SquareFitter.fitSquare(qualityThreshold = 0.2f)
-        CircleFitter.strokeForFitting = stroke
+        CircleFitter.strokeForFitting = strokeForFitting
         val circleFit = CircleFitter.fitCircle(qualityThreshold = 0.2f)
 
         if (squareFit != null && circleFit != null) {
