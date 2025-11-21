@@ -22,7 +22,7 @@ class ShapeFitter {
             // We determine this by checking if the distance between the start and end points
             // is greater than 20% of the largest dimension of the stroke's bounding box.
             if (distance > maxDimension * 0.2f) {
-                LineFitter.fitLine(strokeForFitting, qualityThreshold = 99f)?.let {
+                LineFitter.fitLine(strokeForFitting)?.let {
                     fits.add(ShapeFitResult.Line(strokeToReplace, it))
                 }
 
@@ -42,10 +42,10 @@ class ShapeFitter {
 
             } else {
                 // If the stroke is likely a closed shape, try to fit a square and a circle.
-                SquareFitter.fitSquare(strokeForFitting, qualityThreshold = 99f)?.let {
+                SquareFitter.fitSquare(strokeForFitting)?.let {
                     fits.add(ShapeFitResult.Square(strokeToReplace, it))
                 }
-                CircleFitter.fitCircle(strokeForFitting, qualityThreshold = 99f)?.let {
+                CircleFitter.fitCircle(strokeForFitting)?.let {
                     fits.add(ShapeFitResult.Circle(strokeToReplace, it))
                 }
             }

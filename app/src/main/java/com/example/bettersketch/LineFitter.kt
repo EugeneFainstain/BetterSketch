@@ -17,7 +17,7 @@ object LineFitter {
         val fittedStroke: Stroke
     )
 
-    fun fitLine(stroke: Stroke, qualityThreshold: Float = 0.1f): FitResult? {
+    fun fitLine(stroke: Stroke): FitResult? {
         if (stroke.points.size < 2) return null
 
         val points = stroke.points.map { it.point }
@@ -34,10 +34,6 @@ object LineFitter {
         val lineLength = distance(startPoint, endPoint)
         if (lineLength == 0f) return null
         val normalizedError = averageError / lineLength
-
-        if (normalizedError > qualityThreshold) {
-            return null
-        }
 
         val fittedStroke = createLineStroke(params, stroke.paint)
         return FitResult(params, normalizedError, fittedStroke)

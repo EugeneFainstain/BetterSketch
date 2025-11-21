@@ -19,8 +19,7 @@ object SquareFitter {
     )
 
     fun fitSquare(
-        stroke: Stroke,
-        qualityThreshold: Float = 0.15f
+        stroke: Stroke
     ): FitResult? {
         if (stroke.points.size < 4) return null
 
@@ -78,10 +77,6 @@ object SquareFitter {
 
         val maxDistance = evaluateMaxDistance(centerX, centerY, sideLength, bestAngle, points)
         val normalizedError = maxDistance / sideLength
-
-        if (normalizedError > qualityThreshold) {
-            return null
-        }
 
         val fittedStroke = createSquareStroke(params, stroke.paint)
         return FitResult(params, normalizedError, fittedStroke)

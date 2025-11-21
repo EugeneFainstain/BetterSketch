@@ -18,8 +18,7 @@ object CircleFitter {
     )
 
     fun fitCircle(
-        stroke: Stroke,
-        qualityThreshold: Float = 0.15f
+        stroke: Stroke
     ): FitResult? {
         if (stroke.points.size < 3) return null
 
@@ -63,10 +62,6 @@ object CircleFitter {
             maxDeviation = max(maxDeviation, deviation)
         }
         val normalizedError = maxDeviation / (2f * radius)
-
-        if (normalizedError > qualityThreshold) {
-            return null
-        }
 
         val fittedStroke = createCircleStroke(params, stroke.paint)
         return FitResult(params, normalizedError, fittedStroke)
