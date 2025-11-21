@@ -51,7 +51,13 @@ class ShapeFitter {
                 when (it) {
                     is ShapeFitResult.Square -> it.fitResult.normalizedError
                     is ShapeFitResult.Circle -> it.fitResult.normalizedError
-                    is ShapeFitResult.Polynomial -> it.fitResult.normalizedError
+                    is ShapeFitResult.Polynomial -> {
+                        if (it.fitResult.degree == 1) {
+                            it.fitResult.normalizedError / 4f // Preference for lines...
+                        } else {
+                            it.fitResult.normalizedError
+                        }
+                    }
                 }
             }
         }
