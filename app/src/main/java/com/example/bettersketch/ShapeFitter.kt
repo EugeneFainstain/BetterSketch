@@ -26,7 +26,7 @@ class ShapeFitter {
                 var bestPolyFit: ShapeFitResult.Polynomial? = null
                 var minError = Float.MAX_VALUE
 
-                for (degree in 1..5) {
+                for (degree in 1..4) {
                     PolynomFitter.fitPolynomial(strokeForFitting, degree)?.let {
                         val weightedError = it.normalizedError
                         if (weightedError < minError) {
@@ -53,7 +53,7 @@ class ShapeFitter {
                     is ShapeFitResult.Circle -> it.fitResult.normalizedError
                     is ShapeFitResult.Polynomial -> {
                         if (it.fitResult.degree == 1) {
-                            it.fitResult.normalizedError / 4f // Preference for lines...
+                            it.fitResult.normalizedError / 2f // Preference for lines...
                         } else {
                             it.fitResult.normalizedError
                         }
