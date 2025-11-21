@@ -147,11 +147,13 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             }
             is ShapeFitResult.Polynomial -> {
                 val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
-                Quad(p, "Poly", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
+                Quad(p, "Poly(${shapeFitResult.fitResult.degree})", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
             }
         }
 
-        if (error > 0.2f) {
+        val fitErrorThreshold = 0.5f
+
+        if (error > fitErrorThreshold) {
             btnShape.visibility = View.GONE
         } else {
             btnShape.text = "${String.format("%.2f", percentage)}% $shapeName"

@@ -16,7 +16,8 @@ object PolynomFitter {
     data class FitResult(
         val params: PolynomialParams,
         val normalizedError: Float,
-        val fittedStroke: Stroke
+        val fittedStroke: Stroke,
+        val degree: Int
     )
 
     fun fitPolynomial(stroke: Stroke, degree: Int): FitResult? {
@@ -59,7 +60,9 @@ object PolynomFitter {
         val diagonal = sqrt(bounds.width().pow(2) + bounds.height().pow(2))
         val normalizedError = if (diagonal > 0) (rmse / diagonal).toFloat() else 0f
 
-        return FitResult(params, normalizedError, fittedStroke)
+//        return FitResult(params, normalizedError * degree, fittedStroke, degree)
+        return FitResult(params, normalizedError * degree * sqrt(degree.toFloat()), fittedStroke, degree)
+//        return FitResult(params, normalizedError * degree * degree, fittedStroke, degree)
     }
 
     private fun evaluatePolynomial(coeffs: DoubleArray, t: Double): Double {

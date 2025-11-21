@@ -18,22 +18,34 @@ class ShapeFitter {
 
             val fits = mutableListOf<ShapeFitResult>()
 
-            // Always try to fit a polynomial
-            PolynomFitter.fitPolynomial(strokeForFitting, 3)?.let {
-                fits.add(ShapeFitResult.Polynomial(strokeToReplace, it))
-            }
-
-            // If the stroke is likely an open shape, only try to fit a line.
-            if (distance > maxDimension * 0.1f) {
-                LineFitter.fitLine(strokeForFitting, qualityThreshold = 0.1f)?.let {
+            // Optimization: if the stroke is not a closed loop, don't try to fit a closed-loop shape.
+            // We determine this by checking if the distance between the start and end points
+            // is greater than 20% of the largest dimension of the stroke's bounding box.
+            if (distance > maxDimension * 0.2f) {
+                LineFitter.fitLine(strokeForFitting, qualityThreshold = 99f)?.let {
                     fits.add(ShapeFitResult.Line(strokeToReplace, it))
                 }
+
+                var bestPolyFit: ShapeFitResult.Polynomial? = null
+                var minError = Float.MAX_VALUE
+
+                for (degree in 2..15) {
+                    PolynomFitter.fitPolynomial(strokeForFitting, degree)?.let {
+                        val weightedError = it.normalizedError
+                        if (weightedError < minError) {
+                            minError = weightedError
+                            bestPolyFit = ShapeFitResult.Polynomial(strokeToReplace, it)
+                        }
+                    }
+                }
+                bestPolyFit?.let { fits.add(it) }
+
             } else {
                 // If the stroke is likely a closed shape, try to fit a square and a circle.
-                SquareFitter.fitSquare(strokeForFitting, qualityThreshold = 0.2f)?.let {
+                SquareFitter.fitSquare(strokeForFitting, qualityThreshold = 99f)?.let {
                     fits.add(ShapeFitResult.Square(strokeToReplace, it))
                 }
-                CircleFitter.fitCircle(strokeForFitting, qualityThreshold = 0.2f)?.let {
+                CircleFitter.fitCircle(strokeForFitting, qualityThreshold = 99f)?.let {
                     fits.add(ShapeFitResult.Circle(strokeToReplace, it))
                 }
             }
