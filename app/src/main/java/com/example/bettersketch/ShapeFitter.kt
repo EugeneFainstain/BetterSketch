@@ -16,13 +16,15 @@ class ShapeFitter {
             val bounds = strokeForFitting.getBounds()
             val maxDimension = max(bounds.width(), bounds.height())
 
-            // Optimization: if the stroke is not a closed loop, don't try to fit a shape.
+            // Optimization: if the stroke is not a closed loop, don't try to fit a closed-loop shape.
             // We determine this by checking if the distance between the start and end points
             // is greater than 20% of the largest dimension of the stroke's bounding box.
             if (distance > maxDimension * 0.2f) {
-                return null
+                val lineFit = LineFitter.fitLine(strokeForFitting, qualityThreshold = 0.1f)
+                return lineFit?.let { ShapeFitResult.Line(strokeToReplace, it) }
             }
 
+            // If the stroke is likely a closed shape, try to fit a square and a circle.
             val squareFit = SquareFitter.fitSquare(strokeForFitting, qualityThreshold = 0.2f)
             val circleFit = CircleFitter.fitCircle(strokeForFitting, qualityThreshold = 0.2f)
 

@@ -141,6 +141,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
                 val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
                 Quad(p, "Circle", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
             }
+            is ShapeFitResult.Line -> {
+                val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
+                Quad(p, "Line", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
+            }
         }
 
         if (error > 0.2f) {

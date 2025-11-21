@@ -18,6 +18,7 @@ sealed class ShapeFitResult {
     abstract val strokeToReplace: Stroke
     data class Square(override val strokeToReplace: Stroke, val fitResult: SquareFitter.FitResult) : ShapeFitResult()
     data class Circle(override val strokeToReplace: Stroke, val fitResult: CircleFitter.FitResult) : ShapeFitResult()
+    data class Line(override val strokeToReplace: Stroke, val fitResult: LineFitter.FitResult) : ShapeFitResult()
 }
 
 interface ShapeDetectionListener {
