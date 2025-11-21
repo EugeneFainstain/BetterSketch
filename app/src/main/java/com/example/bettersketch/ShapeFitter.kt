@@ -16,29 +16,35 @@ class ShapeFitter {
             val bounds = strokeForFitting.getBounds()
             val maxDimension = max(bounds.width(), bounds.height())
 
-            // Optimization: if the stroke is not a closed loop, don't try to fit a closed-loop shape.
-            // We determine this by checking if the distance between the start and end points
-            // is greater than 20% of the largest dimension of the stroke's bounding box.
-            if (distance > maxDimension * 0.2f) {
-                val lineFit = LineFitter.fitLine(strokeForFitting, qualityThreshold = 0.1f)
-                return lineFit?.let { ShapeFitResult.Line(strokeToReplace, it) }
+            val fits = mutableListOf<ShapeFitResult>()
+
+            // Always try to fit a polynomial
+            PolynomFitter.fitPolynomial(strokeForFitting, 3)?.let {
+                fits.add(ShapeFitResult.Polynomial(strokeToReplace, it))
             }
 
-            // If the stroke is likely a closed shape, try to fit a square and a circle.
-            val squareFit = SquareFitter.fitSquare(strokeForFitting, qualityThreshold = 0.2f)
-            val circleFit = CircleFitter.fitCircle(strokeForFitting, qualityThreshold = 0.2f)
-
-            return when {
-                squareFit != null && circleFit != null -> {
-                    if (squareFit.normalizedError < circleFit.normalizedError) {
-                        ShapeFitResult.Square(strokeToReplace, squareFit)
-                    } else {
-                        ShapeFitResult.Circle(strokeToReplace, circleFit)
-                    }
+            // If the stroke is likely an open shape, only try to fit a line.
+            if (distance > maxDimension * 0.1f) {
+                LineFitter.fitLine(strokeForFitting, qualityThreshold = 0.1f)?.let {
+                    fits.add(ShapeFitResult.Line(strokeToReplace, it))
                 }
-                squareFit != null -> ShapeFitResult.Square(strokeToReplace, squareFit)
-                circleFit != null -> ShapeFitResult.Circle(strokeToReplace, circleFit)
-                else -> null
+            } else {
+                // If the stroke is likely a closed shape, try to fit a square and a circle.
+                SquareFitter.fitSquare(strokeForFitting, qualityThreshold = 0.2f)?.let {
+                    fits.add(ShapeFitResult.Square(strokeToReplace, it))
+                }
+                CircleFitter.fitCircle(strokeForFitting, qualityThreshold = 0.2f)?.let {
+                    fits.add(ShapeFitResult.Circle(strokeToReplace, it))
+                }
+            }
+
+            return fits.minByOrNull {
+                when (it) {
+                    is ShapeFitResult.Square -> it.fitResult.normalizedError
+                    is ShapeFitResult.Circle -> it.fitResult.normalizedError
+                    is ShapeFitResult.Line -> it.fitResult.normalizedError
+                    is ShapeFitResult.Polynomial -> it.fitResult.normalizedError
+                }
             }
         }
     }
