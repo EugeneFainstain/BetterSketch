@@ -713,13 +713,14 @@ class DrawingView @JvmOverloads constructor(
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
         if (twoFingerGestureOccured || threeFingerGestureOccured) return true
 
+        val invertedMatrix = Matrix()
+        globalTransform.invert(invertedMatrix)
+        val delta = floatArrayOf(dx, dy)
+        invertedMatrix.mapVectors(delta)
+
         when (currentState) {
             State.NORMAL_DRAWING -> touchMove(event.x, event.y)
             State.STROKE_EDITING -> {
-                val invertedMatrix = Matrix()
-                globalTransform.invert(invertedMatrix)
-                val delta = floatArrayOf(dx, dy)
-                invertedMatrix.mapVectors(delta)
                 moveEditingPoint(delta[0], delta[1])
             }
             State.CHOSEN_STROKE -> {
@@ -733,8 +734,13 @@ class DrawingView @JvmOverloads constructor(
                             val centerY = bounds.centerY()
                             val initialHeight = bounds.height()
 
-                            val totalDx = event.x - initialTouchX
-                            var totalDy = event.y - initialTouchY
+                            var _totalDx = event.x - initialTouchX
+                            var _totalDy = event.y - initialTouchY
+
+                            val worldDelta = floatArrayOf(_totalDx, _totalDy)
+
+                            val totalDx = worldDelta[0]
+                            var totalDy = worldDelta[1]
 
                             if( initialTouchY > centerY )
                                 totalDy = -totalDy
@@ -764,20 +770,21 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
+        val invertedGlobal = Matrix()
+        globalTransform.invert(invertedGlobal)
+        val worldDelta = floatArrayOf(dx, dy)
+        invertedGlobal.mapVectors(worldDelta)
+
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 val mid = midpoint(event)
-                globalTransform.preTranslate(dx, dy)
+                globalTransform.preTranslate(worldDelta[0], worldDelta[1])
                 globalTransform.preScale(scale, scale, mid.x, mid.y)
                 globalTransform.preRotate(rotate, mid.x, mid.y)
                 redrawHistory()
             }
             State.CHOSEN_STROKE, State.STROKE_EDITING -> {
                 currentStroke?.let {
-                    val invertedGlobal = Matrix()
-                    globalTransform.invert(invertedGlobal)
-                    val worldDelta = floatArrayOf(dx, dy)
-                    invertedGlobal.mapVectors(worldDelta)
 
                     val deltaMatrix = Matrix()
                     val bounds = it.getBounds()
