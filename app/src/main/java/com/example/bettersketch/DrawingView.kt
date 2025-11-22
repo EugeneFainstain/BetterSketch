@@ -69,6 +69,7 @@ class DrawingView @JvmOverloads constructor(
     private var editingPointInitialWeights: List<Float>? = null
 
     // Transformation state
+    private val globalTransform = Matrix()
     private var twoFingerGestureOccured = false
     private var threeFingerGestureOccured = false
     private var backedUpGroupStroke: Stroke? = null
@@ -136,17 +137,6 @@ class DrawingView @JvmOverloads constructor(
         listener?.onStateChanged()
     }
 
-    fun exportBitmap(): Bitmap {
-        val bmp = createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val c = Canvas(bmp)
-        // Temporarily set to normal drawing to export all strokes as opaque
-        val oldState = currentState
-        currentState = State.NORMAL_DRAWING
-        redrawHistory(c)
-        currentState = oldState
-        return bmp
-    }
-
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w > 0 && h > 0) {
@@ -163,18 +153,18 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.withSave {
-            // 1. Draw the pre-rendered history from the bitmap
-            backingBitmap?.let { drawBitmap(it, 0f, 0f, null) }
+        // 1. Draw the pre-rendered, transformed history from the bitmap
+        backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
 
-            // 2. Draw the "live" part (the new stroke being created) on top.
-            if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
-                drawStroke(canvas, strokeInProgress!!, 1.0f, 1.0f, false)
-            }
+        // 2. Draw the "live" part (the new stroke being created) on top, with transformation.
+        if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
+            drawStroke(canvas, strokeInProgress!!, 1.0f, 1.0f, false, useGlobalTransform = true)
+        }
 
-            selectionCircle?.let {
-                drawPath(it.third, selectionPaint)
-            }
+        selectionCircle?.let {
+            val transformedPath = Path(it.third)
+            transformedPath.transform(globalTransform)
+            canvas.drawPath(transformedPath, selectionPaint)
         }
     }
 
@@ -189,67 +179,54 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    private fun transformStroke(stroke: Stroke, matrix: Matrix, isGlobalTransform: Boolean) {
-        val scale = getScaleFromMatrix(matrix)
-        stroke.forEachStroke { s ->
-            if (isGlobalTransform) {
-                s.paint.strokeWidth *= scale
-                s.totalDistance *= scale
-
-                val transformPoint = { pathPoint: PathPoint ->
-                    val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                    matrix.mapPoints(point)
-                    pathPoint.point.set(point[0], point[1])
-                    pathPoint.distance *= scale
-                }
-
-                s.points.forEach(transformPoint)
-                s.unsmoothedPoints.forEach(transformPoint)
-                s.originalPoints.forEach(transformPoint)
-
-            } else {
-                s.isModified = true
-                s.paint.strokeWidth *= scale
-
-                s.unsmoothedPoints.forEach { pathPoint ->
-                    val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                    matrix.mapPoints(point)
-                    pathPoint.point.set(point[0], point[1])
-                }
-                val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(s.unsmoothedPoints.map { it.point })
-                s.unsmoothedPoints.clear()
-                s.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-                s.totalDistance = newTotalDistance
-
-                s.applySmoothing()
-            }
-        }
-        if (!isGlobalTransform) {
-            listener?.onStateChanged()
-            redrawHistory()
-        }
+    private fun toWorldCoordinates(x: Float, y: Float): PointF {
+        val point = floatArrayOf(x, y)
+        val invertedMatrix = Matrix()
+        globalTransform.invert(invertedMatrix)
+        invertedMatrix.mapPoints(point)
+        return PointF(point[0], point[1])
     }
 
-    private fun transformAllStrokes(matrix: Matrix) {
-        strokes.forEach { stroke ->
-            transformStroke(stroke, matrix, isGlobalTransform = true)
+    private fun transformStroke(stroke: Stroke, matrix: Matrix) {
+        val scale = getScaleFromMatrix(matrix)
+        stroke.forEachStroke { s ->
+            s.isModified = true
+            s.paint.strokeWidth *= scale
+
+            s.unsmoothedPoints.forEach { pathPoint ->
+                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                matrix.mapPoints(point)
+                pathPoint.point.set(point[0], point[1])
+            }
+            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(s.unsmoothedPoints.map { it.point })
+            s.unsmoothedPoints.clear()
+            s.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+            s.totalDistance = newTotalDistance
+
+            s.applySmoothing()
         }
-        redrawHistory() // Redraw only once after all strokes are transformed
+        listener?.onStateChanged()
+        redrawHistory()
     }
 
     private fun getScaleFromMatrix(matrix: Matrix): Float {
         val values = FloatArray(9)
         matrix.getValues(values)
-        return values[Matrix.MSCALE_X]
+        // Use the pythagorean theorem to calculate the scale, which is robust against rotation
+        val scaleX = values[Matrix.MSCALE_X]
+        val skewY = values[Matrix.MSKEW_Y]
+        return sqrt(scaleX * scaleX + skewY * skewY)
     }
 
     private fun touchStart(x: Float, y: Float) {
+        val worldPoint = toWorldCoordinates(x, y)
         strokeInProgress = Stroke(Paint(currentPaint), currentSmoothness)
-        strokeInProgress?.addPoint(PointF(x, y))
+        strokeInProgress?.addPoint(worldPoint)
     }
 
     private fun touchMove(x: Float, y: Float) {
-        strokeInProgress?.addPoint(PointF(x, y))
+        val worldPoint = toWorldCoordinates(x, y)
+        strokeInProgress?.addPoint(worldPoint)
         invalidate() // Redraw the live stroke
     }
 
@@ -404,7 +381,7 @@ class DrawingView @JvmOverloads constructor(
             val bounds = originalStroke.getBounds()
             val offsetY = -bounds.height() / 2f
             val matrix = Matrix().apply { postTranslate(0f, offsetY) }
-            transformStroke(duplicatedStroke, matrix, isGlobalTransform = true)
+            transformStroke(duplicatedStroke, matrix)
 
             duplicatedStroke.setHighlightedRecursively(true)
 
@@ -544,18 +521,19 @@ class DrawingView @JvmOverloads constructor(
             }
 
             val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
-            drawStroke(c, s, opacityMultiplier, 1.0f, drawEndpoints)
+            drawStroke(c, s, opacityMultiplier, 1.0f, drawEndpoints, useGlobalTransform = true)
         }
 
         if (canvas == null) invalidate()
     }
 
     private fun drawStroke(
-        canvas: Canvas?,
+        canvas: Canvas,
         stroke: Stroke,
         cumulativeOpacityMultiplier: Float,
         cumulativeWidthMultiplier: Float,
-        drawEndpoints: Boolean
+        drawEndpoints: Boolean,
+        useGlobalTransform: Boolean
     ) {
         if (stroke.isGroup) {
             val groupThicknessMultiplier = stroke.paint.strokeWidth / 10f
@@ -563,24 +541,32 @@ class DrawingView @JvmOverloads constructor(
             val newCumulativeOpacityMultiplier = cumulativeOpacityMultiplier * (stroke.paint.alpha / 255f)
 
             stroke.childStrokes.forEach { childStroke ->
-                drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints)
+                drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints, useGlobalTransform)
             }
         } else {
             if (stroke.points.size >= 2) {
                 val path = Path()
-                path.moveTo(stroke.points.first().point.x, stroke.points.first().point.y)
+                val firstPoint = stroke.points.first().point
+                path.moveTo(firstPoint.x, firstPoint.y)
                 for (i in 1 until stroke.points.size) {
-                    path.lineTo(stroke.points[i].point.x, stroke.points[i].point.y)
+                    val point = stroke.points[i].point
+                    path.lineTo(point.x, point.y)
                 }
 
                 val finalPaint = Paint(stroke.paint)
-                finalPaint.strokeWidth *= cumulativeWidthMultiplier
+                var currentScale = 1.0f
+                if (useGlobalTransform) {
+                    path.transform(globalTransform)
+                    currentScale = getScaleFromMatrix(globalTransform)
+                }
+
+                finalPaint.strokeWidth *= cumulativeWidthMultiplier * currentScale
                 finalPaint.alpha = (finalPaint.alpha * cumulativeOpacityMultiplier).toInt()
 
                 if (stroke.isHighlighted) {
                     val haloPaintToUse = Paint(haloPaint)
-                    haloPaintToUse.strokeWidth = finalPaint.strokeWidth + haloOffset
-                    canvas?.drawPath(path, haloPaintToUse)
+                    haloPaintToUse.strokeWidth = finalPaint.strokeWidth + haloOffset * currentScale
+                    canvas.drawPath(path, haloPaintToUse)
                 }
 
                 if (drawEndpoints && !twoFingerGestureOccured && !threeFingerGestureOccured) {
@@ -592,11 +578,15 @@ class DrawingView @JvmOverloads constructor(
 
                     if (editingPointIndex != -1 && editingPointIndex < stroke.points.size) {
                         val pointToHighlight = stroke.points[editingPointIndex].point
-                        canvas?.drawCircle(pointToHighlight.x, pointToHighlight.y, radius, endpointPaint)
+                        val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
+                        if (useGlobalTransform) {
+                            globalTransform.mapPoints(transformedPoint)
+                        }
+                        canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
                     }
                 }
 
-                canvas?.drawPath(path, finalPaint)
+                canvas.drawPath(path, finalPaint)
             }
         }
     }
@@ -613,9 +603,10 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onSingleTapEnd(event: MotionEvent): Boolean {
         performClick()
+        val worldPoint = toWorldCoordinates(event.x, event.y)
         when (currentState) {
             State.NORMAL_DRAWING -> {
-                if (selectStrokeAt(PointF(event.x, event.y))) {
+                if (selectStrokeAt(worldPoint)) {
                     setState(State.CHOSEN_STROKE)
                 }
             }
@@ -634,12 +625,13 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onFirstFingerDown(event: MotionEvent): Boolean {
         val downPoint = PointF(event.x, event.y)
+        val worldPoint = toWorldCoordinates(downPoint.x, downPoint.y)
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 touchStart(downPoint.x, downPoint.y)
             }
             State.CHOSEN_STROKE -> {
-                if (selectEndpointOfCurrentStroke(downPoint)) {
+                if (selectEndpointOfCurrentStroke(worldPoint)) {
                     setState(State.STROKE_EDITING)
                 } else {
                     currentStroke?.let {
@@ -653,7 +645,7 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
             State.STROKE_EDITING -> {
-                if (selectEndpointOfCurrentStroke(downPoint)) {
+                if (selectEndpointOfCurrentStroke(worldPoint)) {
                     redrawHistory()
                 }
             }
@@ -730,7 +722,11 @@ class DrawingView @JvmOverloads constructor(
         when (currentState) {
             State.NORMAL_DRAWING -> touchMove(event.x, event.y)
             State.STROKE_EDITING -> {
-                moveEditingPoint(dx, dy)
+                val invertedMatrix = Matrix()
+                globalTransform.invert(invertedMatrix)
+                val delta = floatArrayOf(dx, dy)
+                invertedMatrix.mapVectors(delta)
+                moveEditingPoint(delta[0], delta[1])
             }
             State.CHOSEN_STROKE -> {
                 currentStroke?.let { current ->
@@ -757,7 +753,7 @@ class DrawingView @JvmOverloads constructor(
                                 val scaleY = newHeight / initialHeight
                                 matrix.postScale(1.0f, scaleY, centerX, centerY)
                             }
-                            transformStroke(current, matrix, isGlobalTransform = false)
+                            transformStroke(current, matrix)
                         }
                     }
                 }
@@ -776,23 +772,27 @@ class DrawingView @JvmOverloads constructor(
     override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
         when (currentState) {
             State.NORMAL_DRAWING -> {
-                val deltaMatrix = Matrix()
                 val mid = midpoint(event)
-                deltaMatrix.postTranslate(dx, dy)
-                deltaMatrix.postScale(scale, scale, mid.x, mid.y)
-                deltaMatrix.postRotate(rotate, mid.x, mid.y)
-                transformAllStrokes(deltaMatrix)
+                globalTransform.preTranslate(dx, dy)
+                globalTransform.preScale(scale, scale, mid.x, mid.y)
+                globalTransform.preRotate(rotate, mid.x, mid.y)
+                redrawHistory()
             }
             State.CHOSEN_STROKE, State.STROKE_EDITING -> {
                 currentStroke?.let {
+                    val invertedGlobal = Matrix()
+                    globalTransform.invert(invertedGlobal)
+                    val worldDelta = floatArrayOf(dx, dy)
+                    invertedGlobal.mapVectors(worldDelta)
+
                     val deltaMatrix = Matrix()
                     val bounds = it.getBounds()
                     val centerX = bounds.centerX()
                     val centerY = bounds.centerY()
                     deltaMatrix.postScale(scale, scale, centerX, centerY)
                     deltaMatrix.postRotate(rotate, centerX, centerY)
-                    deltaMatrix.postTranslate(dx, dy)
-                    transformStroke(it, deltaMatrix, isGlobalTransform = false)
+                    deltaMatrix.postTranslate(worldDelta[0], worldDelta[1])
+                    transformStroke(it, deltaMatrix)
                 }
             }
         }
@@ -830,9 +830,9 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
         if (event.pointerCount >= 3) {
-            val p1 = PointF(event.getX(0), event.getY(0))
-            val p2 = PointF(event.getX(1), event.getY(1))
-            val p3 = PointF(event.getX(2), event.getY(2))
+            val p1 = toWorldCoordinates(event.getX(0), event.getY(0))
+            val p2 = toWorldCoordinates(event.getX(1), event.getY(1))
+            val p3 = toWorldCoordinates(event.getX(2), event.getY(2))
 
             selectionCircle = calculateCircle(p1, p2, p3)
             selectionCircle?.let { (center, radius, _) ->
