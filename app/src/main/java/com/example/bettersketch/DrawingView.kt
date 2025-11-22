@@ -187,6 +187,12 @@ class DrawingView @JvmOverloads constructor(
         return PointF(point[0], point[1])
     }
 
+    private fun toScreenCoordinates(x: Float, y: Float): PointF {
+        val point = floatArrayOf(x, y)
+        globalTransform.mapPoints(point)
+        return PointF(point[0], point[1])
+    }
+
     private fun transformStroke(stroke: Stroke, matrix: Matrix) {
         val scale = getScaleFromMatrix(matrix)
         stroke.forEachStroke { s ->
@@ -713,14 +719,14 @@ class DrawingView @JvmOverloads constructor(
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
         if (twoFingerGestureOccured || threeFingerGestureOccured) return true
 
-        val invertedMatrix = Matrix()
-        globalTransform.invert(invertedMatrix)
-        val delta = floatArrayOf(dx, dy)
-        invertedMatrix.mapVectors(delta)
+        val inverseGlobalTransform = Matrix()
+        globalTransform.invert(inverseGlobalTransform)
 
         when (currentState) {
             State.NORMAL_DRAWING -> touchMove(event.x, event.y)
             State.STROKE_EDITING -> {
+                val delta = floatArrayOf(dx, dy)
+                inverseGlobalTransform.mapVectors(delta)
                 moveEditingPoint(delta[0], delta[1])
             }
             State.CHOSEN_STROKE -> {
@@ -734,26 +740,34 @@ class DrawingView @JvmOverloads constructor(
                             val centerY = bounds.centerY()
                             val initialHeight = bounds.height()
 
-                            var _totalDx = event.x - initialTouchX
-                            var _totalDy = event.y - initialTouchY
-
-                            val worldDelta = floatArrayOf(_totalDx, _totalDy)
-
-                            val totalDx = worldDelta[0]
-                            var totalDy = worldDelta[1]
+                            val totalDx = event.x - initialTouchX
+                            var totalDy = event.y - initialTouchY
 
                             if( initialTouchY > centerY )
                                 totalDy = -totalDy
 
-                            val matrix = Matrix()
-                            matrix.postTranslate(totalDx, 0f)
+                            // Translation Matrix
+                            val translateMatrix = Matrix()
+                            translateMatrix.setTranslate(totalDx, 0f)
 
+                            // Scaling Matrix
+                            val scaleMatrix = Matrix()
                             if (initialHeight != 0f) {
                                 val newHeight = initialHeight - totalDy
                                 val scaleY = newHeight / initialHeight
-                                matrix.postScale(1.0f, scaleY, centerX, centerY)
+                                val center = toScreenCoordinates(centerX, centerY)
+                                scaleMatrix.setScale(1.0f, scaleY, center.x, center.y)
                             }
-                            transformStroke(current, matrix)
+
+                            // Combining all transformations
+                            var totalMatrix = Matrix();
+                            totalMatrix.postConcat(globalTransform)
+                            totalMatrix.postConcat(scaleMatrix)
+                            totalMatrix.postConcat(translateMatrix)
+                            totalMatrix.postConcat(inverseGlobalTransform)
+
+                            // Applying the transformations
+                            transformStroke(current, totalMatrix)
                         }
                     }
                 }
