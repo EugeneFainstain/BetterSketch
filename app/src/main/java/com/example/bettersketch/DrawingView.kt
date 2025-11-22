@@ -158,7 +158,7 @@ class DrawingView @JvmOverloads constructor(
 
         // 2. Draw the "live" part (the new stroke being created) on top, with transformation.
         if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
-            drawStroke(canvas, strokeInProgress!!, 1.0f, 1.0f, false, useGlobalTransform = true)
+            drawStroke(canvas, strokeInProgress!!, 1.0f, 1.0f, false)
         }
 
         selectionCircle?.let {
@@ -521,7 +521,7 @@ class DrawingView @JvmOverloads constructor(
             }
 
             val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
-            drawStroke(c, s, opacityMultiplier, 1.0f, drawEndpoints, useGlobalTransform = true)
+            drawStroke(c, s, opacityMultiplier, 1.0f, drawEndpoints)
         }
 
         if (canvas == null) invalidate()
@@ -532,8 +532,7 @@ class DrawingView @JvmOverloads constructor(
         stroke: Stroke,
         cumulativeOpacityMultiplier: Float,
         cumulativeWidthMultiplier: Float,
-        drawEndpoints: Boolean,
-        useGlobalTransform: Boolean
+        drawEndpoints: Boolean
     ) {
         if (stroke.isGroup) {
             val groupThicknessMultiplier = stroke.paint.strokeWidth / 10f
@@ -541,7 +540,7 @@ class DrawingView @JvmOverloads constructor(
             val newCumulativeOpacityMultiplier = cumulativeOpacityMultiplier * (stroke.paint.alpha / 255f)
 
             stroke.childStrokes.forEach { childStroke ->
-                drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints, useGlobalTransform)
+                drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints)
             }
         } else {
             if (stroke.points.size >= 2) {
@@ -554,11 +553,8 @@ class DrawingView @JvmOverloads constructor(
                 }
 
                 val finalPaint = Paint(stroke.paint)
-                var currentScale = 1.0f
-                if (useGlobalTransform) {
-                    path.transform(globalTransform)
-                    currentScale = getScaleFromMatrix(globalTransform)
-                }
+                path.transform(globalTransform)
+                val currentScale = getScaleFromMatrix(globalTransform)
 
                 finalPaint.strokeWidth *= cumulativeWidthMultiplier * currentScale
                 finalPaint.alpha = (finalPaint.alpha * cumulativeOpacityMultiplier).toInt()
@@ -579,9 +575,7 @@ class DrawingView @JvmOverloads constructor(
                     if (editingPointIndex != -1 && editingPointIndex < stroke.points.size) {
                         val pointToHighlight = stroke.points[editingPointIndex].point
                         val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
-                        if (useGlobalTransform) {
-                            globalTransform.mapPoints(transformedPoint)
-                        }
+                        globalTransform.mapPoints(transformedPoint)
                         canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
                     }
                 }
