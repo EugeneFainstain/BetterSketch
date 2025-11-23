@@ -727,13 +727,10 @@ class DrawingView @JvmOverloads constructor(
         val downPoint = PointF(event.x, event.y)
         val worldPoint = toWorldCoordinates(downPoint.x, downPoint.y)
         when (currentState) {
-            State.NORMAL_DRAWING -> {
-                touchStart(downPoint.x, downPoint.y)
-            }
+            State.NORMAL_DRAWING,
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
-                // If we start drawing, deselect the current stroke and start a new one.
-                //exitEditingMode()
-                //touchStart(downPoint.x, downPoint.y)
+                touchStart(downPoint.x, downPoint.y)
+                setState(currentState)
             }
             State.IN_EDITING_MODE_NOTHING_CHOSEN,
             State.CHOSEN_STROKE_IN_EDITING_MODE -> {
@@ -841,7 +838,15 @@ class DrawingView @JvmOverloads constructor(
         globalTransform.invert(inverseGlobalTransform)
 
         when (currentState) {
-            State.NORMAL_DRAWING -> touchMove(event.x, event.y)
+            State.NORMAL_DRAWING,
+            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
+                touchMove(event.x, event.y)
+                if( currentState != State.NORMAL_DRAWING ) {
+                    selectedStrokeIdx = -1 // First thing - deselect.
+                    strokes.forEach { it.setHighlightedRecursively(false) } // Second - de-highlight
+                    setState(State.NORMAL_DRAWING) // Redraw
+                }
+            }
             State.STROKE_EDITING -> {
                 val delta = floatArrayOf(dx, dy)
                 inverseGlobalTransform.mapVectors(delta) // Transform delta into world-space
