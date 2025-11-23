@@ -549,10 +549,8 @@ class DrawingView @JvmOverloads constructor(
 
         for ((index, s) in strokes.withIndex()) {
             val opacityMultiplier = when (currentState) {
-                State.NORMAL_DRAWING -> 1.0f
-                State.CHOSEN_STROKE_IN_NORMAL_MODE,
-                State.CHOSEN_STROKE_IN_EDITING_MODE,
-                State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
+                State.NORMAL_DRAWING, State.CHOSEN_STROKE_IN_NORMAL_MODE -> 1.0f
+                State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
             }
 
             val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
@@ -648,8 +646,9 @@ class DrawingView @JvmOverloads constructor(
             State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> {
                 if (selectStrokeAt(worldPoint)) {
                     setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-                } else
+                } else {
                     exitEditingMode()
+                }
             }
         }
         return true
