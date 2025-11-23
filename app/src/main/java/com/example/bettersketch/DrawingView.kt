@@ -314,6 +314,8 @@ class DrawingView @JvmOverloads constructor(
         var closestStrokeIndex = -1
         var closestPointWorld: PointF? = null
 
+        selectedStrokeIdx = -1 // First thing - deselect.
+
         strokes.forEach { it.setHighlightedRecursively(false) }
 
         strokes.forEachIndexed { index, stroke ->
@@ -334,7 +336,7 @@ class DrawingView @JvmOverloads constructor(
             val screenDistance = distance(closestPointScreen, tapPointScreen)
             val screenLongDimension = max(width, height)
 
-            if (screenDistance > screenLongDimension / 8f) {
+            if (screenDistance > screenLongDimension / 16f) {
                 return false
             }
 
@@ -656,8 +658,6 @@ class DrawingView @JvmOverloads constructor(
             State.IN_EDITING_MODE_NOTHING_CHOSEN -> {
                 if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-                } else {
-                    exitEditingMode()
                 }
             }
             State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> {
@@ -712,11 +712,7 @@ class DrawingView @JvmOverloads constructor(
                 //exitEditingMode()
                 //touchStart(downPoint.x, downPoint.y)
             }
-            State.IN_EDITING_MODE_NOTHING_CHOSEN -> {
-                // If we start drawing, deselect the current stroke and start a new one.
-                exitEditingMode()
-                touchStart(downPoint.x, downPoint.y)
-            }
+            State.IN_EDITING_MODE_NOTHING_CHOSEN,
             State.CHOSEN_STROKE_IN_EDITING_MODE -> {
                 if (selectEndpointOfCurrentStroke(worldPoint)) {
                     setState(State.STROKE_EDITING)
@@ -791,6 +787,13 @@ class DrawingView @JvmOverloads constructor(
                 strokeInProgress?.let {
                     touchUp()
                 }
+            }
+            State.CHOSEN_STROKE_IN_NORMAL_MODE-> {
+                val screenPoint = PointF(event.x, event.y)
+                if (selectStrokeAt(screenPoint))
+                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+                else
+                    setState(State.NORMAL_DRAWING)
             }
             State.STROKE_EDITING -> {
                 setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
@@ -874,19 +877,18 @@ class DrawingView @JvmOverloads constructor(
         invertedGlobal.mapVectors(worldDelta)
 
         when (currentState) {
-            State.NORMAL_DRAWING -> {
+            State.NORMAL_DRAWING,
+            State.CHOSEN_STROKE_IN_NORMAL_MODE,
+            State.IN_EDITING_MODE_NOTHING_CHOSEN -> {
                 val mid = midpoint(event)
                 globalTransform.preTranslate(worldDelta[0], worldDelta[1])
                 globalTransform.preScale(scale, scale, mid.x, mid.y)
                 globalTransform.preRotate(rotate, mid.x, mid.y)
                 redrawHistory()
             }
-            State.CHOSEN_STROKE_IN_NORMAL_MODE,
-            State.IN_EDITING_MODE_NOTHING_CHOSEN,
             State.CHOSEN_STROKE_IN_EDITING_MODE,
             State.STROKE_EDITING -> {
                 currentStroke?.let {
-
                     val deltaMatrix = Matrix()
                     val bounds = it.getBounds()
                     val centerX = bounds.centerX()
