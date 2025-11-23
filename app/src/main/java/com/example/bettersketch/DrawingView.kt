@@ -29,6 +29,7 @@ interface ShapeDetectionListener {
 private enum class State {
     NORMAL_DRAWING,
     CHOSEN_STROKE_IN_NORMAL_MODE,
+    IN_EDITING_MODE_NOTHING_CHOSEN,
     CHOSEN_STROKE_IN_EDITING_MODE,
     STROKE_EDITING
 }
@@ -49,9 +50,9 @@ class DrawingView @JvmOverloads constructor(
     private fun setState(newState: State) {
         if (currentState != newState) {
             currentState = newState
-            redrawHistory()
             listener?.onStateChanged()
         }
+        redrawHistory() // Redraw in any case
     }
 
     // Drawing state
@@ -108,7 +109,7 @@ class DrawingView @JvmOverloads constructor(
     private val currentStroke: Stroke? get() = strokes.getOrNull(selectedStrokeIdx)
 
     fun isEditing(): Boolean {
-        return currentState == State.CHOSEN_STROKE_IN_EDITING_MODE || currentState == State.STROKE_EDITING
+        return currentState == State.CHOSEN_STROKE_IN_EDITING_MODE || currentState == State.STROKE_EDITING || currentState == State.IN_EDITING_MODE_NOTHING_CHOSEN
     }
 
     fun isCurrentStrokeModified(): Boolean {
@@ -404,7 +405,6 @@ class DrawingView @JvmOverloads constructor(
         }
         selectedStrokeIdx = -1
         setState(State.NORMAL_DRAWING)
-        redrawHistory()
     }
 
     fun duplicateCurrentStroke() {
@@ -443,7 +443,6 @@ class DrawingView @JvmOverloads constructor(
             selectedStrokeIdx = strokes.lastIndex
             newGroup.setHighlightedRecursively(true)
             setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-            redrawHistory()
             listener?.onStateChanged()
         }
     }
@@ -458,7 +457,6 @@ class DrawingView @JvmOverloads constructor(
                     groupStroke.childStrokes.forEach { it.setHighlightedRecursively(true) }
                     selectedStrokeIdx = -1
                     setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-                    redrawHistory()
                     listener?.onStateChanged()
                 }
             }
@@ -554,14 +552,14 @@ class DrawingView @JvmOverloads constructor(
             c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
         }
 
-        if (currentState == State.CHOSEN_STROKE_IN_EDITING_MODE || currentState == State.STROKE_EDITING) {
+        if (isEditing()) {
             c.drawColor(Color.argb(25, 255, 165, 0)) // 10% opacity orange
         }
 
         for ((index, s) in strokes.withIndex()) {
             val opacityMultiplier = when (currentState) {
                 State.NORMAL_DRAWING, State.CHOSEN_STROKE_IN_NORMAL_MODE -> 1.0f
-                State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
+                State.IN_EDITING_MODE_NOTHING_CHOSEN, State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
             }
 
             val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
@@ -649,16 +647,24 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
-                if (selectStrokeAt(screenPoint)) { // Tapped on empty space
+                if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+                } else {
+                    setState(State.NORMAL_DRAWING)
                 }
-                // if tapped on a stroke, selectStrokeAt already handled it and updated selection.
+            }
+            State.IN_EDITING_MODE_NOTHING_CHOSEN -> {
+                if (selectStrokeAt(screenPoint)) {
+                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+                } else {
+                    exitEditingMode()
+                }
             }
             State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> {
                 if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
                 } else {
-                    exitEditingMode()
+                    setState(State.IN_EDITING_MODE_NOTHING_CHOSEN)
                 }
             }
         }
@@ -677,7 +683,13 @@ class DrawingView @JvmOverloads constructor(
                 if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
                 } else {
-                    // double tapped on empty space, just deselect
+                    setState(State.IN_EDITING_MODE_NOTHING_CHOSEN)
+                }
+            }
+            State.IN_EDITING_MODE_NOTHING_CHOSEN -> {
+                if (selectStrokeAt(screenPoint)) {
+                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+                } else {
                     exitEditingMode()
                 }
             }
@@ -696,6 +708,11 @@ class DrawingView @JvmOverloads constructor(
                 touchStart(downPoint.x, downPoint.y)
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
+                // If we start drawing, deselect the current stroke and start a new one.
+                //exitEditingMode()
+                //touchStart(downPoint.x, downPoint.y)
+            }
+            State.IN_EDITING_MODE_NOTHING_CHOSEN -> {
                 // If we start drawing, deselect the current stroke and start a new one.
                 exitEditingMode()
                 touchStart(downPoint.x, downPoint.y)
@@ -782,7 +799,6 @@ class DrawingView @JvmOverloads constructor(
             }
             else -> {}
         }
-        redrawHistory()
         return true
     }
 
@@ -866,6 +882,7 @@ class DrawingView @JvmOverloads constructor(
                 redrawHistory()
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE,
+            State.IN_EDITING_MODE_NOTHING_CHOSEN,
             State.CHOSEN_STROKE_IN_EDITING_MODE,
             State.STROKE_EDITING -> {
                 currentStroke?.let {
