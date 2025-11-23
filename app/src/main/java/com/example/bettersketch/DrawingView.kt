@@ -675,9 +675,7 @@ class DrawingView @JvmOverloads constructor(
         val screenPoint = PointF(event.x, event.y)
         when (currentState) {
             State.NORMAL_DRAWING -> {
-                if (selectStrokeAt(screenPoint)) {
-                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-                }
+                setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
                 if (selectStrokeAt(screenPoint)) {

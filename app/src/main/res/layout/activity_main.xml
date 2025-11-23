@@ -50,7 +50,7 @@
             tools:visibility="visible" />
 
         <Button
-            android:id="@+id/btnClear"
+            android:id="@+id/btnDel"
             android:layout_width="80dp"
             android:layout_height="wrap_content"
             android:layout_gravity="top|start"

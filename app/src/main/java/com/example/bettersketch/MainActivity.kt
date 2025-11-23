@@ -19,6 +19,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnGroupStrokes: Button
     private lateinit var btnUnGroupStrokes: Button
     private lateinit var btnShape: Button
+    private lateinit var btnDel: Button
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -54,10 +55,11 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnGroupStrokes = findViewById(R.id.btnGroupStrokes)
         btnUnGroupStrokes = findViewById(R.id.btnUnGroupStrokes)
         btnShape = findViewById(R.id.btnShape)
+        btnDel = findViewById(R.id.btnDel)
 
         setupSliderListeners()
 
-        findViewById<Button>(R.id.btnClear).setOnClickListener {
+        btnDel.setOnClickListener {
             drawingView.deleteCurrentStroke()
         }
 
@@ -72,6 +74,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnGroupStrokes.setOnClickListener {
             drawingView.groupSelectedStrokes()
         }
+
 
         btnUnGroupStrokes.setOnClickListener {
             drawingView.ungroupSelectedStrokes()
@@ -194,6 +197,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         if (highlightedStrokeCount != 1) {
             btnShape.visibility = View.GONE
         }
+
+        btnDel.visibility = if (drawingView.isStrokeSelected) View.VISIBLE else View.GONE
     }
 }
 
