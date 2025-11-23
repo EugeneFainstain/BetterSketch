@@ -912,14 +912,15 @@ class DrawingView @JvmOverloads constructor(
 
         when (currentState) {
             State.NORMAL_DRAWING,
-            State.CHOSEN_STROKE_IN_NORMAL_MODE,
             State.IN_EDITING_MODE_NOTHING_CHOSEN -> {
-                val mid = midpoint(event)
+                val screenMidPoint = midpoint(event)
+                val worldMidPoint = toWorldCoordinates(screenMidPoint.x, screenMidPoint.y)
                 globalTransform.preTranslate(worldDelta[0], worldDelta[1])
-                globalTransform.preScale(scale, scale, mid.x, mid.y)
-                globalTransform.preRotate(rotate, mid.x, mid.y)
+                globalTransform.preScale(scale, scale, worldMidPoint.x, worldMidPoint.y)
+                globalTransform.preRotate(rotate, worldMidPoint.x, worldMidPoint.y)
                 redrawHistory()
             }
+            State.CHOSEN_STROKE_IN_NORMAL_MODE,
             State.CHOSEN_STROKE_IN_EDITING_MODE,
             State.STROKE_EDITING -> {
                 currentStroke?.let {
