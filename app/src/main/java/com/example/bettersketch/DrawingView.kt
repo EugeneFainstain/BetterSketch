@@ -444,6 +444,12 @@ class DrawingView @JvmOverloads constructor(
             globalTransform.invert(inverseGlobalTransform)
             transformStroke(duplicatedStroke, inverseGlobalTransform) // Bring it back into world-space
 
+            // Explicitly deleting "undo" history:
+            duplicatedStroke.originalPoints.clear()
+            duplicatedStroke.originalPoints.addAll(duplicatedStroke.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+            duplicatedStroke.isModified = false
+
+            // Highlighting
             duplicatedStroke.setHighlightedRecursively(true)
 
             strokes.add(duplicatedStroke)
