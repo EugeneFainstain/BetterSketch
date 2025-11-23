@@ -542,6 +542,10 @@ class DrawingView @JvmOverloads constructor(
             c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
         }
 
+        if (currentState == State.CHOSEN_STROKE_IN_EDITING_MODE || currentState == State.STROKE_EDITING) {
+            c.drawColor(Color.argb(25, 255, 165, 0)) // 10% opacity orange
+        }
+
         for ((index, s) in strokes.withIndex()) {
             val opacityMultiplier = when (currentState) {
                 State.NORMAL_DRAWING -> 1.0f
