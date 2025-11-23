@@ -256,7 +256,12 @@ class DrawingView @JvmOverloads constructor(
 
     private fun touchUp() {
         strokeInProgress?.let {
-            commitStrokeInProgress()
+            if( it.totalDistance > 20f )
+                commitStrokeInProgress()
+            else {
+                strokeInProgress = null
+                setState(currentState) // causes redraw
+            }
         }
     }
 
@@ -405,8 +410,22 @@ class DrawingView @JvmOverloads constructor(
         } else if (strokes.isNotEmpty()) {
             strokes.removeAt(strokes.lastIndex)
         }
-        selectedStrokeIdx = -1
-        setState(State.NORMAL_DRAWING)
+
+        selectedStrokeIdx = strokes.lastIndex
+        setStrokeHighlighted(currentStroke)
+
+        when (currentState) {
+            State.NORMAL_DRAWING,
+            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
+                setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+            }
+
+            State.IN_EDITING_MODE_NOTHING_CHOSEN,
+            State.CHOSEN_STROKE_IN_EDITING_MODE,
+            State.STROKE_EDITING -> {
+                setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+            }
+        }
     }
 
     fun duplicateCurrentStroke() {
