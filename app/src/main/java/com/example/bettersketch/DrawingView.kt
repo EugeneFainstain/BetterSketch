@@ -399,11 +399,17 @@ class DrawingView @JvmOverloads constructor(
         currentStroke?.let { originalStroke ->
             strokes.forEach { it.setHighlightedRecursively(false) }
 
-            val duplicatedStroke = originalStroke.newFrom()
-            val bounds = originalStroke.getBounds()
-            val offsetY = -bounds.height() / 2f
+            val duplicatedStroke = originalStroke.newFrom() // Create a copy of the original stroke
+            transformStroke(duplicatedStroke, globalTransform) // Bring it into screen-space
+
+            val bounds = duplicatedStroke.getBounds() // Calculate the bounds, in screen-space
+            val offsetY = -max(bounds.width(), bounds.height()) / 2f
             val matrix = Matrix().apply { postTranslate(0f, offsetY) }
-            transformStroke(duplicatedStroke, matrix)
+            transformStroke(duplicatedStroke, matrix) // Offset in screen-space
+
+            val inverseGlobalTransform = Matrix()
+            globalTransform.invert(inverseGlobalTransform)
+            transformStroke(duplicatedStroke, inverseGlobalTransform) // Bring it back into world-space
 
             duplicatedStroke.setHighlightedRecursively(true)
 
