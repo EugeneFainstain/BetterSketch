@@ -69,7 +69,7 @@ class DrawingView @JvmOverloads constructor(
     private var editingPointInitialWeights: List<Float>? = null
 
     // Transformation state
-    private val globalTransform = Matrix()
+    private val globalTransform = Matrix() // Matrix for transforming from WORLD-SPACE to SCREEN-SPACE (a.k.a the VIEW MATRIX)
     private var twoFingerGestureOccured = false
     private var threeFingerGestureOccured = false
     private var backedUpGroupStroke: Stroke? = null
@@ -726,7 +726,7 @@ class DrawingView @JvmOverloads constructor(
             State.NORMAL_DRAWING -> touchMove(event.x, event.y)
             State.STROKE_EDITING -> {
                 val delta = floatArrayOf(dx, dy)
-                inverseGlobalTransform.mapVectors(delta)
+                inverseGlobalTransform.mapVectors(delta) // Transform delta into world-space
                 moveEditingPoint(delta[0], delta[1])
             }
             State.CHOSEN_STROKE -> {
@@ -738,36 +738,33 @@ class DrawingView @JvmOverloads constructor(
                             val bounds = backup.getBounds()
                             val centerX = bounds.centerX()
                             val centerY = bounds.centerY()
-                            val initialHeight = bounds.height()
+                            val centerScreen = toScreenCoordinates(centerX, centerY)
+                            val initialHeight = centerScreen.y - initialTouchY  // yes, it can be negative
 
                             val totalDx = event.x - initialTouchX
                             var totalDy = event.y - initialTouchY
 
-                            if( initialTouchY > centerY )
-                                totalDy = -totalDy
+                            // Transform Matrix - in screen-space
+                            val screenspaceTransform = Matrix()
 
-                            // Translation Matrix
-                            val translateMatrix = Matrix()
-                            translateMatrix.setTranslate(totalDx, 0f)
+                            // Applying translation, in screen-space
+                            screenspaceTransform.setTranslate(totalDx, 0f)
 
-                            // Scaling Matrix
-                            val scaleMatrix = Matrix()
+                            // Applying scaling, in screen-space
                             if (initialHeight != 0f) {
                                 val newHeight = initialHeight - totalDy
                                 val scaleY = newHeight / initialHeight
-                                val center = toScreenCoordinates(centerX, centerY)
-                                scaleMatrix.setScale(1.0f, scaleY, center.x, center.y)
+                                screenspaceTransform.preScale(1.0f, scaleY, centerScreen.x, centerScreen.y)
                             }
 
-                            // Combining all transformations
-                            var totalMatrix = Matrix();
-                            totalMatrix.postConcat(globalTransform)
-                            totalMatrix.postConcat(scaleMatrix)
-                            totalMatrix.postConcat(translateMatrix)
-                            totalMatrix.postConcat(inverseGlobalTransform)
+                            // Calculate the world-space transform matrix to be applied to stroke points
+                            val worldspaceTransform = Matrix()
+                            worldspaceTransform.set(globalTransform)                      // 1. First thing, transform everything to screen-space
+                            worldspaceTransform.postConcat(screenspaceTransform)  // 2. Next, apply our transformation, in screen-space
+                            worldspaceTransform.postConcat(inverseGlobalTransform)// 3. Finally, transform back to world-space
 
-                            // Applying the transformations
-                            transformStroke(current, totalMatrix)
+                            // Applying the transformations, in world-space
+                            transformStroke(current, worldspaceTransform)
                         }
                     }
                 }
