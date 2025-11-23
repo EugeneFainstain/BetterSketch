@@ -224,6 +224,22 @@ class DrawingView @JvmOverloads constructor(
         return sqrt(scaleX * scaleX + skewY * skewY)
     }
 
+    private fun preTransform(matrix: Matrix, pre: Matrix) {
+        // I added this wrapper to reduce confusion as to what postConcat and preConcat actually do.
+        // The naming is very confusing, because it implies opposite things - when considering the order
+        // of matrix multiplications vs the order of applying the transformations. Using the new names
+        // this confusion is removed.
+        matrix.preConcat(pre)
+    }
+
+    private fun postTransform(matrix: Matrix, post: Matrix) {
+        // I added this wrapper to reduce confusion as to what postConcat and preConcat actually do.
+        // The naming is very confusing, because it implies opposite things - when considering the order
+        // of matrix multiplications vs the order of applying the transformations. Using the new names
+        // this confusion is removed.
+        matrix.postConcat(post)
+    }
+
     private fun touchStart(x: Float, y: Float) {
         val worldPoint = toWorldCoordinates(x, y)
         strokeInProgress = Stroke(Paint(currentPaint), currentSmoothness)
@@ -759,9 +775,9 @@ class DrawingView @JvmOverloads constructor(
 
                             // Calculate the world-space transform matrix to be applied to stroke points
                             val worldspaceTransform = Matrix()
-                            worldspaceTransform.set(globalTransform)                      // 1. First thing, transform everything to screen-space
-                            worldspaceTransform.postConcat(screenspaceTransform)  // 2. Next, apply our transformation, in screen-space
-                            worldspaceTransform.postConcat(inverseGlobalTransform)// 3. Finally, transform back to world-space
+                            worldspaceTransform.set(globalTransform)                                // 1. First thing, transform everything to screen-space
+                            postTransform(worldspaceTransform,screenspaceTransform)  // 2. Next, apply our transformation, in screen-space
+                            postTransform(worldspaceTransform,inverseGlobalTransform)// 3. Finally, transform back to world-space
 
                             // Applying the transformations, in world-space
                             transformStroke(current, worldspaceTransform)
