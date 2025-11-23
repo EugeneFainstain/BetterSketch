@@ -28,6 +28,7 @@ interface ShapeDetectionListener {
 
 private enum class State {
     NORMAL_DRAWING,
+    CHOSEN_STROKE_IN_NORMAL_MODE,
     CHOSEN_STROKE_IN_EDITING_MODE,
     STROKE_EDITING
 }
@@ -107,7 +108,7 @@ class DrawingView @JvmOverloads constructor(
     private val currentStroke: Stroke? get() = strokes.getOrNull(selectedStrokeIdx)
 
     fun isEditing(): Boolean {
-        return currentState != State.NORMAL_DRAWING
+        return currentState == State.CHOSEN_STROKE_IN_EDITING_MODE || currentState == State.STROKE_EDITING
     }
 
     fun isCurrentStrokeModified(): Boolean {
@@ -549,7 +550,9 @@ class DrawingView @JvmOverloads constructor(
         for ((index, s) in strokes.withIndex()) {
             val opacityMultiplier = when (currentState) {
                 State.NORMAL_DRAWING -> 1.0f
-                State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
+                State.CHOSEN_STROKE_IN_NORMAL_MODE,
+                State.CHOSEN_STROKE_IN_EDITING_MODE,
+                State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
             }
 
             val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
@@ -633,11 +636,16 @@ class DrawingView @JvmOverloads constructor(
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 if (selectStrokeAt(worldPoint)) {
-                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
             }
+            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
+                if (!selectStrokeAt(worldPoint)) { // Tapped on empty space
+                    exitEditingMode()
+                }
+                // if tapped on a stroke, selectStrokeAt already handled it and updated selection.
+            }
             State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> {
-                strokes.forEach { it.setHighlightedRecursively(false) }
                 exitEditingMode()
             }
         }
@@ -645,7 +653,25 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onDoubleTapEnd(event: MotionEvent): Boolean {
-        onSingleTapEnd(event)
+        val worldPoint = toWorldCoordinates(event.x, event.y)
+        when (currentState) {
+            State.NORMAL_DRAWING -> {
+                if (selectStrokeAt(worldPoint)) {
+                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+                }
+            }
+            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
+                if (selectStrokeAt(worldPoint)) {
+                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+                } else {
+                    // double tapped on empty space, just deselect
+                    exitEditingMode()
+                }
+            }
+            State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> {
+                setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+            }
+        }
         return true
     }
 
@@ -654,6 +680,11 @@ class DrawingView @JvmOverloads constructor(
         val worldPoint = toWorldCoordinates(downPoint.x, downPoint.y)
         when (currentState) {
             State.NORMAL_DRAWING -> {
+                touchStart(downPoint.x, downPoint.y)
+            }
+            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
+                // If we start drawing, deselect the current stroke and start a new one.
+                exitEditingMode()
                 touchStart(downPoint.x, downPoint.y)
             }
             State.CHOSEN_STROKE_IN_EDITING_MODE -> {
@@ -795,6 +826,7 @@ class DrawingView @JvmOverloads constructor(
                     }
                 }
             }
+            else -> {}
         }
         return true
     }
@@ -820,7 +852,9 @@ class DrawingView @JvmOverloads constructor(
                 globalTransform.preRotate(rotate, mid.x, mid.y)
                 redrawHistory()
             }
-            State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> {
+            State.CHOSEN_STROKE_IN_NORMAL_MODE,
+            State.CHOSEN_STROKE_IN_EDITING_MODE,
+            State.STROKE_EDITING -> {
                 currentStroke?.let {
 
                     val deltaMatrix = Matrix()
