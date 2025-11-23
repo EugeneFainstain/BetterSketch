@@ -640,13 +640,16 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
-                if (!selectStrokeAt(worldPoint)) { // Tapped on empty space
-                    exitEditingMode()
+                if (selectStrokeAt(worldPoint)) { // Tapped on empty space
+                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
                 // if tapped on a stroke, selectStrokeAt already handled it and updated selection.
             }
             State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> {
-                exitEditingMode()
+                if (selectStrokeAt(worldPoint)) {
+                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+                } else
+                    exitEditingMode()
             }
         }
         return true
