@@ -307,25 +307,36 @@ class DrawingView @JvmOverloads constructor(
         stroke?.setHighlightedRecursively(true)
     }
 
-    private fun selectStrokeAt(tapPoint: PointF): Boolean {
+    private fun selectStrokeAt(tapPointScreen: PointF): Boolean {
+        val tapPointWorld = toWorldCoordinates(tapPointScreen.x, tapPointScreen.y)
         var minDistance = Float.MAX_VALUE
         var closestStrokeIndex = -1
+        var closestPointWorld: PointF? = null
 
         strokes.forEach { it.setHighlightedRecursively(false) }
 
         strokes.forEachIndexed { index, stroke ->
             stroke.forEachStroke { s ->
                 for (pathPoint in s.points) {
-                    val d = distance(pathPoint.point, tapPoint)
+                    val d = distance(pathPoint.point, tapPointWorld)
                     if (d < minDistance) {
                         minDistance = d
                         closestStrokeIndex = index
+                        closestPointWorld = pathPoint.point
                     }
                 }
             }
         }
 
-        if (closestStrokeIndex != -1) {
+        if (closestStrokeIndex != -1 && closestPointWorld != null) {
+            val closestPointScreen = toScreenCoordinates(closestPointWorld!!.x, closestPointWorld!!.y)
+            val screenDistance = distance(closestPointScreen, tapPointScreen)
+            val screenLongDimension = max(width, height)
+
+            if (screenDistance > screenLongDimension / 8f) {
+                return false
+            }
+
             selectedStrokeIdx = closestStrokeIndex
             val selected = currentStroke
             if (selected != null) {
@@ -630,21 +641,21 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onSingleTapEnd(event: MotionEvent): Boolean {
         performClick()
-        val worldPoint = toWorldCoordinates(event.x, event.y)
+        val screenPoint = PointF(event.x, event.y)
         when (currentState) {
             State.NORMAL_DRAWING -> {
-                if (selectStrokeAt(worldPoint)) {
+                if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
-                if (selectStrokeAt(worldPoint)) { // Tapped on empty space
+                if (selectStrokeAt(screenPoint)) { // Tapped on empty space
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
                 // if tapped on a stroke, selectStrokeAt already handled it and updated selection.
             }
             State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> {
-                if (selectStrokeAt(worldPoint)) {
+                if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
                 } else {
                     exitEditingMode()
@@ -655,15 +666,15 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onDoubleTapEnd(event: MotionEvent): Boolean {
-        val worldPoint = toWorldCoordinates(event.x, event.y)
+        val screenPoint = PointF(event.x, event.y)
         when (currentState) {
             State.NORMAL_DRAWING -> {
-                if (selectStrokeAt(worldPoint)) {
+                if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
                 }
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
-                if (selectStrokeAt(worldPoint)) {
+                if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
                 } else {
                     // double tapped on empty space, just deselect
