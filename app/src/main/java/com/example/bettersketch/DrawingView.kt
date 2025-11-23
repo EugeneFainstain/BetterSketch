@@ -50,9 +50,9 @@ class DrawingView @JvmOverloads constructor(
     private fun setState(newState: State) {
         if (currentState != newState) {
             currentState = newState
-            listener?.onStateChanged()
         }
         redrawHistory() // Redraw in any case
+        listener?.onStateChanged() // Update UI in any case...
     }
 
     // Drawing state
@@ -758,7 +758,6 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
-        twoFingerGestureOccured = false
         selectionCircle = null
         backedUpGroupStroke = null
 
@@ -777,8 +776,13 @@ class DrawingView @JvmOverloads constructor(
             }
             threeFingerGestureOccured = false
             listener?.onStateChanged()
+            return true
         }
 
+        if (twoFingerGestureOccured) {
+            twoFingerGestureOccured = false
+            return true
+        }
 
         when (currentState) {
             State.NORMAL_DRAWING -> {
@@ -800,6 +804,8 @@ class DrawingView @JvmOverloads constructor(
             }
             else -> {}
         }
+
+
         return true
     }
 
