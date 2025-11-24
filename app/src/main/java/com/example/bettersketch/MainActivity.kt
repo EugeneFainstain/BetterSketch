@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.toColorInt
+import java.util.Locale
 import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionListener {
@@ -147,6 +149,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             is ShapeFitResult.Polynomial -> {
                 val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
                 Quad(p, "Poly(${shapeFitResult.fitResult.degree})", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
+            }
+            is ShapeFitResult.PolyLine -> {
+                val p = (1.0f - shapeFitResult.fitResult.error / 1000f) * 100
+                Quad(p, "PolyLine", shapeFitResult.strokeToReplace, shapeFitResult.fitResult.error)
             }
         }
 

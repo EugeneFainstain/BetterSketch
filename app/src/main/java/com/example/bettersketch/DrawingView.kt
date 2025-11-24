@@ -19,6 +19,7 @@ sealed class ShapeFitResult {
     data class Square(override val strokeToReplace: Stroke, val fitResult: SquareFitter.FitResult) : ShapeFitResult()
     data class Circle(override val strokeToReplace: Stroke, val fitResult: CircleFitter.FitResult) : ShapeFitResult()
     data class Polynomial(override val strokeToReplace: Stroke, val fitResult: PolynomFitter.FitResult) : ShapeFitResult()
+    data class PolyLine(override val strokeToReplace: Stroke, val fitResult: PolyLineFitter.FitResult) : ShapeFitResult()
 }
 
 interface ShapeDetectionListener {

@@ -37,6 +37,10 @@ class ShapeFitter {
                 }
                 bestPolyFit?.let { fits.add(it) }
 
+                PolyLineFitter.fit(strokeForFitting)?.let {
+                    fits.add(ShapeFitResult.PolyLine(strokeToReplace, it))
+                }
+
             } else {
                 // If the stroke is likely a closed shape, try to fit a square and a circle.
                 SquareFitter.fitSquare(strokeForFitting)?.let {
