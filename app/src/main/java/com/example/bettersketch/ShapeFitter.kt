@@ -37,7 +37,9 @@ class ShapeFitter {
                 }
                 bestPolyFit?.let { fits.add(it) }
 
-                PolyLineFitter.fit(strokeForFitting)?.let {
+                // PolyLineFitter needs the original stroke with non-uniform point distribution
+                // to detect corners via k-means clustering on the distance domain
+                PolyLineFitter.fit(strokeToReplace)?.let {
                     fits.add(ShapeFitResult.PolyLine(strokeToReplace, it))
                 }
 
