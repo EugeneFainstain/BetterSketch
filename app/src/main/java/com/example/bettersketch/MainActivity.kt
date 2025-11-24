@@ -198,7 +198,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             btnShape.visibility = View.GONE
         }
 
-        btnDel.visibility = if (drawingView.isStrokeSelected) View.VISIBLE else View.GONE
+        btnDel.visibility = View.GONE
+        if (drawingView.isStrokeSelected)
+            btnDel.visibility = View.VISIBLE
+
+        if( drawingView.selectedStrokeIdx == drawingView.strokes.lastIndex )
+            btnDel.visibility = View.VISIBLE
     }
 }
 

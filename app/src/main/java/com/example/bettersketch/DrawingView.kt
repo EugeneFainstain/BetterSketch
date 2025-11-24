@@ -66,7 +66,8 @@ class DrawingView @JvmOverloads constructor(
 
     // Data
     val strokes = mutableListOf<Stroke>()
-    private var selectedStrokeIdx: Int = -1
+    public var selectedStrokeIdx: Int = -1
+    public var lastStrokeHighlightedIdx: Int = -1
     private var editingPointIndex: Int = -1
     private var editingPointInitialWeights: List<Float>? = null
 
@@ -271,7 +272,7 @@ class DrawingView @JvmOverloads constructor(
             val newStroke = Stroke(finalUnsmoothedPoints, Paint(currentStrokeInProgress.paint), totalDistanceForNewStroke, currentStrokeInProgress.smoothness)
             strokes.add(newStroke)
             strokeInProgress = null
-            selectedStrokeIdx = -1
+            selectedStrokeIdx = strokes.lastIndex
             setState(State.NORMAL_DRAWING)
 
             detectShape(newStroke)
@@ -308,14 +309,16 @@ class DrawingView @JvmOverloads constructor(
         return sqrt(dx * dx + dy * dy)
     }
 
-    private fun setStrokeHighlighted(stroke: Stroke?) {
+    private fun setStrokeHighlighted(stroke: Stroke?, idx: Int?) {
         stroke?.setHighlightedRecursively(true)
+        idx?.let { lastStrokeHighlightedIdx = it }
     }
 
     private fun deselectAndDeHighlight() {
         // Note: doesn't cause a redraw on its own
         selectedStrokeIdx = -1 // First thing - deselect.
         strokes.forEach { it.setHighlightedRecursively(false) } // Second - de-highlight
+        lastStrokeHighlightedIdx = -1
     }
 
     private fun selectStrokeAt(tapPointScreen: PointF): Boolean {
@@ -349,9 +352,10 @@ class DrawingView @JvmOverloads constructor(
             }
 
             selectedStrokeIdx = closestStrokeIndex
+            lastStrokeHighlightedIdx = selectedStrokeIdx
             val selected = currentStroke
             if (selected != null) {
-                setStrokeHighlighted(selected)
+                setStrokeHighlighted(selected, selectedStrokeIdx)
                 currentPaint = Paint(selected.paint)
                 if (!selected.isGroup) {
                     detectShape(selected)
@@ -415,7 +419,7 @@ class DrawingView @JvmOverloads constructor(
         }
 
         selectedStrokeIdx = strokes.lastIndex
-        setStrokeHighlighted(currentStroke)
+        setStrokeHighlighted(currentStroke, strokes.lastIndex)
 
         when (currentState) {
             State.NORMAL_DRAWING,
@@ -536,6 +540,7 @@ class DrawingView @JvmOverloads constructor(
     fun setStrokeSmoothness(smoothness: Int) {
         currentSmoothness = smoothness
         val selectedStroke = currentStroke
+        if (lastStrokeHighlightedIdx != -1)
         if (selectedStroke != null && !selectedStroke.isGroup) {
             selectedStroke.forEachStroke {
                 it.smoothness = smoothness
@@ -548,7 +553,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun setColor(color: Int, applyToSelected: Boolean) {
-        if (applyToSelected) {
+        if (applyToSelected && (lastStrokeHighlightedIdx != -1)) {
             val selectedStroke = currentStroke
             if (selectedStroke != null && !selectedStroke.isGroup) {
                 selectedStroke.forEachStroke {
@@ -563,7 +568,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun setStrokeWidth(px: Float, applyToSelected: Boolean) {
-        if (applyToSelected) {
+        if (applyToSelected && (lastStrokeHighlightedIdx != -1)) {
             val w = max(1f, min(120f, px))
             val selectedStroke = currentStroke
             if (selectedStroke != null) {
