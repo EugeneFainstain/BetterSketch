@@ -117,8 +117,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun exitEditingMode() {
-        currentStroke?.setHighlightedRecursively(false)
-        selectedStrokeIdx = -1
+        deselectAndDeHighlight()
         editingPointIndex = -1
         editingPointInitialWeights = null
         setState(State.NORMAL_DRAWING)
@@ -313,15 +312,19 @@ class DrawingView @JvmOverloads constructor(
         stroke?.setHighlightedRecursively(true)
     }
 
+    private fun deselectAndDeHighlight() {
+        // Note: doesn't cause a redraw on its own
+        selectedStrokeIdx = -1 // First thing - deselect.
+        strokes.forEach { it.setHighlightedRecursively(false) } // Second - de-highlight
+    }
+
     private fun selectStrokeAt(tapPointScreen: PointF): Boolean {
         val tapPointWorld = toWorldCoordinates(tapPointScreen.x, tapPointScreen.y)
         var minDistance = Float.MAX_VALUE
         var closestStrokeIndex = -1
         var closestPointWorld: PointF? = null
 
-        selectedStrokeIdx = -1 // First thing - deselect.
-
-        strokes.forEach { it.setHighlightedRecursively(false) }
+        deselectAndDeHighlight() // do this first thing
 
         strokes.forEachIndexed { index, stroke ->
             stroke.forEachStroke { s ->
@@ -699,25 +702,16 @@ class DrawingView @JvmOverloads constructor(
     override fun onDoubleTapEnd(event: MotionEvent): Boolean {
         val screenPoint = PointF(event.x, event.y)
         when (currentState) {
-            State.NORMAL_DRAWING -> {
-                setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-            }
+            State.NORMAL_DRAWING,
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
-                if (selectStrokeAt(screenPoint)) {
-                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-                } else {
-                    setState(State.IN_EDITING_MODE_NOTHING_CHOSEN)
-                }
+                deselectAndDeHighlight() // Note: doesn't cause a redraw on its own
+                setState(State.IN_EDITING_MODE_NOTHING_CHOSEN)
             }
-            State.IN_EDITING_MODE_NOTHING_CHOSEN -> {
-                if (selectStrokeAt(screenPoint)) {
-                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-                } else {
-                    exitEditingMode()
-                }
-            }
-            State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> {
-                setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+            State.IN_EDITING_MODE_NOTHING_CHOSEN,
+            State.CHOSEN_STROKE_IN_EDITING_MODE,
+            State.STROKE_EDITING -> {
+                deselectAndDeHighlight() // Note: doesn't cause a redraw on its own
+                setState(State.NORMAL_DRAWING)
             }
         }
         return true
@@ -842,8 +836,7 @@ class DrawingView @JvmOverloads constructor(
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
                 touchMove(event.x, event.y)
                 if( currentState != State.NORMAL_DRAWING ) {
-                    selectedStrokeIdx = -1 // First thing - deselect.
-                    strokes.forEach { it.setHighlightedRecursively(false) } // Second - de-highlight
+                    deselectAndDeHighlight() // Note: doesn't cause a redraw on its own
                     setState(State.NORMAL_DRAWING) // Redraw
                 }
             }
