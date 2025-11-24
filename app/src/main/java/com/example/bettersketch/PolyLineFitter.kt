@@ -6,7 +6,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 class PolyLineFitter {
-    data class FitResult(val points: List<PointF>, var error: Float)
+    data class FitResult(val points: List<PointF>, var error: Float, val fittedStroke: Stroke, val k: Int)
 
     companion object {
         fun fit(stroke: Stroke): FitResult? {
@@ -18,7 +18,7 @@ class PolyLineFitter {
 
             var bestFit: FitResult? = null
 
-            for (k in 3..20) {
+            for (k in 2..5) {
                 val centers = runKMeans(distances, k, totalDistance)
                 val polylinePoints = centers.map { centerDist ->
                     getPointAtDistance(stroke, centerDist)
@@ -27,7 +27,14 @@ class PolyLineFitter {
                 val error = calculateFitError(stroke, polylinePoints)
 
                 if (bestFit == null || error < bestFit.error) {
-                    bestFit = FitResult(polylinePoints, error)
+                    val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(polylinePoints)
+                    val fittedStroke = Stroke(
+                        pathPoints.toMutableList(),
+                        stroke.paint,
+                        newTotalDistance,
+                        0
+                    )
+                    bestFit = FitResult(polylinePoints, error, fittedStroke, k)
                 }
             }
 

@@ -151,8 +151,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
                 Quad(p, "Poly(${shapeFitResult.fitResult.degree})", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
             }
             is ShapeFitResult.PolyLine -> {
-                val p = (1.0f - shapeFitResult.fitResult.error / 1000f) * 100
-                Quad(p, "PolyLine", shapeFitResult.strokeToReplace, shapeFitResult.fitResult.error)
+                val p = (1.0f - shapeFitResult.fitResult.error) * 100
+                Quad(p, "PolyLine(${shapeFitResult.fitResult.k})", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.error)
             }
         }
 
