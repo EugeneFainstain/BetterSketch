@@ -17,14 +17,20 @@ class PolyLineFitter {
             val totalDistance = stroke.totalDistance
 
             var bestFit: FitResult? = null
+            var previousError = Float.MAX_VALUE
 
-            for (k in 2..5) {
+            for (k in 2..20) {
                 val centers = runKMeans(distances, k, totalDistance)
                 val polylinePoints = centers.map { centerDist ->
                     getPointAtDistance(stroke, centerDist)
                 }
 
                 val error = calculateFitError(stroke, polylinePoints)
+
+                // If error doesn't reduce by at least 2x, stop searching
+                if (k > 2 && error > previousError * 0.75f) {
+                    break
+                }
 
                 if (bestFit == null || error < bestFit.error) {
                     val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(polylinePoints)
@@ -36,6 +42,8 @@ class PolyLineFitter {
                     )
                     bestFit = FitResult(polylinePoints, error, fittedStroke, k)
                 }
+
+                previousError = error
             }
 
 ////////////////////////////////////////////////////////////
