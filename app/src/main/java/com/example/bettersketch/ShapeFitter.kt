@@ -62,6 +62,7 @@ class ShapeFitter {
                             it.fitResult.normalizedError
                         }
                     }
+                    is ShapeFitResult.PolyLine -> it.fitResult.error
                 }
             }
         }
