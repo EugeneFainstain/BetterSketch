@@ -297,10 +297,11 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun replaceWithShape(originalStroke: Stroke, fittedStroke: Stroke) {
-        val index = strokes.indexOf(originalStroke)
-        if (index != -1) {
-            strokes[index] = fittedStroke
-        }
+//        val index = strokes.indexOf(originalStroke)
+  //      if (index != -1) {
+    //        strokes[index] = fittedStroke
+      //  }
+        strokes.add(fittedStroke)
         redrawHistory()
     }
 
