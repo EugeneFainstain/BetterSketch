@@ -11,7 +11,8 @@ class PolyLineFitter {
 
     companion object {
         // Epsilon values to try (based on stroke scale)
-        private val EPSILON_MULTIPLIERS = listOf(0.01f, 0.015f, 0.02f, 0.025f, 0.03f, 0.04f, 0.05f, 0.075f, 0.1f)
+        private val EPSILON_MULTIPLIERS =
+            listOf(0.01f, 0.015f, 0.02f, 0.025f, 0.03f, 0.04f, 0.05f, 0.075f, 0.1f)
         private const val QUALITY_THRESHOLD = 0.95f // 95% good
 
         fun fit(stroke: Stroke): FitResult? {
@@ -39,7 +40,11 @@ class PolyLineFitter {
                 }
 
                 // Step 3: Average corresponding breakpoints
-                val (averagedIndices, averagedCoords) = averageBreakpoints(forwardBreakpoints, backwardBreakpoints, points)
+                val (averagedIndices, averagedCoords) = averageBreakpoints(
+                    forwardBreakpoints,
+                    backwardBreakpoints,
+                    points
+                )
 
                 // Step 4: Fit lines to segments using parametric least squares on original points
                 val lines = fitLinesToSegments(points, averagedIndices)
@@ -53,8 +58,17 @@ class PolyLineFitter {
 
                 // Find segmentation that is 95% good
                 if (normalizedError <= QUALITY_THRESHOLD * epsilonMultiplier) {
-                    val fittedStroke = createPolyLineStroke(intersectionPoints, stroke.paint, stroke.pointsForDrawing.size)
-                    val fitResult = FitResult(intersectionPoints, normalizedError, fittedStroke, averagedIndices.size - 1)
+                    val fittedStroke = createPolyLineStroke(
+                        intersectionPoints,
+                        stroke.paint,
+                        stroke.pointsForDrawing.size
+                    )
+                    val fitResult = FitResult(
+                        intersectionPoints,
+                        normalizedError,
+                        fittedStroke,
+                        averagedIndices.size - 1
+                    )
 
                     if (bestFit == null || fitResult.k < bestFit.k) {
                         bestFit = fitResult
@@ -241,7 +255,10 @@ class PolyLineFitter {
          * Fit lines to segments defined by breakpoint indices.
          * Each line is fitted to the original points in that segment using parametric least squares.
          */
-        private fun fitLinesToSegments(points: List<PointF>, breakpointIndices: List<Int>): List<Line> {
+        private fun fitLinesToSegments(
+            points: List<PointF>,
+            breakpointIndices: List<Int>
+        ): List<Line> {
             val lines = mutableListOf<Line>()
 
             for (i in 0 until breakpointIndices.size - 1) {
@@ -349,76 +366,45 @@ class PolyLineFitter {
          * Create a fitted polyline stroke with analytical points at the line vertices
          * and interpolated points distributed along the segments matching the original stroke's point count
          */
-        private fun createPolyLineStroke(vertices: List<PointF>, paint: android.graphics.Paint, targetPointCount: Int): Stroke {
+        private fun createPolyLineStroke(
+            vertices: List<PointF>,
+            paint: android.graphics.Paint,
+            targetPointCount: Int
+        ): Stroke {
             val stroke = Stroke(paint, 0)
-            
+            stroke.analyticalShapeType = AnalyticalShapeType.POLYLINE
+
             // Store the analytical line vertices
-            val (analyticalPathPoints, analyticalTotalDistance) = Stroke.calculatePathPointsWithDistances(vertices)
+            val (analyticalPathPoints, analyticalTotalDistance) = Stroke.calculatePathPointsWithDistances(
+                vertices
+            )
             stroke.analyticalPoints.addAll(analyticalPathPoints)
-            
-            // Generate interpolated points along the polyline segments
-            val interpolatedPoints = mutableListOf<PointF>()
-            
-            // Calculate total distance along the polyline
-            var totalDistance = 0f
-            for (i in 1 until vertices.size) {
-                val dx = vertices[i].x - vertices[i - 1].x
-                val dy = vertices[i].y - vertices[i - 1].y
-                totalDistance += sqrt(dx * dx + dy * dy)
-            }
-            
-            if (totalDistance <= 0f) {
-                // Degenerate case: all vertices are at the same point
-                interpolatedPoints.add(vertices.first())
-            } else {
-                val spacing = totalDistance / (targetPointCount - 1)
-                
-                for (i in 0 until targetPointCount) {
-                    val targetDist = i * spacing
-                    val point = interpolatePointOnPolyLine(vertices, targetDist)
-                    interpolatedPoints.add(point)
-                }
-            }
-            
+
+            // Generate interpolated points using Stroke utility
+            val interpolatedPoints = stroke.interpolateAlongPolyLine(vertices, targetPointCount)
+
             // Create the stroke with interpolated points
-            val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(interpolatedPoints)
+            val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
+                interpolatedPoints
+            )
             stroke.unsmoothedPoints.addAll(pathPoints)
-            stroke.pointsForDrawing.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-            stroke.originalPoints.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+            stroke.pointsForDrawing.addAll(pathPoints.map {
+                PathPoint(
+                    PointF(
+                        it.point.x,
+                        it.point.y
+                    ), it.distance
+                )
+            })
+            stroke.originalPoints.addAll(pathPoints.map {
+                PathPoint(
+                    PointF(it.point.x, it.point.y),
+                    it.distance
+                )
+            })
             stroke.totalDistance = newTotalDistance
-            
+
             return stroke
-        }
-        
-        /**
-         * Interpolate a point at a specific distance along the polyline
-         */
-        private fun interpolatePointOnPolyLine(vertices: List<PointF>, targetDistance: Float): PointF {
-            if (vertices.size < 2) return vertices.first()
-            
-            var accumulatedDistance = 0f
-            
-            for (i in 1 until vertices.size) {
-                val start = vertices[i - 1]
-                val end = vertices[i]
-                val dx = end.x - start.x
-                val dy = end.y - start.y
-                val segmentLength = sqrt(dx * dx + dy * dy)
-                
-                if (accumulatedDistance + segmentLength >= targetDistance) {
-                    // Target distance is within this segment
-                    val remainingDistance = targetDistance - accumulatedDistance
-                    val t = if (segmentLength > 0f) remainingDistance / segmentLength else 0f
-                    val x = start.x + t * dx
-                    val y = start.y + t * dy
-                    return PointF(x, y)
-                }
-                
-                accumulatedDistance += segmentLength
-            }
-            
-            // If we reach here, return the last vertex
-            return vertices.last()
         }
     }
 }

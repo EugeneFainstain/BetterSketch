@@ -7,6 +7,14 @@ import kotlin.math.sqrt
 
 data class PathPoint(var point: PointF, var distance: Float)
 
+enum class AnalyticalShapeType {
+    NONE,           // No analytical shape
+    SQUARE,         // Square shape
+    CIRCLE,         // Circle shape
+    POLYLINE,       // Polyline (connected line segments)
+    POLYNOMIAL      // Polynomial curve
+}
+
 class Stroke(
     val paint: Paint,
     var smoothness: Int
@@ -20,6 +28,9 @@ class Stroke(
     val childStrokes: MutableList<Stroke> = mutableListOf()
     val isGroup: Boolean get() = childStrokes.isNotEmpty()
     var isHighlighted: Boolean = false
+
+    var analyticalShapeType: AnalyticalShapeType = AnalyticalShapeType.NONE // Type of analytical shape
+
 
     // Secondary constructor for creating a stroke from existing points (like the original constructor)
     constructor(incomingPoints: List<PathPoint>, paint: Paint, totalDistance: Float, smoothness: Int) : this(paint, smoothness) {
@@ -128,6 +139,7 @@ class Stroke(
     fun copyFrom(other: Stroke, forDuplication: Boolean = false) {
         this.paint.set(other.paint)
         this.smoothness = other.smoothness
+        this.analyticalShapeType = other.analyticalShapeType
         this.pointsForDrawing.clear()
         this.pointsForDrawing.addAll(other.pointsForDrawing.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
@@ -224,6 +236,118 @@ class Stroke(
 
         // If we reach here, return the last point
         return PointF(pointsForDrawing.last().point.x, pointsForDrawing.last().point.y)
+    }
+
+    /**
+     * Regenerates unsmoothedPoints from analytical points based on the analytical shape type.
+     * This is useful after transformations to ensure the unsmoothed points accurately
+     * represent the analytical shape geometry.
+     *
+     * @param targetPointCount The desired number of interpolated points (optional, uses current size if not specified)
+     */
+    fun regenerateUnsmoothedPointsFromAnalytical(targetPointCount: Int? = null) {
+        if (analyticalPoints.isEmpty()) return
+
+        val pointCount = targetPointCount ?: unsmoothedPoints.size
+        if (pointCount < 2) return
+
+        val interpolatedPoints = mutableListOf<PointF>()
+
+        when (analyticalShapeType) {
+            AnalyticalShapeType.SQUARE -> {
+                // For squares: analyticalPoints contains the 4 corners (+ closed point)
+                interpolatedPoints.addAll(interpolateAlongPolyLine(analyticalPoints.map { it.point }, pointCount))
+            }
+            AnalyticalShapeType.CIRCLE -> {
+                // For circles: analyticalPoints contains points around the circle perimeter
+                interpolatedPoints.addAll(interpolateAlongPolyLine(analyticalPoints.map { it.point }, pointCount))
+            }
+            AnalyticalShapeType.POLYLINE -> {
+                // For polylines: analyticalPoints are the vertices
+                interpolatedPoints.addAll(interpolateAlongPolyLine(analyticalPoints.map { it.point }, pointCount))
+            }
+            AnalyticalShapeType.POLYNOMIAL -> {
+                // For polynomials: analyticalPoints are the curve points
+                interpolatedPoints.addAll(interpolateAlongPolyLine(analyticalPoints.map { it.point }, pointCount))
+            }
+            AnalyticalShapeType.NONE -> {
+                // No analytical shape, cannot regenerate
+                return
+            }
+        }
+
+        // Update unsmoothed points with regenerated points
+        val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
+        unsmoothedPoints.clear()
+        unsmoothedPoints.addAll(pathPoints)
+        totalDistance = newTotalDistance
+
+        // Reapply smoothing to update pointsForDrawing
+        applySmoothing()
+    }
+
+    /**
+     * Helper function to interpolate points along a polyline.
+     * Used by regenerateUnsmoothedPointsFromAnalytical and fitters for all shape types.
+     */
+    fun interpolateAlongPolyLine(vertices: List<PointF>, targetPointCount: Int): List<PointF> {
+        if (vertices.size < 2 || targetPointCount < 2) return vertices
+
+        val interpolatedPoints = mutableListOf<PointF>()
+
+        // Calculate total distance along the polyline
+        var totalDistance = 0f
+        for (i in 1 until vertices.size) {
+            val dx = vertices[i].x - vertices[i - 1].x
+            val dy = vertices[i].y - vertices[i - 1].y
+            totalDistance += sqrt(dx * dx + dy * dy)
+        }
+
+        if (totalDistance <= 0f) {
+            // Degenerate case: all vertices are at the same point
+            return listOf(vertices.first())
+        }
+
+        val spacing = totalDistance / (targetPointCount - 1)
+
+        for (i in 0 until targetPointCount) {
+            val targetDist = i * spacing
+            val point = interpolatePointOnPolyLine(vertices, targetDist)
+            interpolatedPoints.add(point)
+        }
+
+        return interpolatedPoints
+    }
+
+    /**
+     * Interpolates a point at a specific distance along the polyline.
+     */
+    fun interpolatePointOnPolyLine(vertices: List<PointF>, targetDistance: Float): PointF {
+        if (vertices.size < 2) return vertices.first()
+
+        var accumulatedDistance = 0f
+
+        for (i in 1 until vertices.size) {
+            val start = vertices[i - 1]
+            val end = vertices[i]
+            val dx = end.x - start.x
+            val dy = end.y - start.y
+            val segmentLength = sqrt(dx * dx + dy * dy)
+
+            if (accumulatedDistance + segmentLength >= targetDistance) {
+                // Target distance is within this segment
+                val remainingDistance = targetDistance - accumulatedDistance
+                val t = if (segmentLength > 0f) remainingDistance / segmentLength else 0f
+                val x = start.x + t * dx
+                val y = start.y + t * dy
+                return PointF(x, y)
+            }
+
+            accumulatedDistance += segmentLength
+        }
+
+        // If we reach here, return the last vertex
+        return vertices.last()
     }
 
     companion object {

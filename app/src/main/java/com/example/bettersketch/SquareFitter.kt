@@ -340,25 +340,18 @@ object SquareFitter {
 
     private fun createSquareStroke(params: SquareParams, paint: Paint, targetPointCount: Int): Stroke {
         val stroke = Stroke(paint, 0)
-        
+        stroke.analyticalShapeType = AnalyticalShapeType.SQUARE
+
         // Get the 4 corners of the square
         val corners = getSquareCorners(params)
-        
+
         // Store the square geometry in analyticalPoints
         val squarePerimeterPoints = corners + corners[0] // Close the square
         val (analyticalPathPoints, analyticalTotalDistance) = Stroke.calculatePathPointsWithDistances(squarePerimeterPoints)
         stroke.analyticalPoints.addAll(analyticalPathPoints)
         
-        // Generate interpolated points along the square perimeter
-        val interpolatedPoints = mutableListOf<PointF>()
-        val perimeter = params.sideLength * 4f
-        val spacing = perimeter / (targetPointCount - 1)
-        
-        for (i in 0 until targetPointCount) {
-            val targetDistance = i * spacing
-            val point = interpolatePointOnSquarePerimeter(corners, targetDistance)
-            interpolatedPoints.add(point)
-        }
+        // Generate interpolated points using Stroke utility
+        val interpolatedPoints = stroke.interpolateAlongPolyLine(squarePerimeterPoints, targetPointCount)
         
         // Create the stroke with interpolated points
         val (pathPoints, totalDistance) = Stroke.calculatePathPointsWithDistances(interpolatedPoints)
@@ -368,23 +361,6 @@ object SquareFitter {
         stroke.totalDistance = totalDistance
         
         return stroke
-    }
-    
-    private fun interpolatePointOnSquarePerimeter(corners: List<PointF>, targetDistance: Float): PointF {
-        val sideLength = distance(corners[0], corners[1])
-        val perimeter = sideLength * 4f
-        val normalizedDistance = (targetDistance % perimeter) / perimeter
-        
-        val segmentIndex = (normalizedDistance * 4).toInt()
-        val segmentProgress = (normalizedDistance * 4) - segmentIndex
-        
-        val start = corners[segmentIndex % 4]
-        val end = corners[(segmentIndex + 1) % 4]
-        
-        val x = start.x + segmentProgress * (end.x - start.x)
-        val y = start.y + segmentProgress * (end.y - start.y)
-        
-        return PointF(x, y)
     }
 
     private fun distance(p1: PointF, p2: PointF): Float {
