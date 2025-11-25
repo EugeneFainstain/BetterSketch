@@ -11,7 +11,7 @@ class Stroke(
     val paint: Paint,
     var smoothness: Int
 ) {
-    val points: MutableList<PathPoint> = mutableListOf() // Smoothed points for drawing
+    val pointsForDrawing: MutableList<PathPoint> = mutableListOf() // Smoothed points for drawing
     val originalPoints: MutableList<PathPoint> = mutableListOf() // Original points for undo/reset
     val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
     var totalDistance: Float = 0f
@@ -53,8 +53,8 @@ class Stroke(
 
     fun applySmoothing() {
         if (this.smoothness == 0) {
-            this.points.clear()
-            this.points.addAll(this.unsmoothedPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
+            this.pointsForDrawing.clear()
+            this.pointsForDrawing.addAll(this.unsmoothedPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
             return
         }
 
@@ -84,8 +84,8 @@ class Stroke(
         // Recalculate distances for the final smoothed points
         val pointFs = smoothedPoints.map { it.point }
         val (finalPoints, newTotalDistance) = calculatePathPointsWithDistances(pointFs)
-        this.points.clear()
-        this.points.addAll(finalPoints)
+        this.pointsForDrawing.clear()
+        this.pointsForDrawing.addAll(finalPoints)
         this.totalDistance = newTotalDistance // Update totalDistance based on smoothed points
     }
 
@@ -107,10 +107,10 @@ class Stroke(
     fun getBounds(): RectF {
         val bounds = RectF()
         forEachStroke { stroke ->
-            if (stroke.points.isNotEmpty()) {
-                val strokeBounds = RectF(stroke.points.first().point.x, stroke.points.first().point.y, stroke.points.first().point.x, stroke.points.first().point.y)
-                for (i in 1 until stroke.points.size) {
-                    strokeBounds.union(stroke.points[i].point.x, stroke.points[i].point.y)
+            if (stroke.pointsForDrawing.isNotEmpty()) {
+                val strokeBounds = RectF(stroke.pointsForDrawing.first().point.x, stroke.pointsForDrawing.first().point.y, stroke.pointsForDrawing.first().point.x, stroke.pointsForDrawing.first().point.y)
+                for (i in 1 until stroke.pointsForDrawing.size) {
+                    strokeBounds.union(stroke.pointsForDrawing[i].point.x, stroke.pointsForDrawing[i].point.y)
                 }
                 bounds.union(strokeBounds)
             }
@@ -127,8 +127,8 @@ class Stroke(
     fun copyFrom(other: Stroke, forDuplication: Boolean = false) {
         this.paint.set(other.paint)
         this.smoothness = other.smoothness
-        this.points.clear()
-        this.points.addAll(other.points.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        this.pointsForDrawing.clear()
+        this.pointsForDrawing.addAll(other.pointsForDrawing.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
         this.unsmoothedPoints.clear()
         this.unsmoothedPoints.addAll(other.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
@@ -163,13 +163,13 @@ class Stroke(
      * @return A new Stroke with uniformly sampled points, or null if N < 2 or stroke has no points
      */
     fun generateUniformSampled(N: Int): Stroke {
-        if (N < 2 || points.isEmpty()) return Stroke(mutableListOf(), Paint(), 0f, 0)
+        if (N < 2 || pointsForDrawing.isEmpty()) return Stroke(mutableListOf(), Paint(), 0f, 0)
 
         val uniformPoints = mutableListOf<PointF>()
         val spacing = totalDistance / (N - 1)
 
         // Always add the first point
-        uniformPoints.add(PointF(points.first().point.x, points.first().point.y))
+        uniformPoints.add(PointF(pointsForDrawing.first().point.x, pointsForDrawing.first().point.y))
 
         // Generate N-2 intermediate points at uniform distances
         for (i in 1 until N - 1) {
@@ -181,7 +181,7 @@ class Stroke(
         }
 
         // Always add the last point
-        uniformPoints.add(PointF(points.last().point.x, points.last().point.y))
+        uniformPoints.add(PointF(pointsForDrawing.last().point.x, pointsForDrawing.last().point.y))
 
         // Create new stroke with uniformly sampled points
         val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(uniformPoints)
@@ -195,14 +195,14 @@ class Stroke(
      * @return The interpolated PointF, or null if targetDistance is out of bounds
      */
     private fun interpolatePointAtDistance(targetDistance: Float): PointF? {
-        if (targetDistance < 0 || targetDistance > totalDistance || points.size < 2) {
+        if (targetDistance < 0 || targetDistance > totalDistance || pointsForDrawing.size < 2) {
             return null
         }
 
         // Find the two points that bracket the target distance
-        for (i in 1 until points.size) {
-            val prevPoint = points[i - 1]
-            val currPoint = points[i]
+        for (i in 1 until pointsForDrawing.size) {
+            val prevPoint = pointsForDrawing[i - 1]
+            val currPoint = pointsForDrawing[i]
 
             if (targetDistance <= currPoint.distance) {
                 // Interpolate between prevPoint and currPoint
@@ -219,7 +219,7 @@ class Stroke(
         }
 
         // If we reach here, return the last point
-        return PointF(points.last().point.x, points.last().point.y)
+        return PointF(pointsForDrawing.last().point.x, pointsForDrawing.last().point.y)
     }
 
     companion object {

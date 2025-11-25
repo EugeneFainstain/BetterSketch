@@ -7,7 +7,6 @@ import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.graphics.createBitmap
-import androidx.core.graphics.withSave
 import kotlin.math.*
 
 interface DrawingViewListener {
@@ -333,7 +332,7 @@ class DrawingView @JvmOverloads constructor(
 
         strokes.forEachIndexed { index, stroke ->
             stroke.forEachStroke { s ->
-                for (pathPoint in s.points) {
+                for (pathPoint in s.pointsForDrawing) {
                     val d = distance(pathPoint.point, tapPointWorld)
                     if (d < minDistance) {
                         minDistance = d
@@ -374,7 +373,7 @@ class DrawingView @JvmOverloads constructor(
 
         var closestDist = Float.MAX_VALUE
         var closestPointIndex = -1
-        stroke.points.forEachIndexed { index, pathPoint ->
+        stroke.pointsForDrawing.forEachIndexed { index, pathPoint ->
             val d = distance(pathPoint.point, tapPoint)
             if (d < closestDist) {
                 closestDist = d
@@ -622,12 +621,12 @@ class DrawingView @JvmOverloads constructor(
                 drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints)
             }
         } else {
-            if (stroke.points.size >= 2) {
+            if (stroke.pointsForDrawing.size >= 2) {
                 val path = Path()
-                val firstPoint = stroke.points.first().point
+                val firstPoint = stroke.pointsForDrawing.first().point
                 path.moveTo(firstPoint.x, firstPoint.y)
-                for (i in 1 until stroke.points.size) {
-                    val point = stroke.points[i].point
+                for (i in 1 until stroke.pointsForDrawing.size) {
+                    val point = stroke.pointsForDrawing[i].point
                     path.lineTo(point.x, point.y)
                 }
 
@@ -651,8 +650,8 @@ class DrawingView @JvmOverloads constructor(
                         color = Color.GREEN
                     }
 
-                    if (editingPointIndex != -1 && editingPointIndex < stroke.points.size) {
-                        val pointToHighlight = stroke.points[editingPointIndex].point
+                    if (editingPointIndex != -1 && editingPointIndex < stroke.pointsForDrawing.size) {
+                        val pointToHighlight = stroke.pointsForDrawing[editingPointIndex].point
                         val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
                         globalTransform.mapPoints(transformedPoint)
                         canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
@@ -759,8 +758,8 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSecondFingerDown(event: MotionEvent): Boolean {
-        if (strokeInProgress != null && strokeInProgress!!.points.isNotEmpty()) {
-            if (strokeInProgress!!.points.size > 5) {
+        if (strokeInProgress != null && strokeInProgress!!.pointsForDrawing.isNotEmpty()) {
+            if (strokeInProgress!!.pointsForDrawing.size > 5) {
                 commitStrokeInProgress()
             } else {
                 strokeInProgress = null
@@ -978,7 +977,7 @@ class DrawingView @JvmOverloads constructor(
                 strokes.forEach { stroke ->
                     var strokeInCircle = false
                     stroke.forEachStroke { s ->
-                        if (s.points.any { isPointInCircle(it.point, center, radius) }) {
+                        if (s.pointsForDrawing.any { isPointInCircle(it.point, center, radius) }) {
                             strokeInCircle = true
                         }
                     }

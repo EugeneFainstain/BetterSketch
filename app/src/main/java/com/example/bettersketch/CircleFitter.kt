@@ -20,9 +20,9 @@ object CircleFitter {
     fun fitCircle(
         stroke: Stroke
     ): FitResult? {
-        if (stroke.points.size < 3) return null
+        if (stroke.pointsForDrawing.size < 3) return null
 
-        val points = stroke.points.map { it.point }
+        val points = stroke.pointsForDrawing.map { it.point }
 
         var minX = Float.MAX_VALUE
         var maxX = Float.MIN_VALUE

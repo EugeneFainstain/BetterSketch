@@ -7,10 +7,10 @@ import kotlin.math.sqrt
 class ShapeFitter {
     companion object {
         fun fit(strokeToReplace: Stroke, strokeForFitting: Stroke): ShapeFitResult? {
-            if (strokeForFitting.points.size < 2) return null
+            if (strokeForFitting.pointsForDrawing.size < 2) return null
 
-            val startPoint = strokeForFitting.points.first().point
-            val endPoint = strokeForFitting.points.last().point
+            val startPoint = strokeForFitting.pointsForDrawing.first().point
+            val endPoint = strokeForFitting.pointsForDrawing.last().point
             val distance = sqrt((startPoint.x - endPoint.x).pow(2) + (startPoint.y - endPoint.y).pow(2))
 
             val bounds = strokeForFitting.getBounds()

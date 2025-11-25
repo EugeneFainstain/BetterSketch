@@ -21,9 +21,9 @@ object SquareFitter {
     fun fitSquare(
         stroke: Stroke
     ): FitResult? {
-        if (stroke.points.size < 4) return null
+        if (stroke.pointsForDrawing.size < 4) return null
 
-        val points = stroke.points.map { it.point }
+        val points = stroke.pointsForDrawing.map { it.point }
 
         // Step 1: Compute centroid (center)
         var sumX = 0f

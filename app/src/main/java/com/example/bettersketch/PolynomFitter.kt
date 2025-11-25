@@ -21,7 +21,7 @@ object PolynomFitter {
     )
 
     fun fitPolynomial(stroke: Stroke, degree: Int): FitResult? {
-        val points = stroke.points.map { it.point }
+        val points = stroke.pointsForDrawing.map { it.point }
         if (points.size <= degree) return null
 
         val t = DoubleArray(points.size) { it.toDouble() }
