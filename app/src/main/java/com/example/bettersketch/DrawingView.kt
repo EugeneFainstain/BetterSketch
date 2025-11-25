@@ -211,6 +211,15 @@ class DrawingView @JvmOverloads constructor(
             s.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             s.totalDistance = newTotalDistance
 
+            s.analyticalPoints.forEach { pathPoint ->
+                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
+                matrix.mapPoints(point)
+                pathPoint.point.set(point[0], point[1])
+            }
+            val (recalculatedAnalyticalPoints, _) = Stroke.calculatePathPointsWithDistances(s.analyticalPoints.map { it.point })
+            s.analyticalPoints.clear()
+            s.analyticalPoints.addAll(recalculatedAnalyticalPoints)
+
             s.applySmoothing()
         }
         listener?.onStateChanged()
@@ -532,6 +541,27 @@ class DrawingView @JvmOverloads constructor(
             stroke.unsmoothedPoints.clear()
             stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             stroke.totalDistance = newTotalDistance
+
+            // Transform analyticalPoints with the same weights
+            if (stroke.analyticalPoints.isNotEmpty()) {
+                if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
+                    stroke.analyticalPoints.forEachIndexed { index, pathPoint ->
+                        pathPoint.point.offset(dx * weights[index], dy * weights[index])
+                    }
+                } else {
+                    stroke.analyticalPoints.forEach { pathPoint ->
+                        val weight = if (selectedEnd == SelectedEnd.START) {
+                            1.0f - (pathPoint.distance / newTotalDistance)
+                        } else {
+                            pathPoint.distance / newTotalDistance
+                        }
+                        pathPoint.point.offset(dx * weight, dy * weight)
+                    }
+                }
+                val (recalculatedAnalyticalPoints, _) = Stroke.calculatePathPointsWithDistances(stroke.analyticalPoints.map { it.point })
+                stroke.analyticalPoints.clear()
+                stroke.analyticalPoints.addAll(recalculatedAnalyticalPoints)
+            }
 
             stroke.applySmoothing()
             redrawHistory()

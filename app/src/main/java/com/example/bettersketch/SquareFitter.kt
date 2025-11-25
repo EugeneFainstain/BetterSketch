@@ -78,7 +78,7 @@ object SquareFitter {
         val maxDistance = evaluateMaxDistance(centerX, centerY, sideLength, bestAngle, points)
         val normalizedError = maxDistance / sideLength
 
-        val fittedStroke = createSquareStroke(params, stroke.paint)
+        val fittedStroke = createSquareStroke(params, stroke.paint, stroke.pointsForDrawing.size)
         return FitResult(params, normalizedError, fittedStroke)
     }
 
@@ -338,14 +338,53 @@ object SquareFitter {
         }
     }
 
-    private fun createSquareStroke(params: SquareParams, paint: Paint): Stroke {
+    private fun createSquareStroke(params: SquareParams, paint: Paint, targetPointCount: Int): Stroke {
+        val stroke = Stroke(paint, 0)
+        
+        // Get the 4 corners of the square
         val corners = getSquareCorners(params)
-        val squarePoints = mutableListOf<PointF>()
-        squarePoints.addAll(corners)
-        squarePoints.add(corners[0])
-
-        val (pathPoints, totalDistance) = Stroke.calculatePathPointsWithDistances(squarePoints)
-        return Stroke(pathPoints, Paint(paint), totalDistance, 0)
+        
+        // Store the square geometry in analyticalPoints
+        val squarePerimeterPoints = corners + corners[0] // Close the square
+        val (analyticalPathPoints, analyticalTotalDistance) = Stroke.calculatePathPointsWithDistances(squarePerimeterPoints)
+        stroke.analyticalPoints.addAll(analyticalPathPoints)
+        
+        // Generate interpolated points along the square perimeter
+        val interpolatedPoints = mutableListOf<PointF>()
+        val perimeter = params.sideLength * 4f
+        val spacing = perimeter / (targetPointCount - 1)
+        
+        for (i in 0 until targetPointCount) {
+            val targetDistance = i * spacing
+            val point = interpolatePointOnSquarePerimeter(corners, targetDistance)
+            interpolatedPoints.add(point)
+        }
+        
+        // Create the stroke with interpolated points
+        val (pathPoints, totalDistance) = Stroke.calculatePathPointsWithDistances(interpolatedPoints)
+        stroke.unsmoothedPoints.addAll(pathPoints)
+        stroke.pointsForDrawing.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        stroke.originalPoints.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        stroke.totalDistance = totalDistance
+        
+        return stroke
+    }
+    
+    private fun interpolatePointOnSquarePerimeter(corners: List<PointF>, targetDistance: Float): PointF {
+        val sideLength = distance(corners[0], corners[1])
+        val perimeter = sideLength * 4f
+        val normalizedDistance = (targetDistance % perimeter) / perimeter
+        
+        val segmentIndex = (normalizedDistance * 4).toInt()
+        val segmentProgress = (normalizedDistance * 4) - segmentIndex
+        
+        val start = corners[segmentIndex % 4]
+        val end = corners[(segmentIndex + 1) % 4]
+        
+        val x = start.x + segmentProgress * (end.x - start.x)
+        val y = start.y + segmentProgress * (end.y - start.y)
+        
+        return PointF(x, y)
     }
 
     private fun distance(p1: PointF, p2: PointF): Float {

@@ -14,6 +14,7 @@ class Stroke(
     val pointsForDrawing: MutableList<PathPoint> = mutableListOf() // Smoothed points for drawing
     val originalPoints: MutableList<PathPoint> = mutableListOf() // Original points for undo/reset
     val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
+    val analyticalPoints: MutableList<PathPoint> = mutableListOf() // Analytical points (fitted/recognized shapes)
     var totalDistance: Float = 0f
     var isModified: Boolean = false
     val childStrokes: MutableList<Stroke> = mutableListOf()
@@ -132,6 +133,9 @@ class Stroke(
 
         this.unsmoothedPoints.clear()
         this.unsmoothedPoints.addAll(other.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+
+        this.analyticalPoints.clear()
+        this.analyticalPoints.addAll(other.analyticalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
         this.totalDistance = other.totalDistance
 

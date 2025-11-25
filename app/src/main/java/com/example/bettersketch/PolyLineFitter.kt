@@ -53,13 +53,7 @@ class PolyLineFitter {
 
                 // Find segmentation that is 95% good
                 if (normalizedError <= QUALITY_THRESHOLD * epsilonMultiplier) {
-                    val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(intersectionPoints)
-                    val fittedStroke = Stroke(
-                        pathPoints.toMutableList(),
-                        stroke.paint,
-                        newTotalDistance,
-                        0
-                    )
+                    val fittedStroke = createPolyLineStroke(intersectionPoints, stroke.paint, stroke.pointsForDrawing.size)
                     val fitResult = FitResult(intersectionPoints, normalizedError, fittedStroke, averagedIndices.size - 1)
 
                     if (bestFit == null || fitResult.k < bestFit.k) {
@@ -349,6 +343,82 @@ class PolyLineFitter {
             }
 
             return if (pointCount > 0) totalError / pointCount else 0f
+        }
+
+        /**
+         * Create a fitted polyline stroke with analytical points at the line vertices
+         * and interpolated points distributed along the segments matching the original stroke's point count
+         */
+        private fun createPolyLineStroke(vertices: List<PointF>, paint: android.graphics.Paint, targetPointCount: Int): Stroke {
+            val stroke = Stroke(paint, 0)
+            
+            // Store the analytical line vertices
+            val (analyticalPathPoints, analyticalTotalDistance) = Stroke.calculatePathPointsWithDistances(vertices)
+            stroke.analyticalPoints.addAll(analyticalPathPoints)
+            
+            // Generate interpolated points along the polyline segments
+            val interpolatedPoints = mutableListOf<PointF>()
+            
+            // Calculate total distance along the polyline
+            var totalDistance = 0f
+            for (i in 1 until vertices.size) {
+                val dx = vertices[i].x - vertices[i - 1].x
+                val dy = vertices[i].y - vertices[i - 1].y
+                totalDistance += sqrt(dx * dx + dy * dy)
+            }
+            
+            if (totalDistance <= 0f) {
+                // Degenerate case: all vertices are at the same point
+                interpolatedPoints.add(vertices.first())
+            } else {
+                val spacing = totalDistance / (targetPointCount - 1)
+                
+                for (i in 0 until targetPointCount) {
+                    val targetDist = i * spacing
+                    val point = interpolatePointOnPolyLine(vertices, targetDist)
+                    interpolatedPoints.add(point)
+                }
+            }
+            
+            // Create the stroke with interpolated points
+            val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(interpolatedPoints)
+            stroke.unsmoothedPoints.addAll(pathPoints)
+            stroke.pointsForDrawing.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+            stroke.originalPoints.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+            stroke.totalDistance = newTotalDistance
+            
+            return stroke
+        }
+        
+        /**
+         * Interpolate a point at a specific distance along the polyline
+         */
+        private fun interpolatePointOnPolyLine(vertices: List<PointF>, targetDistance: Float): PointF {
+            if (vertices.size < 2) return vertices.first()
+            
+            var accumulatedDistance = 0f
+            
+            for (i in 1 until vertices.size) {
+                val start = vertices[i - 1]
+                val end = vertices[i]
+                val dx = end.x - start.x
+                val dy = end.y - start.y
+                val segmentLength = sqrt(dx * dx + dy * dy)
+                
+                if (accumulatedDistance + segmentLength >= targetDistance) {
+                    // Target distance is within this segment
+                    val remainingDistance = targetDistance - accumulatedDistance
+                    val t = if (segmentLength > 0f) remainingDistance / segmentLength else 0f
+                    val x = start.x + t * dx
+                    val y = start.y + t * dy
+                    return PointF(x, y)
+                }
+                
+                accumulatedDistance += segmentLength
+            }
+            
+            // If we reach here, return the last vertex
+            return vertices.last()
         }
     }
 }
