@@ -1,3 +1,4 @@
+
 package com.example.bettersketch
 
 import android.graphics.PointF
@@ -29,8 +30,8 @@ class PolyLineFitter {
                 val epsilon = scale * epsilonMultiplier
 
                 // Step 2: Run forward and backward greedy segmentation
-                val forwardBreakpoints = greedySegmentation(points, epsilon, forward = true)
-                val backwardBreakpoints = greedySegmentation(points, epsilon, forward = false)
+                val forwardBreakpoints = greedySegmentation(points, epsilon)
+                val backwardBreakpoints = greedySegmentation(points.reversed(), epsilon)
 
                 // MUST have same K
                 if (forwardBreakpoints.size != backwardBreakpoints.size) {
@@ -38,19 +39,19 @@ class PolyLineFitter {
                 }
 
                 // Step 3: Average corresponding breakpoints
-                val averagedBreakpoints = averageBreakpoints(forwardBreakpoints, backwardBreakpoints)
+                val (averagedIndices, averagedCoords) = averageBreakpoints(forwardBreakpoints, backwardBreakpoints, points)
 
-                // Step 4: Fit line to each segment (L2 least squares)
-                val lines = fitLinesToSegments(points, averagedBreakpoints)
+                // Step 4: Fit line to averaged coordinates
+                val lines = fitLinesToSegments(averagedCoords)
 
-                // Step 5: Calculate intersections of adjacent lines
-                val intersectionPoints = calculateIntersections(lines, points, averagedBreakpoints)
+                // Step 5: Calculate intersections
+                val intersectionPoints = calculateIntersections(lines, averagedCoords)
 
-                // Calculate error
-                val error = calculateFitError(points, averagedBreakpoints, lines)
+                // Calculate error using original points and averaged indices
+                val error = calculateFitError(points, averagedIndices, lines)
                 val normalizedError = error / scale
 
-                // Step 3: Find segmentation that is 95% good
+                // Find segmentation that is 95% good
                 if (normalizedError <= QUALITY_THRESHOLD * epsilonMultiplier) {
                     val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(intersectionPoints)
                     val fittedStroke = Stroke(
@@ -59,7 +60,7 @@ class PolyLineFitter {
                         newTotalDistance,
                         0
                     )
-                    val fitResult = FitResult(intersectionPoints, normalizedError, fittedStroke, averagedBreakpoints.size - 1)
+                    val fitResult = FitResult(intersectionPoints, normalizedError, fittedStroke, averagedCoords.size - 1)
 
                     if (bestFit == null || fitResult.k < bestFit.k) {
                         bestFit = fitResult
@@ -71,73 +72,37 @@ class PolyLineFitter {
         }
 
         /**
-         * Greedy segmentation algorithm.
+         * Greedy segmentation algorithm (forward direction only).
          * Returns list of breakpoint indices (including 0 and last index)
          */
-        private fun greedySegmentation(points: List<PointF>, epsilon: Float, forward: Boolean): List<Int> {
+        private fun greedySegmentation(points: List<PointF>, epsilon: Float): List<Int> {
             val n = points.size
             val breakpoints = mutableListOf<Int>()
 
-            if (forward) {
-                breakpoints.add(0)
-                var currentStart = 0
+            var current = 0
+            breakpoints.add(current)
 
-                while (currentStart < n - 1) {
-                    var currentEnd = currentStart + 1
+            while (current < n - 1) {
+                var probe = current + 1
 
-                    // Extend segment as far as possible while staying within epsilon
-                    while (currentEnd < n) {
-                        val segment = points.subList(currentStart, currentEnd + 1)
-                        val error = segmentError(segment)
+                // Extend segment as far as possible while staying within epsilon
+                while (probe < n) {
+                    val segment = points.subList(current, probe + 1)
+                    val error = segmentError(segment)
 
-                        if (error > epsilon) {
-                            break
-                        }
-                        currentEnd++
-                    }
+                    if (error > epsilon)
+                        break
 
-                    // Take the furthest point that was still within epsilon
-                    val nextBreakpoint = (currentEnd - 1).coerceAtLeast(currentStart + 1)
-                    breakpoints.add(nextBreakpoint)
-                    currentStart = nextBreakpoint
+                    probe++
                 }
 
-                // Ensure last point is included
-                if (breakpoints.last() != n - 1) {
-                    breakpoints.add(n - 1)
-                }
-            } else {
-                // Backward pass
-                breakpoints.add(n - 1)
-                var currentEnd = n - 1
-
-                while (currentEnd > 0) {
-                    var currentStart = currentEnd - 1
-
-                    // Extend segment backwards as far as possible
-                    while (currentStart >= 0) {
-                        val segment = points.subList(currentStart, currentEnd + 1)
-                        val error = segmentError(segment)
-
-                        if (error > epsilon) {
-                            break
-                        }
-                        currentStart--
-                    }
-
-                    val nextBreakpoint = (currentStart + 1).coerceAtMost(currentEnd - 1)
-                    breakpoints.add(nextBreakpoint)
-                    currentEnd = nextBreakpoint
-                }
-
-                if (breakpoints.last() != 0) {
-                    breakpoints.add(0)
-                }
-
-                breakpoints.reverse()
+                // Update current to the furthest point that was still within epsilon
+                // Note: this will eventually add the last point as the last breakpoint.
+                current = probe - 1
+                breakpoints.add(current)
             }
 
-            return breakpoints.distinct().sorted()
+            return breakpoints
         }
 
         /**
@@ -160,17 +125,36 @@ class PolyLineFitter {
         }
 
         /**
-         * Average corresponding breakpoint pairs from forward and backward passes
+         * Average corresponding breakpoint pairs from forward and backward passes.
+         * Returns both the averaged indices and averaged coordinates.
          */
-        private fun averageBreakpoints(forward: List<Int>, backward: List<Int>): List<Int> {
+        private fun averageBreakpoints(
+            forward: List<Int>,
+            backward: List<Int>,
+            points: List<PointF>
+        ): Pair<List<Int>, List<PointF>> {
             require(forward.size == backward.size) { "Forward and backward must have same length" }
 
-            val averaged = mutableListOf<Int>()
+            val backwardReversed = backward.reversed()
+            val averagedIndices = mutableListOf<Int>()
+            val averagedCoords = mutableListOf<PointF>()
+            val n = points.size
+
             for (i in forward.indices) {
-                averaged.add((forward[i] + backward[i]) / 2)
+                // Average indices for segment definition
+                val backwardIdx = n - 1 - backwardReversed[i]
+                val avgIdx = (forward[i] + backwardIdx) / 2
+                averagedIndices.add(avgIdx)
+
+                // Average coordinates for line fitting
+                val forwardPoint = points[forward[i]]
+                val backwardPoint = points[backwardIdx]
+                val avgX = (forwardPoint.x + backwardPoint.x) / 2f
+                val avgY = (forwardPoint.y + backwardPoint.y) / 2f
+                averagedCoords.add(PointF(avgX, avgY))
             }
 
-            return averaged.distinct().sorted()
+            return Pair(averagedIndices.distinct().sorted(), averagedCoords)
         }
 
         /**
@@ -243,17 +227,22 @@ class PolyLineFitter {
         }
 
         /**
-         * Fit lines to each segment defined by breakpoints
+         * Fit lines to segments defined by breakpoint coordinates
          */
-        private fun fitLinesToSegments(points: List<PointF>, breakpoints: List<Int>): List<Line> {
+        private fun fitLinesToSegments(breakpoints: List<PointF>): List<Line> {
             val lines = mutableListOf<Line>()
 
             for (i in 0 until breakpoints.size - 1) {
-                val startIdx = breakpoints[i]
-                val endIdx = breakpoints[i + 1]
-                val segment = points.subList(startIdx, endIdx + 1)
-                val line = fitLineToPoints(segment)
-                lines.add(line)
+                // Fit line through two consecutive breakpoints
+                val p1 = breakpoints[i]
+                val p2 = breakpoints[i + 1]
+
+                // Create line through these two points
+                val dx = p2.x - p1.x
+                val dy = p2.y - p1.y
+
+                // Line equation: dy*x - dx*y + (dx*p1.y - dy*p1.x) = 0
+                lines.add(Line(dy, -dx, dx * p1.y - dy * p1.x))
             }
 
             return lines
@@ -264,15 +253,14 @@ class PolyLineFitter {
          */
         private fun calculateIntersections(
             lines: List<Line>,
-            originalPoints: List<PointF>,
-            breakpoints: List<Int>
+            breakpoints: List<PointF>
         ): List<PointF> {
             if (lines.isEmpty()) return emptyList()
 
             val intersections = mutableListOf<PointF>()
 
-            // First point: start of first line (project first original point onto first line)
-            intersections.add(projectPointOntoLine(originalPoints[breakpoints[0]], lines[0]))
+            // First point: use first breakpoint
+            intersections.add(breakpoints.first())
 
             // Intermediate points: intersections of adjacent lines
             for (i in 0 until lines.size - 1) {
@@ -280,34 +268,15 @@ class PolyLineFitter {
                 if (intersection != null) {
                     intersections.add(intersection)
                 } else {
-                    // Lines are parallel, use midpoint of segment
-                    val idx = breakpoints[i + 1]
-                    intersections.add(originalPoints[idx])
+                    // Lines are parallel, use breakpoint
+                    intersections.add(breakpoints[i + 1])
                 }
             }
 
-            // Last point: end of last line
-            intersections.add(projectPointOntoLine(originalPoints[breakpoints.last()], lines.last()))
+            // Last point: use last breakpoint
+            intersections.add(breakpoints.last())
 
             return intersections
-        }
-
-        /**
-         * Project a point onto a line
-         */
-        private fun projectPointOntoLine(point: PointF, line: Line): PointF {
-            val a = line.a
-            val b = line.b
-            val c = line.c
-
-            val denominator = a * a + b * b
-            if (denominator < 1e-6f) return point
-
-            // Projection formula
-            val x = (b * (b * point.x - a * point.y) - a * c) / denominator
-            val y = (a * (-b * point.x + a * point.y) - b * c) / denominator
-
-            return PointF(x, y)
         }
 
         /**
@@ -315,23 +284,11 @@ class PolyLineFitter {
          * Returns null if lines are parallel
          */
         private fun intersectLines(line1: Line, line2: Line): PointF? {
-            val a1 = line1.a
-            val b1 = line1.b
-            val c1 = line1.c
+            val det = line1.a * line2.b - line2.a * line1.b
+            if (abs(det) < 1e-6f) return null // Lines are parallel
 
-            val a2 = line2.a
-            val b2 = line2.b
-            val c2 = line2.c
-
-            val denominator = a1 * b2 - a2 * b1
-
-            if (abs(denominator) < 1e-6f) {
-                return null // Parallel lines
-            }
-
-            val x = (b1 * c2 - b2 * c1) / denominator
-            val y = (a2 * c1 - a1 * c2) / denominator
-
+            val x = (line1.b * line2.c - line2.b * line1.c) / det
+            val y = (line2.a * line1.c - line1.a * line2.c) / det
             return PointF(x, y)
         }
 
@@ -340,16 +297,17 @@ class PolyLineFitter {
          */
         private fun calculateFitError(
             points: List<PointF>,
-            breakpoints: List<Int>,
+            breakpointIndices: List<Int>,
             lines: List<Line>
         ): Float {
             var totalError = 0f
             var pointCount = 0
 
-            for (i in 0 until breakpoints.size - 1) {
-                val startIdx = breakpoints[i]
-                val endIdx = breakpoints[i + 1]
+            for (i in 0 until breakpointIndices.size - 1) {
+                val startIdx = breakpointIndices[i]
+                val endIdx = breakpointIndices[i + 1]
 
+                // Calculate error for all points in this segment
                 for (j in startIdx..endIdx) {
                     val error = perpendicularDistance(points[j], lines[i])
                     totalError += error
