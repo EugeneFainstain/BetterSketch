@@ -41,13 +41,13 @@ class PolyLineFitter {
                 // Step 3: Average corresponding breakpoints
                 val (averagedIndices, averagedCoords) = averageBreakpoints(forwardBreakpoints, backwardBreakpoints, points)
 
-                // Step 4: Fit line to averaged coordinates
-                val lines = fitLinesToSegments(averagedCoords)
+                // Step 4: Fit lines to segments using parametric least squares on original points
+                val lines = fitLinesToSegments(points, averagedIndices)
 
-                // Step 5: Calculate intersections
-                val intersectionPoints = calculateIntersections(lines, averagedCoords)
+                // Step 5: Calculate intersections of adjacent fitted lines
+                val intersectionPoints = calculateIntersections(lines, points, averagedIndices)
 
-                // Calculate error using original points and averaged indices
+                // Calculate error
                 val error = calculateFitError(points, averagedIndices, lines)
                 val normalizedError = error / scale
 
@@ -60,7 +60,7 @@ class PolyLineFitter {
                         newTotalDistance,
                         0
                     )
-                    val fitResult = FitResult(intersectionPoints, normalizedError, fittedStroke, averagedCoords.size - 1)
+                    val fitResult = FitResult(intersectionPoints, normalizedError, fittedStroke, averagedIndices.size - 1)
 
                     if (bestFit == null || fitResult.k < bestFit.k) {
                         bestFit = fitResult
@@ -162,59 +162,75 @@ class PolyLineFitter {
          */
         private data class Line(val a: Float, val b: Float, val c: Float)
 
+
         /**
-         * Fit a line to a set of points using least squares (L2)
+         * Fit a line to equidistantly sampled points using parametric form.
+         * Fits x(t) and y(t) separately where t is the point index.
          */
         private fun fitLineToPoints(points: List<PointF>): Line {
             if (points.size < 2) {
                 return Line(0f, 0f, 0f)
             }
 
-            // Calculate centroid
+            if (points.size == 2) {
+                // Just connect the two points
+                val p1 = points[0]
+                val p2 = points[1]
+                val dx = p2.x - p1.x
+                val dy = p2.y - p1.y
+                return Line(dy, -dx, dx * p1.y - dy * p1.x)
+            }
+
+            val n = points.size
+
+            // Calculate mean index (for centered fitting)
+            val meanT = (n - 1) / 2f
+
+            // Calculate means of x and y
             var sumX = 0f
             var sumY = 0f
             for (p in points) {
                 sumX += p.x
                 sumY += p.y
             }
-            val cx = sumX / points.size
-            val cy = sumY / points.size
+            val meanX = sumX / n
+            val meanY = sumY / n
 
-            // Calculate covariance
-            var sumXX = 0f
-            var sumYY = 0f
-            var sumXY = 0f
-            for (p in points) {
-                val dx = p.x - cx
-                val dy = p.y - cy
-                sumXX += dx * dx
-                sumYY += dy * dy
-                sumXY += dx * dy
+            // Fit x(t) = ax * t + bx  and  y(t) = ay * t + by
+            // Using least squares: slope = Σ((t - meanT) * (val - meanVal)) / Σ((t - meanT)²)
+
+            var sumTSquared = 0f
+            var sumTX = 0f
+            var sumTY = 0f
+
+            for (i in points.indices) {
+                val t = i.toFloat()
+                val dt = t - meanT
+                sumTSquared += dt * dt
+                sumTX += dt * (points[i].x - meanX)
+                sumTY += dt * (points[i].y - meanY)
             }
 
-            // Use principal component analysis
-            // The line passes through centroid and aligns with principal direction
-            if (abs(sumXY) < 1e-6f && abs(sumXX - sumYY) < 1e-6f) {
-                // Points are aligned or clustered
-                if (points.size >= 2) {
-                    val p1 = points.first()
-                    val p2 = points.last()
-                    val dx = p2.x - p1.x
-                    val dy = p2.y - p1.y
-                    // Line: dy*x - dx*y + (dx*p1.y - dy*p1.x) = 0
-                    return Line(dy, -dx, dx * p1.y - dy * p1.x)
-                }
-                return Line(0f, 1f, -cy)
+            if (sumTSquared < 1e-6f) {
+                // All points at same t (shouldn't happen with size > 2, but handle it)
+                return Line(0f, 1f, -meanY)
             }
 
-            // Find principal direction using eigenvalue decomposition
-            val theta = 0.5f * kotlin.math.atan2(2 * sumXY, sumXX - sumYY)
-            val cos = kotlin.math.cos(theta)
-            val sin = kotlin.math.sin(theta)
+            // Slopes of x(t) and y(t)
+            val ax = sumTX / sumTSquared
+            val ay = sumTY / sumTSquared
 
-            // Line equation: sin*(x-cx) - cos*(y-cy) = 0
-            // or: sin*x - cos*y + (cos*cy - sin*cx) = 0
-            return Line(sin, -cos, cos * cy - sin * cx)
+            // Intercepts (using the fact that line passes through (meanX, meanY) at t = meanT)
+            val bx = meanX - ax * meanT
+            val by = meanY - ay * meanT
+
+            // The parametric line is: (x, y) = (ax*t + bx, ay*t + by)
+            // Direction vector: (ax, ay)
+            // Point on line: (bx, by) when t = 0
+            // Line in implicit form: ay*(x - bx) - ax*(y - by) = 0
+            // Simplifying: ay*x - ax*y + (ax*by - ay*bx) = 0
+
+            return Line(ay, -ax, ax * by - ay * bx)
         }
 
         /**
@@ -226,41 +242,45 @@ class PolyLineFitter {
             return if (denominator > 0) numerator / denominator else 0f
         }
 
+
         /**
-         * Fit lines to segments defined by breakpoint coordinates
+         * Fit lines to segments defined by breakpoint indices.
+         * Each line is fitted to the original points in that segment using parametric least squares.
          */
-        private fun fitLinesToSegments(breakpoints: List<PointF>): List<Line> {
+        private fun fitLinesToSegments(points: List<PointF>, breakpointIndices: List<Int>): List<Line> {
             val lines = mutableListOf<Line>()
 
-            for (i in 0 until breakpoints.size - 1) {
-                // Fit line through two consecutive breakpoints
-                val p1 = breakpoints[i]
-                val p2 = breakpoints[i + 1]
+            for (i in 0 until breakpointIndices.size - 1) {
+                val startIdx = breakpointIndices[i]
+                val endIdx = breakpointIndices[i + 1]
 
-                // Create line through these two points
-                val dx = p2.x - p1.x
-                val dy = p2.y - p1.y
+                // Extract the segment of original points
+                val segment = points.subList(startIdx, endIdx + 1)
 
-                // Line equation: dy*x - dx*y + (dx*p1.y - dy*p1.x) = 0
-                lines.add(Line(dy, -dx, dx * p1.y - dy * p1.x))
+                // Fit line using parametric least squares
+                val line = fitLineToPoints(segment)
+                lines.add(line)
             }
 
             return lines
         }
 
         /**
-         * Calculate intersection points of adjacent lines
+         * Calculate intersection points of adjacent fitted lines.
+         * Uses projections for the first and last points.
          */
         private fun calculateIntersections(
             lines: List<Line>,
-            breakpoints: List<PointF>
+            originalPoints: List<PointF>,
+            breakpointIndices: List<Int>
         ): List<PointF> {
             if (lines.isEmpty()) return emptyList()
 
             val intersections = mutableListOf<PointF>()
 
-            // First point: use first breakpoint
-            intersections.add(breakpoints.first())
+            // First point: project first original point onto first line
+            val firstPoint = originalPoints[breakpointIndices.first()]
+            intersections.add(projectPointOntoLine(firstPoint, lines.first()))
 
             // Intermediate points: intersections of adjacent lines
             for (i in 0 until lines.size - 1) {
@@ -268,15 +288,28 @@ class PolyLineFitter {
                 if (intersection != null) {
                     intersections.add(intersection)
                 } else {
-                    // Lines are parallel, use breakpoint
-                    intersections.add(breakpoints[i + 1])
+                    // Lines are parallel, project breakpoint onto one of the lines
+                    val breakpointIdx = breakpointIndices[i + 1]
+                    intersections.add(projectPointOntoLine(originalPoints[breakpointIdx], lines[i]))
                 }
             }
 
-            // Last point: use last breakpoint
-            intersections.add(breakpoints.last())
+            // Last point: project last original point onto last line
+            val lastPoint = originalPoints[breakpointIndices.last()]
+            intersections.add(projectPointOntoLine(lastPoint, lines.last()))
 
             return intersections
+        }
+
+        /**
+         * Project a point onto a line
+         */
+        private fun projectPointOntoLine(point: PointF, line: Line): PointF {
+            val denom = line.a * line.a + line.b * line.b
+            if (denom < 1e-6f) return point
+
+            val t = -(line.a * point.x + line.b * point.y + line.c) / denom
+            return PointF(point.x + t * line.a, point.y + t * line.b)
         }
 
         /**
