@@ -22,7 +22,7 @@ class Stroke(
     val pointsForDrawing: MutableList<PathPoint> = mutableListOf() // Smoothed points for drawing
     val originalPoints: MutableList<PathPoint> = mutableListOf() // Original points for undo/reset
     val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
-    val analyticalPoints: MutableList<PathPoint> = mutableListOf() // Analytical points (fitted/recognized shapes)
+    val polylinePoints: MutableList<PathPoint> = mutableListOf() // Analytical polyline points
     var totalDistance: Float = 0f
     var isModified: Boolean = false
     val childStrokes: MutableList<Stroke> = mutableListOf()
@@ -166,8 +166,8 @@ class Stroke(
         this.unsmoothedPoints.clear()
         this.unsmoothedPoints.addAll(other.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
-        this.analyticalPoints.clear()
-        this.analyticalPoints.addAll(other.analyticalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        this.polylinePoints.clear()
+        this.polylinePoints.addAll(other.polylinePoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
         this.totalDistance = other.totalDistance
 
@@ -269,7 +269,7 @@ class Stroke(
 
         needsToRegenerate = false
 
-        if (analyticalPoints.isEmpty()) return
+        if (polylinePoints.isEmpty()) return
 
         val pointCount = originalPoints.size
         if (pointCount < 2) return
@@ -278,20 +278,20 @@ class Stroke(
 
         when (analyticalShapeType) {
             AnalyticalShapeType.SQUARE -> {
-                // For squares: analyticalPoints contains the 4 corners (+ closed point)
-                interpolatedPoints.addAll(interpolateAlongPolyLine(analyticalPoints.map { it.point }, pointCount))
+                // For squares: polylinePoints contains the 4 corners (+ closed point)
+                interpolatedPoints.addAll(interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount))
             }
             AnalyticalShapeType.CIRCLE -> {
-                // For circles: analyticalPoints contains points around the circle perimeter
-                interpolatedPoints.addAll(interpolateAlongPolyLine(analyticalPoints.map { it.point }, pointCount))
+                // For circles: polylinePoints contains points around the circle perimeter
+                interpolatedPoints.addAll(interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount))
             }
             AnalyticalShapeType.POLYLINE -> {
-                // For polylines: analyticalPoints are the vertices
-                interpolatedPoints.addAll(interpolateAlongPolyLine(analyticalPoints.map { it.point }, pointCount))
+                // For polylines: polylinePoints are the vertices
+                interpolatedPoints.addAll(interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount))
             }
             AnalyticalShapeType.POLYNOMIAL -> {
-                // For polynomials: analyticalPoints are the curve points
-                interpolatedPoints.addAll(interpolateAlongPolyLine(analyticalPoints.map { it.point }, pointCount))
+                // For polynomials: polylinePoints are the curve points
+                interpolatedPoints.addAll(interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount))
             }
             AnalyticalShapeType.NONE -> {
                 // No analytical shape, cannot regenerate

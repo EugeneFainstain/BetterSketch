@@ -218,14 +218,14 @@ class DrawingView @JvmOverloads constructor(
             s.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             s.totalDistance = newTotalDistance
 
-            s.analyticalPoints.forEach { pathPoint ->
+            s.polylinePoints.forEach { pathPoint ->
                 val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
                 matrix.mapPoints(point)
                 pathPoint.point.set(point[0], point[1])
             }
-            val (recalculatedAnalyticalPoints, _) = Stroke.calculatePathPointsWithDistances(s.analyticalPoints.map { it.point })
-            s.analyticalPoints.clear()
-            s.analyticalPoints.addAll(recalculatedAnalyticalPoints)
+            val (recalculatedAnalyticalPoints, _) = Stroke.calculatePathPointsWithDistances(s.polylinePoints.map { it.point })
+            s.polylinePoints.clear()
+            s.polylinePoints.addAll(recalculatedAnalyticalPoints)
 
             s.applySmoothing()
         }
@@ -393,7 +393,7 @@ class DrawingView @JvmOverloads constructor(
         val stroke = currentStroke ?: return false
         if (stroke.isGroup) return false
 
-        if (stroke.analyticalPoints.size > 0)
+        if (stroke.polylinePoints.size > 0)
             return selectEndpointOfCurrentAnalyticalStroke(tapPoint)
 
         var closestDist = Float.MAX_VALUE
@@ -459,7 +459,7 @@ class DrawingView @JvmOverloads constructor(
         val unsmoothedPointDistance = stroke.unsmoothedPoints[closestDrawingPointIndex].distance
 
         // Find closest analytical point along the path (by distance, not 2D space)
-        stroke.analyticalPoints.forEachIndexed { index, pathPoint ->
+        stroke.polylinePoints.forEachIndexed { index, pathPoint ->
             val d = kotlin.math.abs(pathPoint.distance - unsmoothedPointDistance)
             if (d < closestAnalyticalDist) {
                 closestAnalyticalDist = d
@@ -471,8 +471,8 @@ class DrawingView @JvmOverloads constructor(
         selectedEnd = SelectedEnd.MIDDLE
 
         // Find the corresponding unsmoothed point index based on distance ratio
-        val analyticalPointDistance = stroke.analyticalPoints[closestAnalyticalIndex].distance
-        val analyticalTotalDistance = stroke.analyticalPoints.lastOrNull()?.distance ?: 0f
+        val analyticalPointDistance = stroke.polylinePoints[closestAnalyticalIndex].distance
+        val analyticalTotalDistance = stroke.polylinePoints.lastOrNull()?.distance ?: 0f
 
         if (analyticalTotalDistance > 0f) {
             val distanceRatio = analyticalPointDistance / analyticalTotalDistance
@@ -625,17 +625,17 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun moveEditingAnalyticalPoint(stroke: Stroke, dx: Float, dy: Float) {
-        if (editingAnalyticalPointIndex >= stroke.analyticalPoints.size) return
+        if (editingAnalyticalPointIndex >= stroke.polylinePoints.size) return
 
         // Move the analytical point
-        stroke.analyticalPoints[editingAnalyticalPointIndex].point.offset(dx, dy)
+        stroke.polylinePoints[editingAnalyticalPointIndex].point.offset(dx, dy)
 
         // Recalculate distances for analytical points after moving
         val (recalculatedAnalyticalPoints, _) = Stroke.calculatePathPointsWithDistances(
-            stroke.analyticalPoints.map { it.point }
+            stroke.polylinePoints.map { it.point }
         )
-        stroke.analyticalPoints.clear()
-        stroke.analyticalPoints.addAll(recalculatedAnalyticalPoints)
+        stroke.polylinePoints.clear()
+        stroke.polylinePoints.addAll(recalculatedAnalyticalPoints)
 
         // Regenerate all derived points from the modified analytical points
         stroke.regenerateUnsmoothedPointsFromAnalytical()
@@ -645,11 +645,11 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun updateHighlightedPointForAnalyticalStroke(stroke: Stroke) {
-        if (editingAnalyticalPointIndex < 0 || editingAnalyticalPointIndex >= stroke.analyticalPoints.size) return
+        if (editingAnalyticalPointIndex < 0 || editingAnalyticalPointIndex >= stroke.polylinePoints.size) return
 
         // Find the corresponding unsmoothed point index based on distance ratio
-        val analyticalPointDistance = stroke.analyticalPoints[editingAnalyticalPointIndex].distance
-        val analyticalTotalDistance = stroke.analyticalPoints.lastOrNull()?.distance ?: 0f
+        val analyticalPointDistance = stroke.polylinePoints[editingAnalyticalPointIndex].distance
+        val analyticalTotalDistance = stroke.polylinePoints.lastOrNull()?.distance ?: 0f
 
         if (analyticalTotalDistance > 0f) {
             val distanceRatio = analyticalPointDistance / analyticalTotalDistance
