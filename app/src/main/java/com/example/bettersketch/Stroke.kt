@@ -135,12 +135,12 @@ class Stroke(
         return bounds
     }
 
-    fun isSingleColor(): Boolean {
+    fun getSingleColor(): Int? {
         val colors = mutableSetOf<Int>()
         forEachStroke { stroke ->
             colors.add(stroke.paint.color)
         }
-        return colors.size <= 1
+        return if (colors.size == 1) colors.first() else null
     }
 
     fun setColor(color: Int) {

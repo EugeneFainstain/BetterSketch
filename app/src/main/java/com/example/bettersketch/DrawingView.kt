@@ -686,12 +686,26 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun setColor(color: Int, applyToSelected: Boolean) {
-        if (applyToSelected && (lastStrokeHighlightedIdx != -1)) {
-            val selectedStroke = currentStroke
-            if (selectedStroke != null) {
-                if (selectedStroke.isGroup) {
-                    selectedStroke.setColor(color)
-                    redrawHistory()
+        if (applyToSelected) {
+            val highlightedStrokes = strokes.filter { it.isHighlighted }
+            
+            if (highlightedStrokes.isNotEmpty()) {
+                // Get the common color from the first stroke
+                val firstStrokeColor = highlightedStrokes.first().getSingleColor()
+                
+                // Only apply if the first stroke has a uniform color
+                if (firstStrokeColor != null) {
+                    // Check if ALL highlighted strokes have the SAME single color
+                    val allHaveSameColor = highlightedStrokes.all { stroke ->
+                        stroke.getSingleColor() == firstStrokeColor
+                    }
+                    
+                    if (allHaveSameColor) {
+                        highlightedStrokes.forEach { stroke ->
+                            stroke.setColor(color)
+                        }
+                        redrawHistory()
+                    }
                 }
             }
         }
