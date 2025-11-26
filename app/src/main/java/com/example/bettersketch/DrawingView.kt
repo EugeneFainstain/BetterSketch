@@ -443,39 +443,64 @@ class DrawingView @JvmOverloads constructor(
         val stroke = currentStroke ?: return false
         if (stroke.isGroup) return false
 
-        var closestPointDist = Float.MAX_VALUE
-        var closestPointIndex = -1
+        var closestDrawingPointDist = Float.MAX_VALUE
+        var closestDrawingPointIndex = 0
         var closestAnalyticalDist = Float.MAX_VALUE
-        var closestAnalyticalIndex = -1
+        var closestAnalyticalIndex = 0
 
-        // Find closest pointsForDrawing point (for highlighting)
+        // Find closest pointsForDrawing point
         stroke.pointsForDrawing.forEachIndexed { index, pathPoint ->
             val d = distance(pathPoint.point, tapPoint)
-            if (d < closestPointDist) {
-                closestPointDist = d
-                closestPointIndex = index
+            if (d < closestDrawingPointDist) {
+                closestDrawingPointDist = d
+                closestDrawingPointIndex = index
             }
         }
 
-        // Find closest analytical point (for editing)
+        // Find closest analytical point
         stroke.analyticalPoints.forEachIndexed { index, pathPoint ->
-            val d = distance(pathPoint.point, tapPoint)
+            val closestDrawingPoint = stroke.pointsForDrawing[closestDrawingPointIndex].point
+            val d = distance(pathPoint.point, closestDrawingPoint)
             if (d < closestAnalyticalDist) {
                 closestAnalyticalDist = d
                 closestAnalyticalIndex = index
             }
         }
 
-        if (closestPointIndex == -1 && closestAnalyticalIndex == -1) {
+        if (closestAnalyticalIndex == -1) {
             selectedEnd = SelectedEnd.NONE
             editingPointIndex = -1
             editingAnalyticalPointIndex = -1
             return false
         }
 
-        editingPointIndex = closestPointIndex
         editingAnalyticalPointIndex = closestAnalyticalIndex
         selectedEnd = SelectedEnd.MIDDLE
+
+        // Find the corresponding unsmoothed point index based on distance ratio
+        val analyticalPointDistance = stroke.analyticalPoints[closestAnalyticalIndex].distance
+        val analyticalTotalDistance = stroke.analyticalPoints.lastOrNull()?.distance ?: 0f
+
+        if (analyticalTotalDistance > 0f) {
+            val distanceRatio = analyticalPointDistance / analyticalTotalDistance
+            val unsmoothedTotalDistance = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
+            val targetUnsmoothedDistance = distanceRatio * unsmoothedTotalDistance
+
+            // Find the closest unsmoothed point to this target distance
+            var minDistanceDiff = Float.MAX_VALUE
+            var closestUnsmoothedIndex = -1
+            stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
+                val diff = kotlin.math.abs(pathPoint.distance - targetUnsmoothedDistance)
+                if (diff < minDistanceDiff) {
+                    minDistanceDiff = diff
+                    closestUnsmoothedIndex = index
+                }
+            }
+            editingPointIndex = closestUnsmoothedIndex
+        } else {
+            editingPointIndex = closestDrawingPointIndex
+        }
+
         return true
     }
 
@@ -578,41 +603,86 @@ class DrawingView @JvmOverloads constructor(
         currentStroke?.let { stroke ->
             // If this is an analytical stroke, move the analytical point
             if (stroke.analyticalShapeType != AnalyticalShapeType.NONE && editingAnalyticalPointIndex != -1) {
-                if (editingAnalyticalPointIndex < stroke.analyticalPoints.size) {
-                    stroke.analyticalPoints[editingAnalyticalPointIndex].point.offset(dx, dy)
-                    
-                    // Regenerate all derived points from the modified analytical points
-                    stroke.regenerateUnsmoothedPointsFromAnalytical()
-                }
+                moveEditingAnalyticalPoint(stroke, dx, dy)
             } else {
-                // Original weight-based editing for non-analytical strokes
-                val weights = editingPointInitialWeights
-                if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
-                    stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
-                        pathPoint.point.offset(dx * weights[index], dy * weights[index])
-                    }
-                } else {
-                    val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
-                    if (totalDistanceOfUnsmoothed == 0f) return
-
-                    stroke.unsmoothedPoints.forEach { pathPoint ->
-                        val weight = if (selectedEnd == SelectedEnd.START) {
-                            1.0f - (pathPoint.distance / totalDistanceOfUnsmoothed)
-                        } else {
-                            pathPoint.distance / totalDistanceOfUnsmoothed
-                        }
-                        pathPoint.point.offset(dx * weight, dy * weight)
-                    }
-                }
-
-                val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { p -> p.point })
-                stroke.unsmoothedPoints.clear()
-                stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-                stroke.totalDistance = newTotalDistance
-
-                stroke.applySmoothing()
+                moveEditingNormalPoint(stroke, dx, dy)
             }
             redrawHistory()
+        }
+    }
+
+    private fun moveEditingNormalPoint(stroke: Stroke, dx: Float, dy: Float) {
+        // Original weight-based editing for non-analytical strokes
+        val weights = editingPointInitialWeights
+        if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
+            stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
+                pathPoint.point.offset(dx * weights[index], dy * weights[index])
+            }
+        } else {
+            val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
+            if (totalDistanceOfUnsmoothed == 0f) return
+
+            stroke.unsmoothedPoints.forEach { pathPoint ->
+                val weight = if (selectedEnd == SelectedEnd.START) {
+                    1.0f - (pathPoint.distance / totalDistanceOfUnsmoothed)
+                } else {
+                    pathPoint.distance / totalDistanceOfUnsmoothed
+                }
+                pathPoint.point.offset(dx * weight, dy * weight)
+            }
+        }
+
+        val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { p -> p.point })
+        stroke.unsmoothedPoints.clear()
+        stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+        stroke.totalDistance = newTotalDistance
+
+        stroke.applySmoothing()
+    }
+
+    private fun moveEditingAnalyticalPoint(stroke: Stroke, dx: Float, dy: Float) {
+        if (editingAnalyticalPointIndex >= stroke.analyticalPoints.size) return
+
+        // Move the analytical point
+        stroke.analyticalPoints[editingAnalyticalPointIndex].point.offset(dx, dy)
+
+        // Recalculate distances for analytical points after moving
+        val (recalculatedAnalyticalPoints, _) = Stroke.calculatePathPointsWithDistances(
+            stroke.analyticalPoints.map { it.point }
+        )
+        stroke.analyticalPoints.clear()
+        stroke.analyticalPoints.addAll(recalculatedAnalyticalPoints)
+
+        // Regenerate all derived points from the modified analytical points
+        stroke.regenerateUnsmoothedPointsFromAnalytical()
+
+        // Recalculate which unsmoothed point index to highlight during dragging
+        updateHighlightedPointForAnalyticalStroke(stroke)
+    }
+
+    private fun updateHighlightedPointForAnalyticalStroke(stroke: Stroke) {
+        if (editingAnalyticalPointIndex < 0 || editingAnalyticalPointIndex >= stroke.analyticalPoints.size) return
+
+        // Find the corresponding unsmoothed point index based on distance ratio
+        val analyticalPointDistance = stroke.analyticalPoints[editingAnalyticalPointIndex].distance
+        val analyticalTotalDistance = stroke.analyticalPoints.lastOrNull()?.distance ?: 0f
+
+        if (analyticalTotalDistance > 0f) {
+            val distanceRatio = analyticalPointDistance / analyticalTotalDistance
+            val unsmoothedTotalDistance = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
+            val targetUnsmoothedDistance = distanceRatio * unsmoothedTotalDistance
+
+            // Find the closest unsmoothed point to this target distance
+            var minDistanceDiff = Float.MAX_VALUE
+            var closestUnsmoothedIndex = -1
+            stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
+                val diff = kotlin.math.abs(pathPoint.distance - targetUnsmoothedDistance)
+                if (diff < minDistanceDiff) {
+                    minDistanceDiff = diff
+                    closestUnsmoothedIndex = index
+                }
+            }
+            editingPointIndex = closestUnsmoothedIndex
         }
     }
 
