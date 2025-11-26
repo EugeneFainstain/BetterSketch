@@ -75,7 +75,7 @@
             android:src="@drawable/outline_undo_icon"
             android:scaleType="fitCenter"
             android:padding="8dp"
-            android:elevation="8dp"
+            android:elevation="3dp"
             android:visibility="gone"
             tools:visibility="visible" />
 
