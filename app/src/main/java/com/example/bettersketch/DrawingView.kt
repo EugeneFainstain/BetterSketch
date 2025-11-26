@@ -70,6 +70,7 @@ class DrawingView @JvmOverloads constructor(
     public var lastStrokeHighlightedIdx: Int = -1
     private var editingPointIndex: Int = -1
     private var editingPointInitialWeights: List<Float>? = null
+    private var editingAnalyticalPointIndex: Int = -1  // Index of the analytical point being edited
 
     // Transformation state
     private val globalTransform = Matrix() // Matrix for transforming from WORLD-SPACE to SCREEN-SPACE (a.k.a the VIEW MATRIX)
@@ -120,6 +121,7 @@ class DrawingView @JvmOverloads constructor(
     fun exitEditingMode() {
         deselectAndDeHighlight()
         editingPointIndex = -1
+        editingAnalyticalPointIndex = -1
         editingPointInitialWeights = null
         setState(State.NORMAL_DRAWING)
     }
@@ -393,6 +395,9 @@ class DrawingView @JvmOverloads constructor(
         val stroke = currentStroke ?: return false
         if (stroke.isGroup) return false
 
+        if (stroke.analyticalPoints.size > 0)
+            return selectEndpointOfCurrentAnalyticalStroke(tapPoint)
+
         var closestDist = Float.MAX_VALUE
         var closestPointIndex = -1
         stroke.pointsForDrawing.forEachIndexed { index, pathPoint ->
@@ -431,6 +436,46 @@ class DrawingView @JvmOverloads constructor(
                 sin(mappedDistance * PI / 2).toFloat()
             }
         }
+        return true
+    }
+
+    private fun selectEndpointOfCurrentAnalyticalStroke(tapPoint: PointF): Boolean {
+        val stroke = currentStroke ?: return false
+        if (stroke.isGroup) return false
+
+        var closestPointDist = Float.MAX_VALUE
+        var closestPointIndex = -1
+        var closestAnalyticalDist = Float.MAX_VALUE
+        var closestAnalyticalIndex = -1
+
+        // Find closest pointsForDrawing point (for highlighting)
+        stroke.pointsForDrawing.forEachIndexed { index, pathPoint ->
+            val d = distance(pathPoint.point, tapPoint)
+            if (d < closestPointDist) {
+                closestPointDist = d
+                closestPointIndex = index
+            }
+        }
+
+        // Find closest analytical point (for editing)
+        stroke.analyticalPoints.forEachIndexed { index, pathPoint ->
+            val d = distance(pathPoint.point, tapPoint)
+            if (d < closestAnalyticalDist) {
+                closestAnalyticalDist = d
+                closestAnalyticalIndex = index
+            }
+        }
+
+        if (closestPointIndex == -1 && closestAnalyticalIndex == -1) {
+            selectedEnd = SelectedEnd.NONE
+            editingPointIndex = -1
+            editingAnalyticalPointIndex = -1
+            return false
+        }
+
+        editingPointIndex = closestPointIndex
+        editingAnalyticalPointIndex = closestAnalyticalIndex
+        selectedEnd = SelectedEnd.MIDDLE
         return true
     }
 
@@ -531,52 +576,42 @@ class DrawingView @JvmOverloads constructor(
     private fun moveEditingPoint(dx: Float, dy: Float) {
         currentStroke?.isModified = true
         currentStroke?.let { stroke ->
-            val weights = editingPointInitialWeights
-            if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
-                stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
-                    pathPoint.point.offset(dx * weights[index], dy * weights[index])
+            // If this is an analytical stroke, move the analytical point
+            if (stroke.analyticalShapeType != AnalyticalShapeType.NONE && editingAnalyticalPointIndex != -1) {
+                if (editingAnalyticalPointIndex < stroke.analyticalPoints.size) {
+                    stroke.analyticalPoints[editingAnalyticalPointIndex].point.offset(dx, dy)
+                    
+                    // Regenerate all derived points from the modified analytical points
+                    stroke.regenerateUnsmoothedPointsFromAnalytical()
                 }
             } else {
-                val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
-                if (totalDistanceOfUnsmoothed == 0f) return
-
-                stroke.unsmoothedPoints.forEach { pathPoint ->
-                    val weight = if (selectedEnd == SelectedEnd.START) {
-                        1.0f - (pathPoint.distance / totalDistanceOfUnsmoothed)
-                    } else {
-                        pathPoint.distance / totalDistanceOfUnsmoothed
-                    }
-                    pathPoint.point.offset(dx * weight, dy * weight)
-                }
-            }
-
-            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { p -> p.point })
-            stroke.unsmoothedPoints.clear()
-            stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-            stroke.totalDistance = newTotalDistance
-
-            // Transform analyticalPoints with the same weights
-            if (stroke.analyticalPoints.isNotEmpty()) {
+                // Original weight-based editing for non-analytical strokes
+                val weights = editingPointInitialWeights
                 if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
-                    stroke.analyticalPoints.forEachIndexed { index, pathPoint ->
+                    stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
                         pathPoint.point.offset(dx * weights[index], dy * weights[index])
                     }
                 } else {
-                    stroke.analyticalPoints.forEach { pathPoint ->
+                    val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
+                    if (totalDistanceOfUnsmoothed == 0f) return
+
+                    stroke.unsmoothedPoints.forEach { pathPoint ->
                         val weight = if (selectedEnd == SelectedEnd.START) {
-                            1.0f - (pathPoint.distance / newTotalDistance)
+                            1.0f - (pathPoint.distance / totalDistanceOfUnsmoothed)
                         } else {
-                            pathPoint.distance / newTotalDistance
+                            pathPoint.distance / totalDistanceOfUnsmoothed
                         }
                         pathPoint.point.offset(dx * weight, dy * weight)
                     }
                 }
-                val (recalculatedAnalyticalPoints, _) = Stroke.calculatePathPointsWithDistances(stroke.analyticalPoints.map { it.point })
-                stroke.analyticalPoints.clear()
-                stroke.analyticalPoints.addAll(recalculatedAnalyticalPoints)
-            }
 
-            stroke.applySmoothing()
+                val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { p -> p.point })
+                stroke.unsmoothedPoints.clear()
+                stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+                stroke.totalDistance = newTotalDistance
+
+                stroke.applySmoothing()
+            }
             redrawHistory()
         }
     }
@@ -660,6 +695,12 @@ class DrawingView @JvmOverloads constructor(
             val newTotalWidthMultiplier = cumulativeWidthMultiplier * groupThicknessMultiplier
             val newCumulativeOpacityMultiplier = cumulativeOpacityMultiplier * (stroke.paint.alpha / 255f)
 
+            // Ensure stroke is regenerated if needed
+            if (stroke.needsToRegenerate) {
+                stroke.regenerateUnsmoothedPointsFromAnalytical()
+                stroke.needsToRegenerate = false
+            }
+
             stroke.childStrokes.forEach { childStroke ->
                 drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints)
             }
@@ -693,6 +734,7 @@ class DrawingView @JvmOverloads constructor(
                         color = Color.GREEN
                     }
 
+                    // Highlight the point from pointsForDrawing (not the analytical point)
                     if (editingPointIndex != -1 && editingPointIndex < stroke.pointsForDrawing.size) {
                         val pointToHighlight = stroke.pointsForDrawing[editingPointIndex].point
                         val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
