@@ -30,6 +30,7 @@ class Stroke(
     var isHighlighted: Boolean = false
 
     var analyticalShapeType: AnalyticalShapeType = AnalyticalShapeType.NONE // Type of analytical shape
+    var needsToRegenerate: Boolean = false // Flag to regenerate unsmoothedPoints from analytical
 
 
     // Secondary constructor for creating a stroke from existing points (like the original constructor)
@@ -64,6 +65,10 @@ class Stroke(
     }
 
     fun applySmoothing() {
+        // Check if we need to regenerate from analytical points first
+        if (needsToRegenerate)
+            regenerateUnsmoothedPointsFromAnalytical()
+
         if (this.smoothness == 0) {
             this.pointsForDrawing.clear()
             this.pointsForDrawing.addAll(this.unsmoothedPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
@@ -136,7 +141,7 @@ class Stroke(
         return newStroke
     }
 
-    fun copyFrom(other: Stroke, forDuplication: Boolean = false) {
+    fun copyFrom(other: Stroke, forDuplication: Boolean) {
         this.paint.set(other.paint)
         this.smoothness = other.smoothness
         this.analyticalShapeType = other.analyticalShapeType
@@ -243,12 +248,15 @@ class Stroke(
      * This is useful after transformations to ensure the unsmoothed points accurately
      * represent the analytical shape geometry.
      *
-     * @param targetPointCount The desired number of interpolated points (optional, uses current size if not specified)
+     * @param targetPointCount The desired number of interpolated points
      */
-    fun regenerateUnsmoothedPointsFromAnalytical(targetPointCount: Int? = null) {
+    fun regenerateUnsmoothedPointsFromAnalytical() {
+
+        needsToRegenerate = false
+
         if (analyticalPoints.isEmpty()) return
 
-        val pointCount = targetPointCount ?: unsmoothedPoints.size
+        val pointCount = originalPoints.size
         if (pointCount < 2) return
 
         val interpolatedPoints = mutableListOf<PointF>()
@@ -288,9 +296,10 @@ class Stroke(
 
     /**
      * Helper function to interpolate points along a polyline.
-     * Used by regenerateUnsmoothedPointsFromAnalytical and fitters for all shape types.
+     * Used by regenerateUnsmoothedPointsFromAnalytical for all shape types.
+     * Private - only used internally by the stroke.
      */
-    fun interpolateAlongPolyLine(vertices: List<PointF>, targetPointCount: Int): List<PointF> {
+    private fun interpolateAlongPolyLine(vertices: List<PointF>, targetPointCount: Int): List<PointF> {
         if (vertices.size < 2 || targetPointCount < 2) return vertices
 
         val interpolatedPoints = mutableListOf<PointF>()
@@ -321,8 +330,9 @@ class Stroke(
 
     /**
      * Interpolates a point at a specific distance along the polyline.
+     * Private - only used internally by the stroke.
      */
-    fun interpolatePointOnPolyLine(vertices: List<PointF>, targetDistance: Float): PointF {
+    private fun interpolatePointOnPolyLine(vertices: List<PointF>, targetDistance: Float): PointF {
         if (vertices.size < 2) return vertices.first()
 
         var accumulatedDistance = 0f

@@ -155,6 +155,13 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        
+        // Ensure all strokes are up-to-date before drawing
+        strokes.forEach { stroke ->
+            if (stroke.needsToRegenerate)
+                stroke.regenerateUnsmoothedPointsFromAnalytical()
+        }
+        
         // 1. Draw the pre-rendered, transformed history from the bitmap
         backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
 
@@ -340,6 +347,12 @@ class DrawingView @JvmOverloads constructor(
         deselectAndDeHighlight() // do this first thing
 
         strokes.forEachIndexed { index, stroke ->
+            // Ensure stroke is up-to-date before accessing its points
+            if (stroke.needsToRegenerate) {
+                stroke.regenerateUnsmoothedPointsFromAnalytical()
+                stroke.needsToRegenerate = false
+            }
+
             stroke.forEachStroke { s ->
                 for (pathPoint in s.pointsForDrawing) {
                     val d = distance(pathPoint.point, tapPointWorld)
@@ -885,7 +898,7 @@ class DrawingView @JvmOverloads constructor(
                 currentStroke?.let { current ->
                     if (current.isGroup) {
                         backedUpGroupStroke?.let { backup ->
-                            current.copyFrom(backup)
+                            current.copyFrom(backup, false)
 
                             val bounds = backup.getBounds()
                             val centerX = bounds.centerX()

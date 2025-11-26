@@ -1,5 +1,6 @@
 package com.example.bettersketch
 
+import android.graphics.PointF
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -51,7 +52,7 @@ class ShapeFitter {
                 }
             }
 
-            return fits.minByOrNull {
+            val bestFit = fits.minByOrNull {
                 when (it) {
                     is ShapeFitResult.Square -> it.fitResult.normalizedError
                     is ShapeFitResult.Circle -> it.fitResult.normalizedError
@@ -65,6 +66,27 @@ class ShapeFitter {
                     is ShapeFitResult.PolyLine -> it.fitResult.error
                 }
             }
+
+            // Regenerate the best fitted stroke's unsmoothed points from analytical
+            bestFit?.let { result ->
+                val fittedStroke = when (result) {
+                    is ShapeFitResult.Square -> result.fitResult.fittedStroke
+                    is ShapeFitResult.Circle -> result.fitResult.fittedStroke
+                    is ShapeFitResult.Polynomial -> result.fitResult.fittedStroke
+                    is ShapeFitResult.PolyLine -> result.fitResult.fittedStroke
+                }
+
+                // Copy original points from the original stroke
+                fittedStroke.originalPoints.clear() // just in case?...
+                fittedStroke.originalPoints.addAll(
+                    strokeToReplace.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }
+                )
+
+                if( fittedStroke.needsToRegenerate )
+                    fittedStroke.regenerateUnsmoothedPointsFromAnalytical()
+            }
+
+            return bestFit
         }
     }
 }

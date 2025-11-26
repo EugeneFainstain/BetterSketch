@@ -373,37 +373,14 @@ class PolyLineFitter {
         ): Stroke {
             val stroke = Stroke(paint, 0)
             stroke.analyticalShapeType = AnalyticalShapeType.POLYLINE
-
+            
             // Store the analytical line vertices
-            val (analyticalPathPoints, analyticalTotalDistance) = Stroke.calculatePathPointsWithDistances(
-                vertices
-            )
+            val (analyticalPathPoints, _) = Stroke.calculatePathPointsWithDistances(vertices)
             stroke.analyticalPoints.addAll(analyticalPathPoints)
-
-            // Generate interpolated points using Stroke utility
-            val interpolatedPoints = stroke.interpolateAlongPolyLine(vertices, targetPointCount)
-
-            // Create the stroke with interpolated points
-            val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
-                interpolatedPoints
-            )
-            stroke.unsmoothedPoints.addAll(pathPoints)
-            stroke.pointsForDrawing.addAll(pathPoints.map {
-                PathPoint(
-                    PointF(
-                        it.point.x,
-                        it.point.y
-                    ), it.distance
-                )
-            })
-            stroke.originalPoints.addAll(pathPoints.map {
-                PathPoint(
-                    PointF(it.point.x, it.point.y),
-                    it.distance
-                )
-            })
-            stroke.totalDistance = newTotalDistance
-
+            
+            // Mark that the stroke needs to regenerate unsmoothedPoints from analytical
+            stroke.needsToRegenerate = true
+            
             return stroke
         }
     }

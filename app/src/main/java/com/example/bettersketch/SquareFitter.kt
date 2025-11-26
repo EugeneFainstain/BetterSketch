@@ -347,19 +347,12 @@ object SquareFitter {
 
         // Store the square geometry in analyticalPoints
         val squarePerimeterPoints = corners + corners[0] // Close the square
-        val (analyticalPathPoints, analyticalTotalDistance) = Stroke.calculatePathPointsWithDistances(squarePerimeterPoints)
+        val (analyticalPathPoints, _) = Stroke.calculatePathPointsWithDistances(squarePerimeterPoints)
         stroke.analyticalPoints.addAll(analyticalPathPoints)
         
-        // Generate interpolated points using Stroke utility
-        val interpolatedPoints = stroke.interpolateAlongPolyLine(squarePerimeterPoints, targetPointCount)
-        
-        // Create the stroke with interpolated points
-        val (pathPoints, totalDistance) = Stroke.calculatePathPointsWithDistances(interpolatedPoints)
-        stroke.unsmoothedPoints.addAll(pathPoints)
-        stroke.pointsForDrawing.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-        stroke.originalPoints.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-        stroke.totalDistance = totalDistance
-        
+        // Mark that the stroke needs to regenerate unsmoothedPoints from analytical
+        stroke.needsToRegenerate = true
+
         return stroke
     }
 
