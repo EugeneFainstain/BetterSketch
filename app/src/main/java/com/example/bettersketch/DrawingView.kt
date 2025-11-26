@@ -312,11 +312,11 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun replaceWithShape(originalStroke: Stroke, fittedStroke: Stroke) {
-//        val index = strokes.indexOf(originalStroke)
-  //      if (index != -1) {
-    //        strokes[index] = fittedStroke
-      //  }
-        strokes.add(fittedStroke)
+        val index = strokes.indexOf(originalStroke)
+        if (index != -1) {
+            strokes[index] = fittedStroke
+        }
+//        strokes.add(fittedStroke)
         redrawHistory()
     }
 
@@ -507,13 +507,10 @@ class DrawingView @JvmOverloads constructor(
         selectedStrokeIdx = strokes.lastIndex
         setStrokeHighlighted(currentStroke, strokes.lastIndex)
 
-        when (currentState) {
-            State.NORMAL_DRAWING,
-            State.CHOSEN_STROKE_IN_NORMAL_MODE,
-            State.STROKE_EDITING -> {
-                setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-            }
-        }
+        if( strokes.size > 0 )
+            setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+        else
+            setState(State.NORMAL_DRAWING)
     }
 
     fun duplicateCurrentStroke() {
@@ -778,14 +775,14 @@ class DrawingView @JvmOverloads constructor(
                 finalPaint.strokeWidth *= cumulativeWidthMultiplier * currentScale
                 finalPaint.alpha = (finalPaint.alpha * cumulativeOpacityMultiplier).toInt()
 
-                if (stroke.isHighlighted) {
-                    val haloPaintToUse = Paint(haloPaint)
-                    haloPaintToUse.strokeWidth = finalPaint.strokeWidth + haloOffset * currentScale
+                val haloPaintToUse = Paint(haloPaint)
+                haloPaintToUse.strokeWidth = finalPaint.strokeWidth + haloOffset
+
+                if (stroke.isHighlighted)
                     canvas.drawPath(path, haloPaintToUse)
-                }
 
                 if (drawEndpoints && !twoFingerGestureOccured && !threeFingerGestureOccured) {
-                    val radius = finalPaint.strokeWidth * 2f
+                    val radius = haloPaintToUse.strokeWidth/2f
                     val endpointPaint = Paint().apply {
                         style = Paint.Style.FILL
                         color = Color.GREEN
