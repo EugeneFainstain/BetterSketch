@@ -304,12 +304,14 @@ class Stroke(
 
         val interpolatedPoints = mutableListOf<PointF>()
 
-        // Calculate total distance along the polyline
+        // Calculate cumulative distances for each vertex
+        val vertexDistances = mutableListOf(0f)
         var totalDistance = 0f
         for (i in 1 until vertices.size) {
             val dx = vertices[i].x - vertices[i - 1].x
             val dy = vertices[i].y - vertices[i - 1].y
             totalDistance += sqrt(dx * dx + dy * dy)
+            vertexDistances.add(totalDistance)
         }
 
         if (totalDistance <= 0f) {
@@ -317,10 +319,20 @@ class Stroke(
             return listOf(vertices.first())
         }
 
+        // Generate uniform spacing points and include vertex points
+        val targetDistances = mutableSetOf<Float>()
         val spacing = totalDistance / (targetPointCount - 1)
-
+        
+        // Add uniformly spaced points
         for (i in 0 until targetPointCount) {
-            val targetDist = i * spacing
+            targetDistances.add(i * spacing)
+        }
+        
+        // Add all vertex distances to ensure they're included
+        targetDistances.addAll(vertexDistances)
+
+        // Interpolate at all target distances
+        for (targetDist in targetDistances.sorted()) {
             val point = interpolatePointOnPolyLine(vertices, targetDist)
             interpolatedPoints.add(point)
         }
