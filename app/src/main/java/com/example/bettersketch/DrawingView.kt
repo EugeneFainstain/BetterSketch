@@ -457,10 +457,12 @@ class DrawingView @JvmOverloads constructor(
             }
         }
 
-        // Find closest analytical point
+        // Get the distance to the unsmoothed point at the same index
+        val unsmoothedPointDistance = stroke.unsmoothedPoints[closestDrawingPointIndex].distance
+
+        // Find closest analytical point along the path (by distance, not 2D space)
         stroke.analyticalPoints.forEachIndexed { index, pathPoint ->
-            val closestDrawingPoint = stroke.pointsForDrawing[closestDrawingPointIndex].point
-            val d = distance(pathPoint.point, closestDrawingPoint)
+            val d = kotlin.math.abs(pathPoint.distance - unsmoothedPointDistance)
             if (d < closestAnalyticalDist) {
                 closestAnalyticalDist = d
                 closestAnalyticalIndex = index
