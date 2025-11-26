@@ -29,8 +29,6 @@ interface ShapeDetectionListener {
 private enum class State {
     NORMAL_DRAWING,
     CHOSEN_STROKE_IN_NORMAL_MODE,
-    IN_EDITING_MODE_NOTHING_CHOSEN,
-    CHOSEN_STROKE_IN_EDITING_MODE,
     STROKE_EDITING
 }
 
@@ -111,7 +109,7 @@ class DrawingView @JvmOverloads constructor(
     private val currentStroke: Stroke? get() = strokes.getOrNull(selectedStrokeIdx)
 
     fun isEditing(): Boolean {
-        return currentState == State.CHOSEN_STROKE_IN_EDITING_MODE || currentState == State.STROKE_EDITING || currentState == State.IN_EDITING_MODE_NOTHING_CHOSEN
+        return currentState == State.CHOSEN_STROKE_IN_NORMAL_MODE || currentState == State.STROKE_EDITING
     }
 
     fun isCurrentStrokeModified(): Boolean {
@@ -469,13 +467,6 @@ class DrawingView @JvmOverloads constructor(
             }
         }
 
-        if (closestAnalyticalIndex == -1) {
-            selectedEnd = SelectedEnd.NONE
-            editingPointIndex = -1
-            editingAnalyticalPointIndex = -1
-            return false
-        }
-
         editingAnalyticalPointIndex = closestAnalyticalIndex
         selectedEnd = SelectedEnd.MIDDLE
 
@@ -518,14 +509,9 @@ class DrawingView @JvmOverloads constructor(
 
         when (currentState) {
             State.NORMAL_DRAWING,
-            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
-                setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-            }
-
-            State.IN_EDITING_MODE_NOTHING_CHOSEN,
-            State.CHOSEN_STROKE_IN_EDITING_MODE,
+            State.CHOSEN_STROKE_IN_NORMAL_MODE,
             State.STROKE_EDITING -> {
-                setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+                setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
             }
         }
     }
@@ -557,8 +543,7 @@ class DrawingView @JvmOverloads constructor(
             strokes.add(duplicatedStroke)
             selectedStrokeIdx = strokes.lastIndex
 
-            setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-            redrawHistory()
+            setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
             listener?.onStateChanged()
         }
     }
@@ -571,7 +556,7 @@ class DrawingView @JvmOverloads constructor(
             strokes.add(newGroup)
             selectedStrokeIdx = strokes.lastIndex
             newGroup.setHighlightedRecursively(true)
-            setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+            setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
             listener?.onStateChanged()
         }
     }
@@ -585,7 +570,7 @@ class DrawingView @JvmOverloads constructor(
                     strokes.addAll(index, groupStroke.childStrokes)
                     groupStroke.childStrokes.forEach { it.setHighlightedRecursively(true) }
                     selectedStrokeIdx = -1
-                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                     listener?.onStateChanged()
                 }
             }
@@ -744,8 +729,8 @@ class DrawingView @JvmOverloads constructor(
 
         for ((index, s) in strokes.withIndex()) {
             val opacityMultiplier = when (currentState) {
-                State.NORMAL_DRAWING, State.CHOSEN_STROKE_IN_NORMAL_MODE -> 1.0f
-                State.IN_EDITING_MODE_NOTHING_CHOSEN, State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
+                State.NORMAL_DRAWING -> 1.0f
+                State.CHOSEN_STROKE_IN_NORMAL_MODE, State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
             }
 
             val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
@@ -834,28 +819,13 @@ class DrawingView @JvmOverloads constructor(
         performClick()
         val screenPoint = PointF(event.x, event.y)
         when (currentState) {
-            State.NORMAL_DRAWING -> {
-                if (selectStrokeAt(screenPoint)) {
-                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-                }
-            }
-            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
+            State.NORMAL_DRAWING,
+            State.CHOSEN_STROKE_IN_NORMAL_MODE,
+            State.STROKE_EDITING-> {
                 if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 } else {
                     setState(State.NORMAL_DRAWING)
-                }
-            }
-            State.IN_EDITING_MODE_NOTHING_CHOSEN -> {
-                if (selectStrokeAt(screenPoint)) {
-                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-                }
-            }
-            State.CHOSEN_STROKE_IN_EDITING_MODE, State.STROKE_EDITING -> {
-                if (selectStrokeAt(screenPoint)) {
-                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-                } else {
-                    setState(State.IN_EDITING_MODE_NOTHING_CHOSEN)
                 }
             }
         }
@@ -863,20 +833,8 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onDoubleTapEnd(event: MotionEvent): Boolean {
-        val screenPoint = PointF(event.x, event.y)
-        when (currentState) {
-            State.NORMAL_DRAWING,
-            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
-                deselectAndDeHighlight() // Note: doesn't cause a redraw on its own
-                setState(State.IN_EDITING_MODE_NOTHING_CHOSEN)
-            }
-            State.IN_EDITING_MODE_NOTHING_CHOSEN,
-            State.CHOSEN_STROKE_IN_EDITING_MODE,
-            State.STROKE_EDITING -> {
-                deselectAndDeHighlight() // Note: doesn't cause a redraw on its own
-                setState(State.NORMAL_DRAWING)
-            }
-        }
+        deselectAndDeHighlight() // Note: doesn't cause a redraw on its own
+        setState(State.NORMAL_DRAWING)
         return true
     }
 
@@ -884,13 +842,11 @@ class DrawingView @JvmOverloads constructor(
         val downPoint = PointF(event.x, event.y)
         val worldPoint = toWorldCoordinates(downPoint.x, downPoint.y)
         when (currentState) {
-            State.NORMAL_DRAWING,
-            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
+            State.NORMAL_DRAWING -> {
                 touchStart(downPoint.x, downPoint.y)
                 setState(currentState)
             }
-            State.IN_EDITING_MODE_NOTHING_CHOSEN,
-            State.CHOSEN_STROKE_IN_EDITING_MODE -> {
+            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
                 if (selectEndpointOfCurrentStroke(worldPoint)) {
                     setState(State.STROKE_EDITING)
                 } else {
@@ -948,11 +904,13 @@ class DrawingView @JvmOverloads constructor(
                 if (index != -1) {
                     selectedStrokeIdx = index
                     currentPaint = Paint(singleHighlightedStroke.paint)
-                    setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
-            } else if (highlightedStrokes.isNotEmpty()) {
-                setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
-            }
+            } else
+            if (highlightedStrokes.isNotEmpty())
+                setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+            else
+                setState(State.NORMAL_DRAWING)
             threeFingerGestureOccured = false
             listener?.onStateChanged()
             return true
@@ -977,7 +935,7 @@ class DrawingView @JvmOverloads constructor(
                     setState(State.NORMAL_DRAWING)
             }
             State.STROKE_EDITING -> {
-                setState(State.CHOSEN_STROKE_IN_EDITING_MODE)
+                setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 editingPointIndex = -1
                 editingPointInitialWeights = null
             }
@@ -995,20 +953,15 @@ class DrawingView @JvmOverloads constructor(
         globalTransform.invert(inverseGlobalTransform)
 
         when (currentState) {
-            State.NORMAL_DRAWING,
-            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
+            State.NORMAL_DRAWING -> {
                 touchMove(event.x, event.y)
-                if( currentState != State.NORMAL_DRAWING ) {
-                    deselectAndDeHighlight() // Note: doesn't cause a redraw on its own
-                    setState(State.NORMAL_DRAWING) // Redraw
-                }
             }
             State.STROKE_EDITING -> {
                 val delta = floatArrayOf(dx, dy)
                 inverseGlobalTransform.mapVectors(delta) // Transform delta into world-space
                 moveEditingPoint(delta[0], delta[1])
             }
-            State.CHOSEN_STROKE_IN_EDITING_MODE -> {
+            State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
                 currentStroke?.let { current ->
                     if (current.isGroup) {
                         backedUpGroupStroke?.let { backup ->
@@ -1067,8 +1020,7 @@ class DrawingView @JvmOverloads constructor(
         invertedGlobal.mapVectors(worldDelta)
 
         when (currentState) {
-            State.NORMAL_DRAWING,
-            State.IN_EDITING_MODE_NOTHING_CHOSEN -> {
+            State.NORMAL_DRAWING -> {
                 val screenMidPoint = midpoint(event)
                 val worldMidPoint = toWorldCoordinates(screenMidPoint.x, screenMidPoint.y)
                 globalTransform.preTranslate(worldDelta[0], worldDelta[1])
@@ -1077,7 +1029,6 @@ class DrawingView @JvmOverloads constructor(
                 redrawHistory()
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE,
-            State.CHOSEN_STROKE_IN_EDITING_MODE,
             State.STROKE_EDITING -> {
                 currentStroke?.let {
                     val deltaMatrix = Matrix()
