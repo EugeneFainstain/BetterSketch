@@ -79,6 +79,8 @@ object CircleFitter {
         }
 
         val (pathPoints, totalDistance) = Stroke.calculatePathPointsWithDistances(circlePoints)
-        return Stroke(pathPoints, Paint(paint), totalDistance, 0)
+        val stroke = Stroke(pathPoints, Paint(paint), totalDistance, 0)
+        stroke.analyticalShapeType = AnalyticalShapeType.CIRCLE
+        return stroke
     }
 }

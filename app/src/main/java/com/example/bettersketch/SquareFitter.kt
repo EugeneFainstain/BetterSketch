@@ -341,6 +341,7 @@ object SquareFitter {
     private fun createSquareStroke(params: SquareParams, paint: Paint, targetPointCount: Int): Stroke {
         val stroke = Stroke(paint, 0)
         stroke.analyticalShapeType = AnalyticalShapeType.SQUARE
+        stroke.isPolyline = true
 
         // Get the 4 corners of the square
         val corners = getSquareCorners(params)

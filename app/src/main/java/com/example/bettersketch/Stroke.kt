@@ -30,6 +30,7 @@ class Stroke(
     var isHighlighted: Boolean = false
 
     var analyticalShapeType: AnalyticalShapeType = AnalyticalShapeType.NONE // Type of analytical shape
+    var isPolyline: Boolean = false // Flag to indicate that the curve has been approximated by a polyline
     var needsToRegenerate: Boolean = false // Flag to regenerate unsmoothedPoints from analytical
 
 
@@ -160,6 +161,7 @@ class Stroke(
         this.paint.set(other.paint)
         this.smoothness = other.smoothness
         this.analyticalShapeType = other.analyticalShapeType
+        this.isPolyline = other.isPolyline
         this.pointsForDrawing.clear()
         this.pointsForDrawing.addAll(other.pointsForDrawing.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
@@ -269,7 +271,7 @@ class Stroke(
 
         needsToRegenerate = false
 
-        if (polylinePoints.isEmpty()) return
+        if (!isPolyline) return
 
         val pointCount = originalPoints.size
         if (pointCount < 2) return

@@ -373,6 +373,7 @@ class PolyLineFitter {
         ): Stroke {
             val stroke = Stroke(paint, 0)
             stroke.analyticalShapeType = AnalyticalShapeType.POLYLINE
+            stroke.isPolyline = true
             
             // Store the analytical line vertices
             val (analyticalPathPoints, _) = Stroke.calculatePathPointsWithDistances(vertices)
