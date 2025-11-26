@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
+import android.widget.ImageButton
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.toColorInt
 import java.util.Locale
@@ -21,7 +22,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnGroupStrokes: Button
     private lateinit var btnUnGroupStrokes: Button
     private lateinit var btnShape: Button
-    private lateinit var btnDel: Button
+    private lateinit var btnDel: ImageButton
 
     private val colors = intArrayOf(
         Color.BLACK,
