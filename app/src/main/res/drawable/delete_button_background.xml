@@ -1,5 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <solid android:color="#FF0000"/>
-</shape>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Pressed state - pale red -->
+    <item android:state_pressed="true">
+        <layer-list>
+            <!-- Minimal shadow when pressed -->
+            <item android:bottom="1dp">
+                <shape android:shape="oval">
+                    <solid android:color="#CC0000"/>
+                </shape>
+            </item>
+            <!-- Main button color - pale red when pressed -->
+            <item android:bottom="0dp">
+                <shape android:shape="oval">
+                    <solid android:color="#FF9999"/>
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    
+    <!-- Normal state - saturated bright red -->
+    <item>
+        <layer-list>
+            <!-- Highlight for 3D depth -->
+            <item android:top="1dp" android:left="1dp" android:right="3dp" android:bottom="3dp">
+                <shape android:shape="oval">
+                    <solid android:color="#FF6666"/>
+                </shape>
+            </item>
+            <!-- Main button color - saturated red -->
+            <item android:bottom="2dp">
+                <shape android:shape="oval">
+                    <solid android:color="#FF0000"/>
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+</selector>

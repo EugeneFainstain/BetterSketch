@@ -51,8 +51,8 @@
 
         <ImageButton
             android:id="@+id/btnDel"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="70dp"
+            android:layout_height="70dp"
             android:layout_gravity="top|start"
             android:layout_marginStart="32dp"
             android:layout_marginTop="16dp"
@@ -60,7 +60,8 @@
             android:contentDescription="@string/del"
             android:src="@drawable/outline_delete_forever_24"
             android:scaleType="fitCenter"
-            android:padding="8dp" />
+            android:padding="8dp"
+            android:elevation="8dp" />
 
         <Button
             android:id="@+id/btnUndoStrokeEdit"
