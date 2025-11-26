@@ -63,15 +63,19 @@
             android:padding="8dp"
             android:elevation="8dp" />
 
-        <Button
+        <ImageButton
             android:id="@+id/btnUndoStrokeEdit"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
             android:layout_gravity="bottom|start"
             android:layout_marginStart="32dp"
             android:layout_marginBottom="24dp"
-            android:backgroundTint="@color/undo_button_tint"
-            android:text="@string/undo"
+            android:background="@drawable/undo_button_background"
+            android:contentDescription="@string/undo"
+            android:src="@drawable/outline_undo_icon"
+            android:scaleType="fitCenter"
+            android:padding="8dp"
+            android:elevation="8dp"
             android:visibility="gone"
             tools:visibility="visible" />
 

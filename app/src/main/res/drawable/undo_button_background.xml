@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Pressed state - flattened and washed out -->
+    <item android:state_pressed="true">
+        <layer-list>
+            <!-- Main surface (flat and washed out when pressed) -->
+            <item android:top="0dp" android:left="0dp" android:right="0dp" android:bottom="0dp">
+                <shape android:shape="oval">
+                    <solid android:color="#AAFFAA"/>
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+    
+    <!-- Normal state - 3D with radial gradient -->
+    <item>
+        <layer-list>
+            <!-- Main surface with radial gradient (bright center, darker edges) -->
+            <item android:top="0dp" android:left="0dp" android:right="0dp" android:bottom="0dp">
+                <shape android:shape="oval">
+                    <gradient
+                        android:type="radial"
+                        android:gradientRadius="80%"
+                        android:centerColor="#00FF00"
+                        android:startColor="#00FF00"
+                        android:endColor="#000000"
+                    />
+               </shape>
+           </item>
+        </layer-list>
+    </item>
+</selector>

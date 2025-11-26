@@ -17,7 +17,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var widthSlider: WidthSlider
     private lateinit var colorSlider: ColorSlider
     private lateinit var smoothingSlider: SmoothingSlider
-    private lateinit var btnUndoStrokeEdit: Button
+    private lateinit var btnUndoStrokeEdit: ImageButton
     private lateinit var btnDuplicateStroke: Button
     private lateinit var btnGroupStrokes: Button
     private lateinit var btnUnGroupStrokes: Button
