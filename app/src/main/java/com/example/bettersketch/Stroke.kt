@@ -135,6 +135,21 @@ class Stroke(
         return bounds
     }
 
+    fun isSingleColor(): Boolean {
+        val colors = mutableSetOf<Int>()
+        forEachStroke { stroke ->
+            colors.add(stroke.paint.color)
+        }
+        return colors.size <= 1
+    }
+
+    fun setColor(color: Int) {
+        forEachStroke { stroke ->
+            stroke.isModified = true
+            stroke.paint.color = color
+        }
+    }
+
     fun newFrom(): Stroke {
         val newStroke = Stroke(Paint(this.paint), this.smoothness)
         newStroke.copyFrom(this, forDuplication = true) // Use copyFrom with forDuplication flag

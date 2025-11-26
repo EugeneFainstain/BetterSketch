@@ -688,12 +688,11 @@ class DrawingView @JvmOverloads constructor(
     fun setColor(color: Int, applyToSelected: Boolean) {
         if (applyToSelected && (lastStrokeHighlightedIdx != -1)) {
             val selectedStroke = currentStroke
-            if (selectedStroke != null && !selectedStroke.isGroup) {
-                selectedStroke.forEachStroke {
-                    it.isModified = true
-                    it.paint.color = color
+            if (selectedStroke != null) {
+                if (selectedStroke.isGroup) {
+                    selectedStroke.setColor(color)
+                    redrawHistory()
                 }
-                redrawHistory()
             }
         }
         currentPaint.color = color
