@@ -325,9 +325,11 @@ class DrawingView @JvmOverloads constructor(
         val index = strokes.indexOf(originalStroke)
         if (index != -1) {
             strokes[index] = fittedStroke
+            selectedStrokeIdx = index
+            fittedStroke.setHighlightedRecursively(true)
+            lastStrokeHighlightedIdx = index
         }
-//        strokes.add(fittedStroke)
-        redrawHistory()
+        setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
     }
 
     private fun distance(p1: PointF, p2: PointF): Float {
@@ -507,17 +509,24 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    fun deleteCurrentStroke() {
-        if (selectedStrokeIdx != -1) {
+    fun deleteStrokes() {
+        val highlightedStrokes = strokes.filter { it.isHighlighted }
+        
+        if (highlightedStrokes.isNotEmpty()) {
+            // Delete all highlighted strokes
+            strokes.removeAll(highlightedStrokes)
+        } else if (selectedStrokeIdx != -1) {
+            // Delete the selected stroke if no highlights
             strokes.removeAt(selectedStrokeIdx)
         } else if (strokes.isNotEmpty()) {
+            // Delete the last stroke as fallback
             strokes.removeAt(strokes.lastIndex)
         }
 
         selectedStrokeIdx = strokes.lastIndex
         setStrokeHighlighted(currentStroke, strokes.lastIndex)
 
-        if( strokes.size > 0 )
+        if (strokes.size > 0)
             setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
         else
             setState(State.NORMAL_DRAWING)

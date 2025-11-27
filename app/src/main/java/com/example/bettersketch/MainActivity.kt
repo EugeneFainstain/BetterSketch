@@ -65,7 +65,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         setupSliderListeners()
 
         btnDel.setOnClickListener {
-            drawingView.deleteCurrentStroke()
+            drawingView.deleteStrokes()
         }
 
         btnUndoStrokeEdit.setOnClickListener {
@@ -221,12 +221,13 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             btnPolyline.visibility = View.GONE
         }
 
-        btnDel.visibility = View.GONE
-        if (drawingView.isStrokeSelected)
-            btnDel.visibility = View.VISIBLE
-
-        if( drawingView.selectedStrokeIdx == drawingView.strokes.lastIndex )
-            btnDel.visibility = View.VISIBLE
+        // Show DEL button if:
+        // 1. There are highlighted strokes, OR
+        // 2. selectedStrokeIdx == strokes.lastIndex (but only if there are strokes)
+        val shouldShowDel = highlightedStrokeCount > 0 || 
+                           (drawingView.selectedStrokeIdx == drawingView.strokes.lastIndex && 
+                            drawingView.strokes.isNotEmpty())
+        btnDel.visibility = if (shouldShowDel) View.VISIBLE else View.GONE
     }
 }
 
