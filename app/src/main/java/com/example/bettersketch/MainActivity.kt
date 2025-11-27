@@ -161,7 +161,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         if (error > fitErrorThreshold) {
             btnShape.visibility = View.GONE
         } else {
-            btnShape.text = "${String.format("%.2f", percentage)}% $shapeName"
+            btnShape.text = "${String.format("%.0f", percentage)}% $shapeName"
             btnShape.visibility = View.VISIBLE
             btnShape.setOnClickListener {
                 drawingView.replaceWithShape(shapeFitResult.strokeToReplace, fittedStroke)
@@ -173,7 +173,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         // Handle polyline fit button
         if (polylineFit != null) {
             val polylinePercentage = (1.0f - polylineFit.error) * 100
-            btnPolyline.text = "${String.format("%.2f", polylinePercentage)}% PolyLine(${polylineFit.k})"
+            btnPolyline.text = "PolyLine(${polylineFit.k})"
             btnPolyline.visibility = View.VISIBLE
             btnPolyline.setOnClickListener {
                 drawingView.replaceWithShape(shapeFitResult.strokeToReplace, polylineFit.fittedStroke)
