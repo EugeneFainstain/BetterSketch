@@ -405,7 +405,7 @@ class DrawingView @JvmOverloads constructor(
         val stroke = currentStroke ?: return false
         if (stroke.isGroup) return false
 
-        if (stroke.polylinePoints.size > 0)
+        if (stroke.isPolyline)
             return selectEndpointOfCurrentAnalyticalStroke(tapPoint)
 
         var closestDist = Float.MAX_VALUE
@@ -513,10 +513,30 @@ class DrawingView @JvmOverloads constructor(
         val highlightedStrokes = strokes.filter { it.isHighlighted }
         
         if (highlightedStrokes.isNotEmpty()) {
+            // Check if we should revert instead of delete
+            if (highlightedStrokes.size == 1) {
+                val stroke = highlightedStrokes.first()
+                if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.isPolyline) {
+                    // Revert the fitted/approximated stroke to original
+                    revertStrokeToOriginal(stroke)
+                    redrawHistory()
+                    listener?.onStateChanged()
+                    return
+                }
+            }
             // Delete all highlighted strokes
             strokes.removeAll(highlightedStrokes)
         } else if (selectedStrokeIdx != -1) {
-            // Delete the selected stroke if no highlights
+            val stroke = strokes[selectedStrokeIdx]
+            // Check if the selected stroke is fitted/approximated
+            if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.isPolyline) {
+                // Revert the fitted/approximated stroke to original
+                revertStrokeToOriginal(stroke)
+                redrawHistory()
+                listener?.onStateChanged()
+                return
+            }
+            // Delete the selected stroke if not fitted
             strokes.removeAt(selectedStrokeIdx)
         } else if (strokes.isNotEmpty()) {
             // Delete the last stroke as fallback
@@ -530,6 +550,34 @@ class DrawingView @JvmOverloads constructor(
             setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
         else
             setState(State.NORMAL_DRAWING)
+    }
+
+    private fun revertStrokeToOriginal(stroke: Stroke) {
+        // Reset analytical shape properties
+        stroke.analyticalShapeType = AnalyticalShapeType.NONE
+        stroke.isPolyline = false
+        stroke.needsToRegenerate = false
+        stroke.polylinePoints.clear()
+        
+        // Restore from originalPoints
+        stroke.unsmoothedPoints.clear()
+        stroke.unsmoothedPoints.addAll(
+            stroke.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }
+        )
+        
+        // Recalculate distances
+        val (recalculatedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
+            stroke.unsmoothedPoints.map { it.point }
+        )
+        stroke.unsmoothedPoints.clear()
+        stroke.unsmoothedPoints.addAll(recalculatedPoints)
+        stroke.totalDistance = newTotalDistance
+        
+        // Reapply smoothing
+        stroke.applySmoothing()
+        
+        // Re-detect shape for the reverted stroke
+        detectShape(stroke)
     }
 
     fun duplicateCurrentStroke() {

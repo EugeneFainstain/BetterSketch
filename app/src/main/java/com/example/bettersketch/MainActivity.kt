@@ -170,8 +170,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             }
         }
 
-        // Handle polyline fit button
-        if (polylineFit != null) {
+        // Handle polyline fit button - hide if stroke is already a polyline
+        if (polylineFit != null && !shapeFitResult.strokeToReplace.isPolyline) {
             val polylinePercentage = (1.0f - polylineFit.error) * 100
             btnPolyline.text = "PolyLine(${polylineFit.k})"
             btnPolyline.visibility = View.VISIBLE
