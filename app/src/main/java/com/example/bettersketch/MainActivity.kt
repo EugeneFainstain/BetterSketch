@@ -22,6 +22,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnGroupStrokes: Button
     private lateinit var btnUnGroupStrokes: Button
     private lateinit var btnShape: Button
+    private lateinit var btnPolyline: Button
     private lateinit var btnDel: ImageButton
 
     private val colors = intArrayOf(
@@ -58,6 +59,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnGroupStrokes = findViewById(R.id.btnGroupStrokes)
         btnUnGroupStrokes = findViewById(R.id.btnUnGroupStrokes)
         btnShape = findViewById(R.id.btnShape)
+        btnPolyline = findViewById(R.id.btnPolyline)
         btnDel = findViewById(R.id.btnDel)
 
         setupSliderListeners()
@@ -137,7 +139,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         updateUi()
     }
 
-    override fun onShapeDetected(shapeFitResult: ShapeFitResult) {
+    override fun onShapeDetected(shapeFitResult: ShapeFitResult, polylineFit: PolyLineFitter.FitResult?) {
         val (percentage, shapeName, fittedStroke, error) = when (shapeFitResult) {
             is ShapeFitResult.Square -> {
                 val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
@@ -151,14 +153,11 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
                 val p = (1.0f - shapeFitResult.fitResult.normalizedError) * 100
                 Quad(p, "Poly(${shapeFitResult.fitResult.degree})", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.normalizedError)
             }
-            is ShapeFitResult.PolyLine -> {
-                val p = (1.0f - shapeFitResult.fitResult.error) * 100
-                Quad(p, "PolyLine(${shapeFitResult.fitResult.k})", shapeFitResult.fitResult.fittedStroke, shapeFitResult.fitResult.error)
-            }
         }
 
         val fitErrorThreshold = 0.5f
 
+        // Handle shape fit button
         if (error > fitErrorThreshold) {
             btnShape.visibility = View.GONE
         } else {
@@ -167,12 +166,28 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             btnShape.setOnClickListener {
                 drawingView.replaceWithShape(shapeFitResult.strokeToReplace, fittedStroke)
                 btnShape.visibility = View.GONE
+                btnPolyline.visibility = View.GONE
             }
+        }
+
+        // Handle polyline fit button
+        if (polylineFit != null) {
+            val polylinePercentage = (1.0f - polylineFit.error) * 100
+            btnPolyline.text = "${String.format("%.2f", polylinePercentage)}% PolyLine(${polylineFit.k})"
+            btnPolyline.visibility = View.VISIBLE
+            btnPolyline.setOnClickListener {
+                drawingView.replaceWithShape(shapeFitResult.strokeToReplace, polylineFit.fittedStroke)
+                btnShape.visibility = View.GONE
+                btnPolyline.visibility = View.GONE
+            }
+        } else {
+            btnPolyline.visibility = View.GONE
         }
     }
 
     override fun onNoShapeDetected() {
         btnShape.visibility = View.GONE
+        btnPolyline.visibility = View.GONE
     }
 
     private fun updateUi() {
@@ -203,6 +218,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
 
         if (highlightedStrokeCount != 1) {
             btnShape.visibility = View.GONE
+            btnPolyline.visibility = View.GONE
         }
 
         btnDel.visibility = View.GONE

@@ -18,11 +18,10 @@ sealed class ShapeFitResult {
     data class Square(override val strokeToReplace: Stroke, val fitResult: SquareFitter.FitResult) : ShapeFitResult()
     data class Circle(override val strokeToReplace: Stroke, val fitResult: CircleFitter.FitResult) : ShapeFitResult()
     data class Polynomial(override val strokeToReplace: Stroke, val fitResult: PolynomFitter.FitResult) : ShapeFitResult()
-    data class PolyLine(override val strokeToReplace: Stroke, val fitResult: PolyLineFitter.FitResult) : ShapeFitResult()
 }
 
 interface ShapeDetectionListener {
-    fun onShapeDetected(shapeFitResult: ShapeFitResult)
+    fun onShapeDetected(shapeFitResult: ShapeFitResult, polylineFit: PolyLineFitter.FitResult?)
     fun onNoShapeDetected()
 }
 
@@ -302,10 +301,21 @@ class DrawingView @JvmOverloads constructor(
         }
 
         val strokeForFitting = stroke.generateUniformSampled(256)
-        val fitResult = ShapeFitter.fit(stroke, strokeForFitting)
+        
+        // Get the polyline fit
+        val polylineFitResult = ShapeFitter.polylineFit(stroke, strokeForFitting)
+        
+        // Update the original stroke's polylinePoints if isPolyline is false
+        if (polylineFitResult != null && !stroke.isPolyline) {
+            stroke.polylinePoints.clear()
+            stroke.polylinePoints.addAll(polylineFitResult.fittedStroke.polylinePoints)
+        }
+        
+        // Get the best shape fit
+        val shapeFitResult = ShapeFitter.shapeFit(stroke, strokeForFitting)
 
-        if (fitResult != null) {
-            shapeDetectionListener?.onShapeDetected(fitResult)
+        if (shapeFitResult != null) {
+            shapeDetectionListener?.onShapeDetected(shapeFitResult, polylineFitResult)
         } else {
             shapeDetectionListener?.onNoShapeDetected()
         }
