@@ -107,6 +107,34 @@ class Stroke(
         this.totalDistance = newTotalDistance // Update totalDistance based on smoothed points
     }
 
+    fun togglePolylineRepresentation() {
+        if (polylinePoints.isEmpty()) {
+            // Cannot toggle if there's no polyline data
+            return
+        }
+
+        isPolyline = !isPolyline
+        isModified = true
+
+        if (isPolyline) {
+            // Switch to polyline representation
+            regenerateUnsmoothedPointsFromAnalytical()
+        } else {
+            // Switch back to original representation
+            unsmoothedPoints.clear()
+            unsmoothedPoints.addAll(originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
+
+            // Recalculate distances for the restored points
+            val (recalculatedPoints, newTotalDistance) = calculatePathPointsWithDistances(unsmoothedPoints.map { it.point })
+            unsmoothedPoints.clear()
+            unsmoothedPoints.addAll(recalculatedPoints)
+            totalDistance = newTotalDistance
+
+            // Re-apply smoothing
+            applySmoothing()
+        }
+    }
+
     fun forEachStroke(action: (Stroke) -> Unit) {
         if (isGroup) {
             childStrokes.forEach { it.forEachStroke(action) }

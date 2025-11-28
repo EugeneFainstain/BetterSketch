@@ -85,6 +85,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             drawingView.ungroupSelectedStrokes()
         }
 
+        btnPolyline.setOnClickListener {
+            drawingView.toggleCurrentStrokePolyline()
+        }
+
         drawingView.post { updateUi() }
     }
 
@@ -126,6 +130,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             override fun onValueChanged(value: Float) {
                 drawingView.setStrokeSmoothness((value * 100).roundToInt())
             }
+
+
 
             override fun onValueEdit(value: Float) {
                 drawingView.setStrokeSmoothness((value * 100).roundToInt())
@@ -170,16 +176,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             }
         }
 
-        // Handle polyline fit button - hide if stroke is already a polyline
-        if (polylineFit != null && !shapeFitResult.strokeToReplace.isPolyline) {
-            val polylinePercentage = (1.0f - polylineFit.error) * 100
+        // Handle polyline fit button
+        if (polylineFit != null) {
             btnPolyline.text = "PolyLine(${polylineFit.k})"
             btnPolyline.visibility = View.VISIBLE
-            btnPolyline.setOnClickListener {
-                drawingView.replaceWithShape(shapeFitResult.strokeToReplace, polylineFit.fittedStroke)
-                btnShape.visibility = View.GONE
-                btnPolyline.visibility = View.GONE
-            }
         } else {
             btnPolyline.visibility = View.GONE
         }

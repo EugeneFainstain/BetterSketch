@@ -309,6 +309,7 @@ class DrawingView @JvmOverloads constructor(
         if (polylineFitResult != null && !stroke.isPolyline) {
             stroke.polylinePoints.clear()
             stroke.polylinePoints.addAll(polylineFitResult.fittedStroke.polylinePoints)
+            stroke.analyticalShapeType = AnalyticalShapeType.POLYLINE
         }
         
         // Get the best shape fit
@@ -330,6 +331,14 @@ class DrawingView @JvmOverloads constructor(
             lastStrokeHighlightedIdx = index
         }
         setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+    }
+
+    fun toggleCurrentStrokePolyline() {
+        currentStroke?.let {
+            it.togglePolylineRepresentation()
+            redrawHistory()
+            listener?.onStateChanged()
+        }
     }
 
     private fun distance(p1: PointF, p2: PointF): Float {
