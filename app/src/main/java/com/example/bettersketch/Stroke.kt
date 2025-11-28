@@ -118,9 +118,11 @@ class Stroke(
 
         if (isPolyline) {
             // Switch to polyline representation
+            analyticalShapeType = AnalyticalShapeType.POLYLINE
             regenerateUnsmoothedPointsFromAnalytical()
         } else {
             // Switch back to original representation
+            analyticalShapeType = AnalyticalShapeType.NONE
             unsmoothedPoints.clear()
             unsmoothedPoints.addAll(originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
 

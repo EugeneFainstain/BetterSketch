@@ -309,7 +309,6 @@ class DrawingView @JvmOverloads constructor(
         if (polylineFitResult != null && !stroke.isPolyline) {
             stroke.polylinePoints.clear()
             stroke.polylinePoints.addAll(polylineFitResult.fittedStroke.polylinePoints)
-            stroke.analyticalShapeType = AnalyticalShapeType.POLYLINE
         }
         
         // Get the best shape fit
@@ -662,7 +661,7 @@ class DrawingView @JvmOverloads constructor(
         currentStroke?.isModified = true
         currentStroke?.let { stroke ->
             // If this is an analytical stroke, move the analytical point
-            if (stroke.analyticalShapeType != AnalyticalShapeType.NONE && editingAnalyticalPointIndex != -1) {
+            if (stroke.isPolyline && editingAnalyticalPointIndex != -1) {
                 moveEditingAnalyticalPoint(stroke, dx, dy)
             } else {
                 moveEditingNormalPoint(stroke, dx, dy)
