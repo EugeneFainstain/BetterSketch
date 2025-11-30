@@ -40,31 +40,28 @@ class PolyLineFitter {
                 }
 
                 // Step 3: Average corresponding breakpoints
-                val (averagedIndices, averagedCoords) = averageBreakpoints(
+                val (averagedIndices, _) = averageBreakpoints(
                     forwardBreakpoints,
                     backwardBreakpoints,
                     points
                 )
 
-                // Step 4: Fit lines to segments using parametric least squares on original points
-                val lines = fitLinesToSegments(points, averagedIndices)
-
-                // Step 5: Calculate intersections of adjacent fitted lines
-                val intersectionPoints = calculateIntersections(lines, points, averagedIndices)
+                // Step 4: Build the polyline directly from the points at the averaged indices
+                val polylinePoints = averagedIndices.map { points[it] }
 
                 // Calculate error
-                val error = calculateFitError(points, averagedIndices, lines)
+                val error = calculateFitError(points, averagedIndices)
                 val normalizedError = error / scale
 
                 // Find segmentation that is 95% good
                 if (normalizedError <= QUALITY_THRESHOLD * epsilonMultiplier) {
                     val fittedStroke = createPolyLineStroke(
-                        intersectionPoints,
+                        polylinePoints,
                         stroke.paint,
                         stroke.pointsForDrawing.size
                     )
                     val fitResult = FitResult(
-                        intersectionPoints,
+                        polylinePoints,
                         normalizedError,
                         fittedStroke,
                         averagedIndices.size - 1
@@ -341,9 +338,9 @@ class PolyLineFitter {
          */
         private fun calculateFitError(
             points: List<PointF>,
-            breakpointIndices: List<Int>,
-            lines: List<Line>
+            breakpointIndices: List<Int>
         ): Float {
+            val lines = fitLinesToSegments(points, breakpointIndices)
             var totalError = 0f
             var pointCount = 0
 
