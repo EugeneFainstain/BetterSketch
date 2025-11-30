@@ -866,8 +866,26 @@ class DrawingView @JvmOverloads constructor(
                 val haloPaintToUse = Paint(haloPaint)
                 haloPaintToUse.strokeWidth = finalPaint.strokeWidth + haloOffset
 
-                if (stroke.isHighlighted)
+                if (stroke.isHighlighted) {
                     canvas.drawPath(path, haloPaintToUse)
+
+                    // Draw circles for associated polyline points
+                    if (stroke.polylinePoints.isNotEmpty()) {
+                        val associatedPoints = stroke.getAssociatedPolylinePointsOnSmoothedCurve()
+                        val vertexPaint = Paint().apply {
+                            style = Paint.Style.FILL
+                            color = Color.BLUE
+                        }
+                        val radius = haloPaintToUse.strokeWidth / 2f
+
+                        associatedPoints.forEach { point ->
+                            val transformedPoint = floatArrayOf(point.x, point.y)
+                            globalTransform.mapPoints(transformedPoint)
+                            canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, vertexPaint)
+                        }
+                    }
+                }
+
 
                 if (drawEndpoints && !twoFingerGestureOccured && !threeFingerGestureOccured) {
                     val radius = haloPaintToUse.strokeWidth/2f
