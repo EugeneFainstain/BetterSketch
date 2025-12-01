@@ -11,7 +11,6 @@ enum class AnalyticalShapeType {
     NONE,           // No analytical shape
     SQUARE,         // Square shape
     CIRCLE,         // Circle shape
-    POLYLINE,       // Polyline (connected line segments)
     POLYNOMIAL      // Polynomial curve
 }
 
@@ -137,14 +136,10 @@ class Stroke(
         isModified = true
 
         if (renderAsPolyline) {
-            // Switch to polyline representation
-            analyticalShapeType = AnalyticalShapeType.POLYLINE
+            // Switch to polyline rendering
             regenerateInterpolatedPolylinePoints()
         } else {
-            // Switch back to original representation
-            analyticalShapeType = AnalyticalShapeType.NONE
-
-            // Re-apply smoothing
+            // Switch back to smooth rendering
             applySmoothing()
         }
     }
@@ -400,9 +395,6 @@ class Stroke(
             AnalyticalShapeType.CIRCLE,
             AnalyticalShapeType.POLYNOMIAL -> {
                 regenerateUnsmoothedPointsFromAnalyticalShape()
-            }
-            AnalyticalShapeType.POLYLINE -> {
-                regenerateInterpolatedPolylinePoints()
             }
             AnalyticalShapeType.NONE -> {
                 // Nothing to regenerate
