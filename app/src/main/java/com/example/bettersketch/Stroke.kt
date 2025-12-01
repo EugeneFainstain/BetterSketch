@@ -502,7 +502,7 @@ class Stroke(
         targetDistances.addAll(vertexDistances)
 
         // Interpolate at all target distances
-        for (targetDist in targetDistances.sorted()) {
+        for (targetDist in targetDistances) {
             val point = interpolatePointOnPolyLine(vertices, targetDist)
             interpolatedPoints.add(point)
         }

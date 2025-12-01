@@ -151,7 +151,7 @@ class PolyLineFitter {
                 averagedIndices.add(avgIdx)
             }
 
-            return averagedIndices.distinct().sorted()
+            return averagedIndices.distinct()
         }
 
         /**
