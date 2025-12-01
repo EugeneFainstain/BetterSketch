@@ -145,17 +145,6 @@ class Stroke(
         } else {
             // Switch back to original representation
             analyticalShapeType = AnalyticalShapeType.NONE
-            unsmoothedPoints.clear()
-            unsmoothedPoints.addAll(originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
-
-            // Recalculate distances for the restored points
-            val (recalculatedPoints, newTotalDistance) = calculatePathPointsWithDistances(unsmoothedPoints.map { it.point })
-            unsmoothedPoints.clear()
-            unsmoothedPoints.addAll(recalculatedPoints)
-            totalDistance = newTotalDistance
-
-            // Clear interpolatedPolylinePoints when switching back to normal mode
-            interpolatedPolylinePoints.clear()
 
             // Re-apply smoothing
             applySmoothing()
@@ -387,13 +376,6 @@ class Stroke(
         interpolatedPolylinePoints.addAll(pathPoints)
 
         // polylineIndices stays the same - vertices are already at the correct indices
-
-        // In polyline mode, also update unsmoothedPoints to match
-        if (isPolyline) {
-            unsmoothedPoints.clear()
-            unsmoothedPoints.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-            totalDistance = newTotalDistance
-        }
 
         // Reapply smoothing to update pointsForDrawing
         applySmoothing()
