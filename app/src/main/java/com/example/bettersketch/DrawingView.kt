@@ -307,10 +307,8 @@ class DrawingView @JvmOverloads constructor(
         // Get the polyline fit - use the ORIGINAL stroke, not the uniformly sampled one
         val polylineFitResult = ShapeFitter.polylineFit(stroke, stroke)
 
-        // Update the original stroke's polylineParameterPoints and polylineIndices if isPolyline is false
+        // Update the original stroke's polylineIndices if isPolyline is false
         if (polylineFitResult != null && !stroke.isPolyline) {
-            stroke.polylineParameterPoints.clear()
-            stroke.polylineParameterPoints.addAll(polylineFitResult.fittedStroke.polylineParameterPoints)
             stroke.polylineIndices.clear()
             stroke.polylineIndices.addAll(polylineFitResult.fittedStroke.polylineIndices)
         }
@@ -715,7 +713,6 @@ class DrawingView @JvmOverloads constructor(
         stroke.isPolyline = false
         stroke.needsToRegenerate = false
         stroke.polylineIndices.clear()
-        stroke.polylineParameterPoints.clear()
         stroke.shapeParameterPoints.clear()
 
         // Restore from originalPoints
@@ -840,18 +837,9 @@ class DrawingView @JvmOverloads constructor(
             stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             stroke.totalDistance = newTotalDistance
 
-            // If this is a polyline stroke, update polyline data structures
-            if (stroke.isPolyline && stroke.polylineIndices.isNotEmpty() && stroke.polylineParameterPoints.isNotEmpty()) {
-                // Update polylineParameterPoints by extracting vertices from the updated unsmoothedPoints
-                stroke.polylineParameterPoints.clear()
-                val updatedVertices = stroke.polylineIndices.map { index ->
-                    val idx = index.coerceIn(0, stroke.unsmoothedPoints.size - 1)
-                    stroke.unsmoothedPoints[idx].point
-                }
-                val (updatedPolylinePoints, _) = Stroke.calculatePathPointsWithDistances(updatedVertices)
-                stroke.polylineParameterPoints.addAll(updatedPolylinePoints)
-
-                // Regenerate interpolatedPolylinePoints from the updated polylineParameterPoints
+            // If this is a polyline stroke, regenerate the interpolated polyline points
+            // from the updated vertices in unsmoothedPoints
+            if (stroke.isPolyline && stroke.polylineIndices.isNotEmpty()) {
                 stroke.regenerateInterpolatedPolylinePoints()
 
                 // Update editingPointIndex to track the moved vertex
@@ -860,7 +848,7 @@ class DrawingView @JvmOverloads constructor(
                     editingPointIndex = newUnsmoothedIdx
                 }
             } else {
-                // For non-polyline strokes, just apply smoothing directly
+                // For non-polyline strokes, just apply smoothing
                 stroke.applySmoothing()
             }
 

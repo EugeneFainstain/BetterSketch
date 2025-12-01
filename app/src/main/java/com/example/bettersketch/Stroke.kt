@@ -23,7 +23,6 @@ class Stroke(
     val pointsForDrawing: MutableList<PathPoint> = mutableListOf() // Smoothed points for drawing
     val originalPoints: MutableList<PathPoint> = mutableListOf() // Original points for undo/reset
     val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
-    val polylineParameterPoints: MutableList<PathPoint> = mutableListOf() // Polyline vertex points (ONLY for POLYLINE type)
     val shapeParameterPoints: MutableList<PathPoint> = mutableListOf() // Shape parameter points (for SQUARE, CIRCLE, POLYNOMIAL)
     val interpolatedPolylinePoints: MutableList<PathPoint> = mutableListOf() // Interpolated polyline points (same count as originalPoints)
     val polylineIndices: MutableList<Int> = mutableListOf() // Indices of the original points that correspond to the polyline vertices
@@ -211,9 +210,6 @@ class Stroke(
         this.unsmoothedPoints.clear()
         this.unsmoothedPoints.addAll(other.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
-        this.polylineParameterPoints.clear()
-        this.polylineParameterPoints.addAll(other.polylineParameterPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-
         this.shapeParameterPoints.clear()
         this.shapeParameterPoints.addAll(other.shapeParameterPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
@@ -358,15 +354,27 @@ class Stroke(
 
 
     fun regenerateInterpolatedPolylinePoints() {
-        if (polylineParameterPoints.isEmpty()) return
+        if (polylineIndices.isEmpty() || unsmoothedPoints.isEmpty()) return
 
         val pointCount = originalPoints.size
         if (pointCount < 2) return
 
+        // Extract vertices from unsmoothedPoints using polylineIndices
+        // Ensure indices are valid
+        val vertices = polylineIndices.mapNotNull { index ->
+            if (index >= 0 && index < unsmoothedPoints.size) {
+                unsmoothedPoints[index].point
+            } else {
+                null
+            }
+        }
+        
+        if (vertices.isEmpty()) return
+
         // The polyline vertices should appear at the indices stored in polylineIndices
         // Interpolate along the polyline vertices with vertices placed at those specific indices
         val interpolatedPoints = interpolateAlongPolyLineWithIndices(
-            polylineParameterPoints.map { it.point },
+            vertices,
             polylineIndices
         )
 
@@ -374,8 +382,6 @@ class Stroke(
         val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
         interpolatedPolylinePoints.clear()
         interpolatedPolylinePoints.addAll(pathPoints)
-
-        // polylineIndices stays the same - vertices are already at the correct indices
 
         // Reapply smoothing to update pointsForDrawing
         applySmoothing()

@@ -7,7 +7,12 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 class PolyLineFitter {
-    data class FitResult(val points: List<PointF>, var error: Float, val fittedStroke: Stroke, val indices: List<Int>)
+    data class FitResult(
+        val points: List<PointF>,
+        var error: Float,
+        val fittedStroke: Stroke,
+        val indices: List<Int>
+    )
 
     companion object {
         // Epsilon values to try (based on stroke scale)
@@ -363,16 +368,71 @@ class PolyLineFitter {
             val stroke = Stroke(paint, 0)
             stroke.analyticalShapeType = AnalyticalShapeType.POLYLINE
             stroke.isPolyline = true
-            
-            // Store the analytical line vertices in polylineParameterPoints
-            val (analyticalPathPoints, _) = Stroke.calculatePathPointsWithDistances(vertices)
-            stroke.polylineParameterPoints.addAll(analyticalPathPoints)
+
+            // Store the vertex indices
             stroke.polylineIndices.addAll(indices)
-            
-            // Mark that the stroke needs to regenerate unsmoothedPoints from analytical
-            stroke.needsToRegenerate = true
-            
+
+            // We need to populate unsmoothedPoints first before we can regenerate
+            // Create a temporary interpolation with the correct number of points
+            val targetPointCount = if (indices.isNotEmpty()) indices.last() + 1 else vertices.size
+
+            // Initialize unsmoothedPoints with a basic interpolation
+            val initialPoints =
+                interpolateAlongPolyLineWithIndices(vertices, indices, targetPointCount)
+            val (pathPoints, totalDist) = Stroke.calculatePathPointsWithDistances(initialPoints)
+            stroke.unsmoothedPoints.addAll(pathPoints)
+            stroke.totalDistance = totalDist
+
+            // Now regenerate interpolatedPolylinePoints from the vertices in unsmoothedPoints
+            stroke.regenerateInterpolatedPolylinePoints()
+
             return stroke
+        }
+
+        /**
+         * Helper to create the initial interpolation for a polyline stroke
+         */
+        private fun interpolateAlongPolyLineWithIndices(
+            vertices: List<PointF>,
+            vertexIndices: List<Int>,
+            targetPointCount: Int
+        ): List<PointF> {
+            if (vertices.size < 2 || vertexIndices.size < 2) return vertices
+            if (targetPointCount < 2) return vertices
+
+            val interpolatedPoints = MutableList<PointF?>(targetPointCount) { null }
+
+            // Place each vertex at its designated index
+            for (i in vertices.indices) {
+                val index = vertexIndices[i]
+                if (index < targetPointCount) {
+                    interpolatedPoints[index] = vertices[i]
+                }
+            }
+
+            // Fill in the gaps between vertices with linear interpolation
+            for (i in 0 until vertices.size - 1) {
+                val startIdx = vertexIndices[i]
+                val endIdx = vertexIndices[i + 1]
+
+                if (startIdx >= targetPointCount || endIdx >= targetPointCount) continue
+
+                val startPoint = vertices[i]
+                val endPoint = vertices[i + 1]
+
+                val segmentPointCount = endIdx - startIdx + 1
+
+                // Interpolate points between startIdx and endIdx
+                for (j in 0 until segmentPointCount) {
+                    val t = j.toFloat() / (segmentPointCount - 1).toFloat()
+                    val x = startPoint.x + t * (endPoint.x - startPoint.x)
+                    val y = startPoint.y + t * (endPoint.y - startPoint.y)
+                    interpolatedPoints[startIdx + j] = PointF(x, y)
+                }
+            }
+
+            // Return the list, filtering out any nulls
+            return interpolatedPoints.filterNotNull()
         }
     }
 }
