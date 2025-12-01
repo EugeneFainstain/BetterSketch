@@ -307,10 +307,12 @@ class DrawingView @JvmOverloads constructor(
         // Get the polyline fit
         val polylineFitResult = ShapeFitter.polylineFit(stroke, strokeForFitting)
         
-        // Update the original stroke's polylinePoints if isPolyline is false
+        // Update the original stroke's polylinePoints and polylineIndices if isPolyline is false
         if (polylineFitResult != null && !stroke.isPolyline) {
             stroke.polylinePoints.clear()
             stroke.polylinePoints.addAll(polylineFitResult.fittedStroke.polylinePoints)
+            stroke.polylineIndices.clear()
+            stroke.polylineIndices.addAll(polylineFitResult.fittedStroke.polylineIndices)
         }
         
         // Get the best shape fit
