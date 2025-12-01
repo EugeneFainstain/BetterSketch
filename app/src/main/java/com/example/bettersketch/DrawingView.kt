@@ -411,6 +411,7 @@ class DrawingView @JvmOverloads constructor(
         return false
     }
 
+
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         val stroke = currentStroke ?: return false
         if (stroke.isGroup) return false
@@ -444,72 +445,98 @@ class DrawingView @JvmOverloads constructor(
             editingPointIndex = totalPoints - 1
         } else {
             selectedEnd = SelectedEnd.MIDDLE
-            
-            // NEW APPROACH: Find closest polyline point along the curve
-            if (stroke.polylineIndices.isNotEmpty() && stroke.polylineIndices.size >= 2) {
-                // Find the closest point on the actual curve (pointsForDrawing)
-                val closestPointDistance = stroke.pointsForDrawing[closestPointIndex].distance
+
+            // NEW APPROACH: Find closest polyline vertex along the curve
+            if (stroke.polylineIndices.isNotEmpty() && stroke.polylineIndices.size >= 2 && stroke.unsmoothedPoints.isNotEmpty()) {
+                // Map the closest drawing point to unsmoothed points using distance
+                val closestDrawingDistance = stroke.pointsForDrawing[closestPointIndex].distance
                 val totalDrawingDistance = stroke.pointsForDrawing.last().distance
-                
-                // Map this to unsmoothed points distance
                 val unsmoothedTotalDistance = stroke.unsmoothedPoints.last().distance
-                val targetUnsmoothedDistance = (closestPointDistance / totalDrawingDistance) * unsmoothedTotalDistance
-                
-                // Find closest polyline point by comparing indices in unsmoothedPoints
-                var closestPolylineIdx = 0
-                var minDistToPolyline = Float.MAX_VALUE
-                
+
+                // Find corresponding unsmoothed point distance
+                val targetUnsmoothedDistance = if (totalDrawingDistance > 0f) {
+                    (closestDrawingDistance / totalDrawingDistance) * unsmoothedTotalDistance
+                } else {
+                    0f
+                }
+
+                // Find closest polyline vertex by looking at polylineIndices
+                var closestPolylineIdxInArray = 0
+                var minDistToPolylineVertex = Float.MAX_VALUE
+
                 for (i in stroke.polylineIndices.indices) {
-                    val polylineIndex = stroke.polylineIndices[i]
-                    if (polylineIndex >= 0 && polylineIndex < stroke.unsmoothedPoints.size) {
-                        val polylinePointDist = stroke.unsmoothedPoints[polylineIndex].distance
-                        val distDiff = abs(polylinePointDist - targetUnsmoothedDistance)
-                        if (distDiff < minDistToPolyline) {
-                            minDistToPolyline = distDiff
-                            closestPolylineIdx = i
+                    val vertexIndexInUnsmoothed = stroke.polylineIndices[i]
+                    if (vertexIndexInUnsmoothed >= 0 && vertexIndexInUnsmoothed < stroke.unsmoothedPoints.size) {
+                        val vertexDistance = stroke.unsmoothedPoints[vertexIndexInUnsmoothed].distance
+                        val distDiff = abs(vertexDistance - targetUnsmoothedDistance)
+                        if (distDiff < minDistToPolylineVertex) {
+                            minDistToPolylineVertex = distDiff
+                            closestPolylineIdxInArray = i
                         }
                     }
                 }
-                
-                // Build weight function for the segments around this polyline point
-                val leftPolylineIdx = if (closestPolylineIdx > 0) closestPolylineIdx - 1 else 0
-                val rightPolylineIdx = if (closestPolylineIdx < stroke.polylineIndices.size - 1) closestPolylineIdx + 1 else stroke.polylineIndices.size - 1
-                
-                val leftUnsmoothedIndex = stroke.polylineIndices[leftPolylineIdx].coerceIn(0, stroke.unsmoothedPoints.size - 1)
-                val middleUnsmoothedIndex = stroke.polylineIndices[closestPolylineIdx].coerceIn(0, stroke.unsmoothedPoints.size - 1)
-                val rightUnsmoothedIndex = stroke.polylineIndices[rightPolylineIdx].coerceIn(0, stroke.unsmoothedPoints.size - 1)
-                
-                editingPointIndex = middleUnsmoothedIndex
-                
-                val leftDist = stroke.unsmoothedPoints[leftUnsmoothedIndex].distance
-                val middleDist = stroke.unsmoothedPoints[middleUnsmoothedIndex].distance
-                val rightDist = stroke.unsmoothedPoints[rightUnsmoothedIndex].distance
-                
-                // Build weight function using sin(x)^2 for affected segments
-                editingPointInitialWeights = stroke.unsmoothedPoints.map { pathPoint ->
-                    val dist = pathPoint.distance
-                    when {
-                        dist < leftDist || dist > rightDist -> 0f // Outside affected range
-                        dist <= middleDist -> {
-                            // Left segment: 1/4 period of sin(x)^2
-                            val segmentLength = middleDist - leftDist
-                            if (segmentLength == 0f) 1f
-                            else {
-                                val t = (dist - leftDist) / segmentLength // 0 to 1
-                                val angle = t * PI.toFloat() / 2f // 0 to π/2
-                                sin(angle) * sin(angle) // sin^2(x)
+
+                // Validate that closestPolylineIdxInArray is within bounds
+                if (closestPolylineIdxInArray >= 0 && closestPolylineIdxInArray < stroke.polylineIndices.size) {
+                    // Get the left, middle, and right polyline vertex indices
+                    val leftPolylineArrayIdx = if (closestPolylineIdxInArray > 0) closestPolylineIdxInArray - 1 else 0
+                    val rightPolylineArrayIdx = if (closestPolylineIdxInArray < stroke.polylineIndices.size - 1) {
+                        closestPolylineIdxInArray + 1
+                    } else {
+                        stroke.polylineIndices.size - 1
+                    }
+
+                    // Convert to actual indices in unsmoothedPoints
+                    val leftUnsmoothedIdx = stroke.polylineIndices[leftPolylineArrayIdx].coerceIn(0, stroke.unsmoothedPoints.size - 1)
+                    val middleUnsmoothedIdx = stroke.polylineIndices[closestPolylineIdxInArray].coerceIn(0, stroke.unsmoothedPoints.size - 1)
+                    val rightUnsmoothedIdx = stroke.polylineIndices[rightPolylineArrayIdx].coerceIn(0, stroke.unsmoothedPoints.size - 1)
+
+                    editingPointIndex = middleUnsmoothedIdx
+
+                    // Get distances along the unsmoothed curve
+                    val leftDist = stroke.unsmoothedPoints[leftUnsmoothedIdx].distance
+                    val middleDist = stroke.unsmoothedPoints[middleUnsmoothedIdx].distance
+                    val rightDist = stroke.unsmoothedPoints[rightUnsmoothedIdx].distance
+
+                    // Build weight function using sin(x)^2 for affected segments
+                    editingPointInitialWeights = stroke.unsmoothedPoints.map { pathPoint ->
+                        val dist = pathPoint.distance
+                        when {
+                            dist < leftDist || dist > rightDist -> 0f // Outside affected range
+                            dist <= middleDist -> {
+                                // Left segment: 1/4 period of sin(x)^2
+                                val segmentLength = middleDist - leftDist
+                                if (segmentLength == 0f) 1f
+                                else {
+                                    val t = (dist - leftDist) / segmentLength // 0 to 1
+                                    val angle = t * PI.toFloat() / 2f // 0 to π/2
+                                    sin(angle) * sin(angle) // sin^2(x)
+                                }
+                            }
+                            else -> {
+                                // Right segment: symmetrically flipped sin(x)^2
+                                val segmentLength = rightDist - middleDist
+                                if (segmentLength == 0f) 1f
+                                else {
+                                    val t = (dist - middleDist) / segmentLength // 0 to 1
+                                    val angle = (1f - t) * PI.toFloat() / 2f // π/2 to 0 (flipped)
+                                    sin(angle) * sin(angle) // sin^2(x)
+                                }
                             }
                         }
-                        else -> {
-                            // Right segment: symmetrically flipped sin(x)^2
-                            val segmentLength = rightDist - middleDist
-                            if (segmentLength == 0f) 1f
-                            else {
-                                val t = (dist - middleDist) / segmentLength // 0 to 1
-                                val angle = (1f - t) * PI.toFloat() / 2f // π/2 to 0 (flipped)
-                                sin(angle) * sin(angle) // sin^2(x)
-                            }
+                    }
+                } else {
+                    // Fallback if index is invalid
+                    val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.last().distance
+                    val middlePointRelativeDistance = stroke.unsmoothedPoints[editingPointIndex].distance / totalDistanceOfUnsmoothed
+                    editingPointInitialWeights = stroke.unsmoothedPoints.map {
+                        val relativeDistance = it.distance / totalDistanceOfUnsmoothed
+                        val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
+                            relativeDistance / middlePointRelativeDistance
+                        } else {
+                            1 - ((relativeDistance - middlePointRelativeDistance) / (1 - middlePointRelativeDistance))
                         }
+                        sin(mappedDistance * PI / 2).toFloat()
                     }
                 }
             } else {
@@ -530,9 +557,15 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
+
     private fun selectEndpointOfCurrentAnalyticalStroke(tapPoint: PointF): Boolean {
         val stroke = currentStroke ?: return false
         if (stroke.isGroup) return false
+
+        // Safety check
+        if (stroke.polylineIndices.isEmpty() || stroke.unsmoothedPoints.isEmpty()) {
+            return false
+        }
 
         var closestDrawingPointDist = Float.MAX_VALUE
         var closestDrawingPointIndex = 0
@@ -546,84 +579,80 @@ class DrawingView @JvmOverloads constructor(
             }
         }
 
-        // Get the distance to the point along the curve
-        val closestPointDistance = stroke.pointsForDrawing[closestDrawingPointIndex].distance
+        // Map from pointsForDrawing to unsmoothedPoints using distance
+        val closestDrawingDistance = stroke.pointsForDrawing[closestDrawingPointIndex].distance
         val totalDrawingDistance = stroke.pointsForDrawing.last().distance
-        
-        // Find closest polyline point along the curve
-        var closestAnalyticalIndex = 0
-        var closestAnalyticalDist = Float.MAX_VALUE
-        
-        stroke.polylinePoints.forEachIndexed { index, pathPoint ->
-            val d = kotlin.math.abs(pathPoint.distance - closestPointDistance * (stroke.polylinePoints.last().distance / totalDrawingDistance))
-            if (d < closestAnalyticalDist) {
-                closestAnalyticalDist = d
-                closestAnalyticalIndex = index
-            }
-        }
-
-        editingAnalyticalPointIndex = closestAnalyticalIndex
-        selectedEnd = SelectedEnd.MIDDLE
-
-        // Calculate totals for later use
-        val analyticalTotalDistance = stroke.polylinePoints.lastOrNull()?.distance ?: 0f
         val unsmoothedTotalDistance = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
 
-        // Find the corresponding unsmoothed point index based on distance ratio
-        val analyticalPointDistance = stroke.polylinePoints[closestAnalyticalIndex].distance
+        val targetUnsmoothedDistance = if (totalDrawingDistance > 0f) {
+            (closestDrawingDistance / totalDrawingDistance) * unsmoothedTotalDistance
+        } else {
+            0f
+        }
 
-        if (analyticalTotalDistance > 0f) {
-            val distanceRatio = analyticalPointDistance / analyticalTotalDistance
-            val targetUnsmoothedDistance = distanceRatio * unsmoothedTotalDistance
+        // Find closest polyline vertex using polylineIndices
+        var closestPolylineIdxInArray = 0
+        var minDistToVertex = Float.MAX_VALUE
 
-            // Find the closest unsmoothed point to this target distance
-            var minDistanceDiff = Float.MAX_VALUE
-            var closestUnsmoothedIndex = -1
-            stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
-                val diff = kotlin.math.abs(pathPoint.distance - targetUnsmoothedDistance)
-                if (diff < minDistanceDiff) {
-                    minDistanceDiff = diff
-                    closestUnsmoothedIndex = index
+        for (i in stroke.polylineIndices.indices) {
+            val vertexIdxInUnsmoothed = stroke.polylineIndices[i]
+            if (vertexIdxInUnsmoothed >= 0 && vertexIdxInUnsmoothed < stroke.unsmoothedPoints.size) {
+                val vertexDistance = stroke.unsmoothedPoints[vertexIdxInUnsmoothed].distance
+                val distDiff = abs(vertexDistance - targetUnsmoothedDistance)
+                if (distDiff < minDistToVertex) {
+                    minDistToVertex = distDiff
+                    closestPolylineIdxInArray = i
                 }
             }
-            editingPointIndex = closestUnsmoothedIndex
-        } else {
-            editingPointIndex = closestDrawingPointIndex
         }
-        
-        // Build weight function for polyline editing (similar to normal mode)
-        if (stroke.polylinePoints.size >= 3 && analyticalTotalDistance > 0f && unsmoothedTotalDistance > 0f) {
-            val leftPolylineIdx = if (closestAnalyticalIndex > 0) closestAnalyticalIndex - 1 else 0
-            val rightPolylineIdx = if (closestAnalyticalIndex < stroke.polylinePoints.size - 1) closestAnalyticalIndex + 1 else stroke.polylinePoints.size - 1
-            
-            val leftDist = stroke.polylinePoints[leftPolylineIdx].distance
-            val middleDist = stroke.polylinePoints[closestAnalyticalIndex].distance
-            val rightDist = stroke.polylinePoints[rightPolylineIdx].distance
-            
-            // Map analytical distances to unsmoothed distances
-            val leftUnsmoothedDist = (leftDist / analyticalTotalDistance) * unsmoothedTotalDistance
-            val middleUnsmoothedDist = (middleDist / analyticalTotalDistance) * unsmoothedTotalDistance
-            val rightUnsmoothedDist = (rightDist / analyticalTotalDistance) * unsmoothedTotalDistance
-            
+
+        // Validate index
+        if (closestPolylineIdxInArray < 0 || closestPolylineIdxInArray >= stroke.polylineIndices.size) {
+            return false
+        }
+
+        editingAnalyticalPointIndex = closestPolylineIdxInArray
+        selectedEnd = SelectedEnd.MIDDLE
+
+        // Set editingPointIndex to the corresponding unsmoothed point
+        val middleUnsmoothedIdx = stroke.polylineIndices[closestPolylineIdxInArray].coerceIn(0, stroke.unsmoothedPoints.size - 1)
+        editingPointIndex = middleUnsmoothedIdx
+
+        // Build weight function for polyline editing
+        if (stroke.polylineIndices.size >= 3) {
+            val leftPolylineArrayIdx = if (closestPolylineIdxInArray > 0) closestPolylineIdxInArray - 1 else 0
+            val rightPolylineArrayIdx = if (closestPolylineIdxInArray < stroke.polylineIndices.size - 1) {
+                closestPolylineIdxInArray + 1
+            } else {
+                stroke.polylineIndices.size - 1
+            }
+
+            val leftUnsmoothedIdx = stroke.polylineIndices[leftPolylineArrayIdx].coerceIn(0, stroke.unsmoothedPoints.size - 1)
+            val rightUnsmoothedIdx = stroke.polylineIndices[rightPolylineArrayIdx].coerceIn(0, stroke.unsmoothedPoints.size - 1)
+
+            val leftDist = stroke.unsmoothedPoints[leftUnsmoothedIdx].distance
+            val middleDist = stroke.unsmoothedPoints[middleUnsmoothedIdx].distance
+            val rightDist = stroke.unsmoothedPoints[rightUnsmoothedIdx].distance
+
             // Build weight function using sin(x)^2
             editingPointInitialWeights = stroke.unsmoothedPoints.map { pathPoint ->
                 val dist = pathPoint.distance
                 when {
-                    dist < leftUnsmoothedDist || dist > rightUnsmoothedDist -> 0f
-                    dist <= middleUnsmoothedDist -> {
-                        val segmentLength = middleUnsmoothedDist - leftUnsmoothedDist
+                    dist < leftDist || dist > rightDist -> 0f
+                    dist <= middleDist -> {
+                        val segmentLength = middleDist - leftDist
                         if (segmentLength == 0f) 1f
                         else {
-                            val t = (dist - leftUnsmoothedDist) / segmentLength
+                            val t = (dist - leftDist) / segmentLength
                             val angle = t * PI.toFloat() / 2f
                             sin(angle) * sin(angle)
                         }
                     }
                     else -> {
-                        val segmentLength = rightUnsmoothedDist - middleUnsmoothedDist
+                        val segmentLength = rightDist - middleDist
                         if (segmentLength == 0f) 1f
                         else {
-                            val t = (dist - middleUnsmoothedDist) / segmentLength
+                            val t = (dist - middleDist) / segmentLength
                             val angle = (1f - t) * PI.toFloat() / 2f
                             sin(angle) * sin(angle)
                         }
@@ -818,25 +847,21 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun moveEditingAnalyticalPoint(stroke: Stroke, dx: Float, dy: Float) {
-        if (editingAnalyticalPointIndex >= stroke.polylinePoints.size) return
+        // Validate indices
+        if (editingAnalyticalPointIndex < 0 || editingAnalyticalPointIndex >= stroke.polylineIndices.size) return
+        if (stroke.polylineIndices.isEmpty() || stroke.unsmoothedPoints.isEmpty()) return
 
-        // Move the analytical point
-        stroke.polylinePoints[editingAnalyticalPointIndex].point.offset(dx, dy)
+        // Get the index in unsmoothedPoints that corresponds to this polyline vertex
+        val unsmoothedIdx = stroke.polylineIndices[editingAnalyticalPointIndex]
+        if (unsmoothedIdx < 0 || unsmoothedIdx >= stroke.unsmoothedPoints.size) return
 
-        // Recalculate distances for analytical points after moving
-        val (recalculatedAnalyticalPoints, _) = Stroke.calculatePathPointsWithDistances(
-            stroke.polylinePoints.map { it.point }
-        )
-        stroke.polylinePoints.clear()
-        stroke.polylinePoints.addAll(recalculatedAnalyticalPoints)
-
-        // Apply weighted transformation to unsmoothed points
+        // Apply weighted transformation to unsmoothedPoints (which affects the polyline vertex)
         val weights = editingPointInitialWeights
         if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
             stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
                 pathPoint.point.offset(dx * weights[index], dy * weights[index])
             }
-            
+
             // Recalculate distances for unsmoothed points
             val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
                 stroke.unsmoothedPoints.map { it.point }
@@ -844,18 +869,31 @@ class DrawingView @JvmOverloads constructor(
             stroke.unsmoothedPoints.clear()
             stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             stroke.totalDistance = newTotalDistance
-            
-            // Apply smoothing
+
+            // Update polylinePoints to match the new positions of the vertices in unsmoothedPoints
+            stroke.polylinePoints.clear()
+            val polylineVertices = stroke.polylineIndices.mapNotNull { idx ->
+                if (idx >= 0 && idx < stroke.unsmoothedPoints.size) {
+                    PointF(stroke.unsmoothedPoints[idx].point.x, stroke.unsmoothedPoints[idx].point.y)
+                } else null
+            }
+
+            if (polylineVertices.isNotEmpty()) {
+                val (polylinePathPoints, _) = Stroke.calculatePathPointsWithDistances(polylineVertices)
+                stroke.polylinePoints.addAll(polylinePathPoints)
+            }
+
+            // Apply smoothing to update pointsForDrawing
             stroke.applySmoothing()
-        } else {
-            // Fallback: regenerate from analytical points
-            stroke.regenerateUnsmoothedPointsFromAnalytical()
         }
 
-        // Recalculate which unsmoothed point index to highlight during dragging
-        updateHighlightedPointForAnalyticalStroke(stroke)
+        // Update editingPointIndex to track the moved vertex
+        if (editingAnalyticalPointIndex < stroke.polylineIndices.size) {
+            val newUnsmoothedIdx = stroke.polylineIndices[editingAnalyticalPointIndex].coerceIn(0, stroke.unsmoothedPoints.size - 1)
+            editingPointIndex = newUnsmoothedIdx
+        }
     }
-
+    
     private fun updateHighlightedPointForAnalyticalStroke(stroke: Stroke) {
         if (editingAnalyticalPointIndex < 0 || editingAnalyticalPointIndex >= stroke.polylinePoints.size) return
 
