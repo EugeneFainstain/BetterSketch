@@ -1052,7 +1052,7 @@ class DrawingView @JvmOverloads constructor(
                     canvas.drawPath(path, haloPaintToUse)
 
                     // Draw circles for associated polyline points
-                    if (stroke.polylinePoints.isNotEmpty()) {
+                    if (stroke.polylineIndices.isNotEmpty()) {
                         val associatedPoints = stroke.getAssociatedPolylinePointsOnSmoothedCurve()
                         val vertexPaint = Paint().apply {
                             style = Paint.Style.FILL
