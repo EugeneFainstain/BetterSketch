@@ -178,7 +178,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
 
         // Handle polyline fit button
         if (polylineFit != null) {
-            btnPolyline.text = "PolyLine(${polylineFit.k})"
+            btnPolyline.text = "PolyLine(${polylineFit.indices.size})"
             btnPolyline.visibility = View.VISIBLE
         } else {
             btnPolyline.visibility = View.GONE

@@ -7,7 +7,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 class PolyLineFitter {
-    data class FitResult(val points: List<PointF>, var error: Float, val fittedStroke: Stroke, val k: Int)
+    data class FitResult(val points: List<PointF>, var error: Float, val fittedStroke: Stroke, val indices: List<Int>)
 
     companion object {
         // Epsilon values to try (based on stroke scale)
@@ -58,16 +58,16 @@ class PolyLineFitter {
                     val fittedStroke = createPolyLineStroke(
                         polylinePoints,
                         stroke.paint,
-                        stroke.pointsForDrawing.size
+                        averagedIndices
                     )
                     val fitResult = FitResult(
                         polylinePoints,
                         normalizedError,
                         fittedStroke,
-                        averagedIndices.size - 1
+                        averagedIndices
                     )
 
-                    if (bestFit == null || fitResult.k < bestFit.k) {
+                    if (bestFit == null || fitResult.indices.size < bestFit.indices.size) {
                         bestFit = fitResult
                     }
                 }
@@ -366,7 +366,7 @@ class PolyLineFitter {
         private fun createPolyLineStroke(
             vertices: List<PointF>,
             paint: android.graphics.Paint,
-            targetPointCount: Int
+            indices: List<Int>
         ): Stroke {
             val stroke = Stroke(paint, 0)
             stroke.analyticalShapeType = AnalyticalShapeType.POLYLINE
@@ -375,6 +375,7 @@ class PolyLineFitter {
             // Store the analytical line vertices
             val (analyticalPathPoints, _) = Stroke.calculatePathPointsWithDistances(vertices)
             stroke.polylinePoints.addAll(analyticalPathPoints)
+            stroke.polylineIndices.addAll(indices)
             
             // Mark that the stroke needs to regenerate unsmoothedPoints from analytical
             stroke.needsToRegenerate = true

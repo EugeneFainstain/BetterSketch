@@ -24,6 +24,7 @@ class Stroke(
     val originalPoints: MutableList<PathPoint> = mutableListOf() // Original points for undo/reset
     val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
     val polylinePoints: MutableList<PathPoint> = mutableListOf() // Analytical polyline points
+    val polylineIndices: MutableList<Int> = mutableListOf() // Indices of the original points that correspond to the polyline vertices
     var totalDistance: Float = 0f
     var isModified: Boolean = false
     val childStrokes: MutableList<Stroke> = mutableListOf()
@@ -254,6 +255,9 @@ class Stroke(
 
         this.polylinePoints.clear()
         this.polylinePoints.addAll(other.polylinePoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+
+        this.polylineIndices.clear()
+        this.polylineIndices.addAll(other.polylineIndices)
 
         this.totalDistance = other.totalDistance
 
