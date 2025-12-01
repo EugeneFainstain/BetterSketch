@@ -793,6 +793,7 @@ class DrawingView @JvmOverloads constructor(
         return currentStroke?.isGroup ?: false
     }
 
+
     private fun moveEditingPoint(dx: Float, dy: Float) {
         currentStroke?.isModified = true
         currentStroke?.let { stroke ->
@@ -818,11 +819,8 @@ class DrawingView @JvmOverloads constructor(
             stroke.regenerateInterpolatedPolylinePoints()
             stroke.applySmoothing()
 
-            // Update editingPointIndex to track the moved vertex (for polyline strokes)
-            if (editingAnalyticalPointIndex >= 0 && editingAnalyticalPointIndex < stroke.polylineIndices.size) {
-                val newUnsmoothedIdx = stroke.polylineIndices[editingAnalyticalPointIndex].coerceIn(0, stroke.unsmoothedPoints.size - 1)
-                editingPointIndex = newUnsmoothedIdx
-            }
+            // Don't update editingPointIndex - keep it at the originally selected point
+            // This ensures the green circle stays at the correct visual location
 
             redrawHistory()
         }
