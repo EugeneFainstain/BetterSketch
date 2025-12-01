@@ -219,15 +219,6 @@ class DrawingView @JvmOverloads constructor(
             s.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             s.totalDistance = newTotalDistance
 
-            s.polylinePoints.forEach { pathPoint ->
-                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                matrix.mapPoints(point)
-                pathPoint.point.set(point[0], point[1])
-            }
-            val (recalculatedAnalyticalPoints, _) = Stroke.calculatePathPointsWithDistances(s.polylinePoints.map { it.point })
-            s.polylinePoints.clear()
-            s.polylinePoints.addAll(recalculatedAnalyticalPoints)
-
             s.applySmoothing()
         }
         listener?.onStateChanged()
@@ -871,26 +862,8 @@ class DrawingView @JvmOverloads constructor(
             stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             stroke.totalDistance = newTotalDistance
 
-            // Update polylinePoints to match the new positions of the vertices in unsmoothedPoints
-            stroke.polylinePoints.clear()
-            val polylineVertices = stroke.polylineIndices.mapNotNull { idx ->
-                if (idx >= 0 && idx < stroke.unsmoothedPoints.size) {
-                    PointF(stroke.unsmoothedPoints[idx].point.x, stroke.unsmoothedPoints[idx].point.y)
-                } else null
-            }
-
-            if (polylineVertices.isNotEmpty()) {
-                val (polylinePathPoints, _) = Stroke.calculatePathPointsWithDistances(polylineVertices)
-                stroke.polylinePoints.addAll(polylinePathPoints)
-            }
-
-            // Update interpolatedPolylinePoints to match unsmoothedPoints
-            stroke.interpolatedPolylinePoints.clear()
-            stroke.interpolatedPolylinePoints.addAll(recalculatedUnsmoothedPoints.map {
-                PathPoint(PointF(it.point.x, it.point.y), it.distance)
-            })
-
             // Apply smoothing to update pointsForDrawing
+            // polylinePoints will be derived on-the-fly from polylineIndices when needed
             stroke.applySmoothing()
         }
 
@@ -1052,7 +1025,7 @@ class DrawingView @JvmOverloads constructor(
                     canvas.drawPath(path, haloPaintToUse)
 
                     // Draw circles for associated polyline points
-                    if (stroke.polylinePoints.isNotEmpty()) {
+                    if (stroke.polylineIndices.isNotEmpty()) {
                         val associatedPoints = stroke.getAssociatedPolylinePointsOnSmoothedCurve()
                         val vertexPaint = Paint().apply {
                             style = Paint.Style.FILL

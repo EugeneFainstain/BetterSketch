@@ -53,27 +53,27 @@ class Stroke(
     }
 
     fun getAssociatedPolylinePointsOnSmoothedCurve(): List<PointF> {
-        if (polylinePoints.isEmpty() || pointsForDrawing.isEmpty()) {
+        if (polylineIndices.isEmpty() || pointsForDrawing.isEmpty() || unsmoothedPoints.isEmpty()) {
             return emptyList()
         }
 
         val associatedPoints = mutableListOf<PointF>()
         val totalDrawingDistance = pointsForDrawing.last().distance
-        val totalPolylineDistance = polylinePoints.last().distance
+        val totalUnsmoothedDistance = unsmoothedPoints.last().distance
 
-        if (totalDrawingDistance == 0f || totalPolylineDistance == 0f) {
+        if (totalDrawingDistance == 0f || totalUnsmoothedDistance == 0f) {
             return emptyList()
         }
 
-        for (polylinePoint in polylinePoints) {
-            val distanceRatio = polylinePoint.distance / totalPolylineDistance
+        // For each polyline vertex index, find the corresponding point on the smoothed curve
+        for (polylineIdx in polylineIndices) {
+            if (polylineIdx < 0 || polylineIdx >= unsmoothedPoints.size) continue
+            
+            val polylinePointDistance = unsmoothedPoints[polylineIdx].distance
+            val distanceRatio = polylinePointDistance / totalUnsmoothedDistance
             val targetDrawingDistance = distanceRatio * totalDrawingDistance
 
             // Find the closest point in pointsForDrawing by distance
-            var minDistanceDiff = Float.MAX_VALUE
-            var closestPoint: PointF? = null
-
-            // Find the two points that bracket the target distance
             var found = false
             for (i in 1 until pointsForDrawing.size) {
                 val prevPoint = pointsForDrawing[i - 1]
@@ -85,20 +85,15 @@ class Stroke(
                     val t = if (segmentLength == 0f) 0f else (targetDrawingDistance - prevPoint.distance) / segmentLength
                     val x = prevPoint.point.x + t * (currPoint.point.x - prevPoint.point.x)
                     val y = prevPoint.point.y + t * (currPoint.point.y - prevPoint.point.y)
-                    closestPoint = PointF(x, y)
+                    associatedPoints.add(PointF(x, y))
                     found = true
                     break
                 }
             }
 
             if (!found) {
-                // If not found (e.g., for the very last point due to float precision), take the last point
-                closestPoint = pointsForDrawing.last().point
-            }
-
-
-            closestPoint?.let {
-                associatedPoints.add(it)
+                // If not found, take the last point
+                associatedPoints.add(pointsForDrawing.last().point)
             }
         }
 
@@ -127,8 +122,9 @@ class Stroke(
             regenerateUnsmoothedPointsFromAnalytical()
 
         // Choose the source points based on whether we're in polyline mode
-        val sourcePoints = if (isPolyline && interpolatedPolylinePoints.isNotEmpty()) {
-            interpolatedPolylinePoints
+        val sourcePoints = if (isPolyline && polylineIndices.isNotEmpty()) {
+            // Generate interpolatedPolylinePoints on-the-fly from unsmoothedPoints + polylineIndices
+            generateInterpolatedPolylinePoints()
         } else {
             unsmoothedPoints
         }
@@ -172,7 +168,7 @@ class Stroke(
 
 
     fun togglePolylineRepresentation() {
-        if (polylinePoints.isEmpty()) {
+        if (polylineIndices.isEmpty()) {
             // Cannot toggle if there's no polyline data
             return
         }
@@ -183,25 +179,17 @@ class Stroke(
         if (isPolyline) {
             // Switch to polyline representation
             analyticalShapeType = AnalyticalShapeType.POLYLINE
-            regenerateInterpolatedPolylinePoints()
+            // No need to regenerate - applySmoothing() will generate interpolatedPolylinePoints on-the-fly
         } else {
             // Switch back to original representation
             analyticalShapeType = AnalyticalShapeType.NONE
-            unsmoothedPoints.clear()
-            unsmoothedPoints.addAll(originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
-
-            // Recalculate distances for the restored points
-            val (recalculatedPoints, newTotalDistance) = calculatePathPointsWithDistances(unsmoothedPoints.map { it.point })
-            unsmoothedPoints.clear()
-            unsmoothedPoints.addAll(recalculatedPoints)
-            totalDistance = newTotalDistance
-
-            // Clear interpolatedPolylinePoints when switching back to normal mode
+            // unsmoothedPoints stays as-is (it's been edited in place)
+            // Just clear the cached interpolated polyline
             interpolatedPolylinePoints.clear()
-
-            // Re-apply smoothing
-            applySmoothing()
         }
+
+        // Re-apply smoothing to update pointsForDrawing
+        applySmoothing()
     }
     fun forEachStroke(action: (Stroke) -> Unit) {
         if (isGroup) {
@@ -264,8 +252,9 @@ class Stroke(
         this.unsmoothedPoints.clear()
         this.unsmoothedPoints.addAll(other.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
-        this.polylinePoints.clear()
-        this.polylinePoints.addAll(other.polylinePoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        // polylinePoints is deprecated - derived from polylineIndices + unsmoothedPoints
+        // this.polylinePoints.clear()
+        // this.polylinePoints.addAll(...)
 
         this.interpolatedPolylinePoints.clear()
         this.interpolatedPolylinePoints.addAll(other.interpolatedPolylinePoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
@@ -434,6 +423,41 @@ class Stroke(
 
         // Reapply smoothing to update pointsForDrawing
         applySmoothing()
+    }
+
+    /**
+     * Generates interpolated polyline points from unsmoothedPoints using polylineIndices.
+     * This creates a piece-wise linear representation of the curve.
+     * Returns a list of points with the same count as originalPoints.
+     */
+    private fun generateInterpolatedPolylinePoints(): List<PathPoint> {
+        if (polylineIndices.isEmpty() || unsmoothedPoints.isEmpty()) {
+            return unsmoothedPoints
+        }
+
+        // Extract the polyline vertices from unsmoothedPoints using polylineIndices
+        val polylineVertices = polylineIndices.mapNotNull { idx ->
+            if (idx >= 0 && idx < unsmoothedPoints.size) {
+                unsmoothedPoints[idx].point
+            } else null
+        }
+
+        if (polylineVertices.size < 2) {
+            return unsmoothedPoints
+        }
+
+        // Interpolate along the polyline to get the same point count as originalPoints
+        val targetPointCount = originalPoints.size.coerceAtLeast(2)
+        val interpolatedPoints = interpolateAlongPolyLine(polylineVertices, targetPointCount)
+        
+        // Convert to PathPoints with calculated distances
+        val (pathPoints, _) = calculatePathPointsWithDistances(interpolatedPoints)
+        
+        // Cache in interpolatedPolylinePoints for potential later use
+        interpolatedPolylinePoints.clear()
+        interpolatedPolylinePoints.addAll(pathPoints)
+        
+        return pathPoints
     }
 
     /**
