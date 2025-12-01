@@ -873,18 +873,8 @@ class DrawingView @JvmOverloads constructor(
             stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             stroke.totalDistance = newTotalDistance
 
-            // Update polylinePoints to match the new positions of the vertices in unsmoothedPoints
-            stroke.polylinePoints.clear()
-            val polylineVertices = stroke.polylineIndices.mapNotNull { idx ->
-                if (idx >= 0 && idx < stroke.unsmoothedPoints.size) {
-                    PointF(stroke.unsmoothedPoints[idx].point.x, stroke.unsmoothedPoints[idx].point.y)
-                } else null
-            }
-
-            if (polylineVertices.isNotEmpty()) {
-                val (polylinePathPoints, _) = Stroke.calculatePathPointsWithDistances(polylineVertices)
-                stroke.polylinePoints.addAll(polylinePathPoints)
-            }
+            // polylinePoints will be derived from unsmoothedPoints[polylineIndices[i]]
+            // No need to update polylinePoints separately
 
             // Update interpolatedPolylinePoints to match unsmoothedPoints
             stroke.interpolatedPolylinePoints.clear()
