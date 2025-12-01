@@ -24,6 +24,7 @@ class Stroke(
     val shapeParameterPoints: MutableList<PathPoint> = mutableListOf() // Shape parameter points (for SQUARE, CIRCLE, POLYNOMIAL)
     val interpolatedPolylinePoints: MutableList<PathPoint> = mutableListOf() // Interpolated polyline points (same count as originalPoints)
     val polylineIndices: MutableList<Int> = mutableListOf() // Indices of the original points that correspond to the polyline vertices
+    val distancesForWeights: MutableList<Float> = mutableListOf() // Distances along path at stroke finalization, used for weight calculation during editing
     var totalDistance: Float = 0f
     var isModified: Boolean = false
     val childStrokes: MutableList<Stroke> = mutableListOf()
@@ -41,6 +42,10 @@ class Stroke(
         this.originalPoints.addAll(incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
         this.unsmoothedPoints.addAll(incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
         this.totalDistance = totalDistance // This totalDistance is based on incomingPoints
+        
+        // Capture distances for weight calculations
+        this.distancesForWeights.addAll(incomingPoints.map { it.distance })
+        
         applySmoothing() // Apply smoothing to generate 'points' from 'unsmoothedPoints'
     }
 
@@ -207,6 +212,9 @@ class Stroke(
 
         this.polylineIndices.clear()
         this.polylineIndices.addAll(other.polylineIndices)
+
+        this.distancesForWeights.clear()
+        this.distancesForWeights.addAll(other.distancesForWeights)
 
         this.totalDistance = other.totalDistance
 
