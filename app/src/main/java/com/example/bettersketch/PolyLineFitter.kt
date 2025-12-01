@@ -384,6 +384,7 @@ class PolyLineFitter {
 
             // Now regenerate interpolatedPolylinePoints from the vertices in unsmoothedPoints
             stroke.regenerateInterpolatedPolylinePoints()
+            stroke.applySmoothing()
 
             return stroke
         }

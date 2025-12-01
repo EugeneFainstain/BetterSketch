@@ -839,6 +839,7 @@ class DrawingView @JvmOverloads constructor(
             // For strokes with polylineIndices: updates interpolatedPolylinePoints from vertices
             // For strokes without polylineIndices: just calls applySmoothing
             stroke.regenerateInterpolatedPolylinePoints()
+            stroke.applySmoothing()
 
             // Update editingPointIndex to track the moved vertex (for polyline strokes)
             if (editingAnalyticalPointIndex >= 0 && editingAnalyticalPointIndex < stroke.polylineIndices.size) {

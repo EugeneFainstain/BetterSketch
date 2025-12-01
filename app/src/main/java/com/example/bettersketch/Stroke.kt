@@ -135,13 +135,8 @@ class Stroke(
         renderAsPolyline = !renderAsPolyline
         isModified = true
 
-        if (renderAsPolyline) {
-            // Switch to polyline rendering
-            regenerateInterpolatedPolylinePoints()
-        } else {
-            // Switch back to smooth rendering
-            applySmoothing()
-        }
+        regenerateInterpolatedPolylinePoints()
+        applySmoothing()
     }
     fun forEachStroke(action: (Stroke) -> Unit) {
         if (isGroup) {
@@ -349,39 +344,33 @@ class Stroke(
 
     fun regenerateInterpolatedPolylinePoints() {
         // Try to regenerate interpolatedPolylinePoints, or skip if conditions aren't met
-        run {
-            // Early exit conditions - if any fail, skip to applySmoothing
-            if (polylineIndices.isEmpty() || unsmoothedPoints.isEmpty()) return@run
-            
-            val pointCount = originalPoints.size
-            if (pointCount < 2) return@run
+        // Early exit conditions - if any fail, skip to applySmoothing
+        if (polylineIndices.isEmpty() || unsmoothedPoints.isEmpty()) return
 
-            // Extract vertices from unsmoothedPoints using polylineIndices
-            val vertices = polylineIndices.mapNotNull { index ->
-                if (index >= 0 && index < unsmoothedPoints.size) {
-                    unsmoothedPoints[index].point
-                } else {
-                    null
-                }
+        val pointCount = originalPoints.size
+        if (pointCount < 2) return
+
+        // Extract vertices from unsmoothedPoints using polylineIndices
+        val vertices = polylineIndices.mapNotNull { index ->
+            if (index >= 0 && index < unsmoothedPoints.size) {
+                unsmoothedPoints[index].point
+            } else {
+                null
             }
-            
-            if (vertices.isEmpty()) return@run
-
-            // Interpolate along the polyline vertices with vertices placed at their specific indices
-            val interpolatedPoints = interpolateAlongPolyLineWithIndices(
-                vertices,
-                polylineIndices
-            )
-
-            // Update interpolatedPolylinePoints
-            val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
-            interpolatedPolylinePoints.clear()
-            interpolatedPolylinePoints.addAll(pathPoints)
         }
 
-        // Always apply smoothing at the end
-        // applySmoothing() will choose between interpolatedPolylinePoints and unsmoothedPoints based on renderAsPolyline flag
-        applySmoothing()
+        if (vertices.isEmpty()) return
+
+        // Interpolate along the polyline vertices with vertices placed at their specific indices
+        val interpolatedPoints = interpolateAlongPolyLineWithIndices(
+            vertices,
+            polylineIndices
+        )
+
+        // Update interpolatedPolylinePoints
+        val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
+        interpolatedPolylinePoints.clear()
+        interpolatedPolylinePoints.addAll(pathPoints)
     }
 
     /**
