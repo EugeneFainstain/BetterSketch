@@ -444,33 +444,25 @@ class DrawingView @JvmOverloads constructor(
         } else {
             selectedEnd = SelectedEnd.MIDDLE
 
-            // NEW APPROACH: Find closest polyline vertex along the curve using distancesForWeights
+            // NEW APPROACH: Find closest polyline anchor in pointsForDrawing
             if (stroke.polylineIndices.isNotEmpty() && stroke.polylineIndices.size >= 2 && 
-                stroke.distancesForWeights.isNotEmpty() && stroke.unsmoothedPoints.size == stroke.distancesForWeights.size) {
+                stroke.distancesForWeights.isNotEmpty() && stroke.pointsForDrawing.isNotEmpty()) {
                 
-                // Map the closest drawing point to original distances using distancesForWeights
+                // Find which polyline anchor (vertex) in pointsForDrawing is closest to the tap
                 val closestDrawingDistance = stroke.pointsForDrawing[closestPointIndex].distance
-                val totalDrawingDistance = stroke.pointsForDrawing.last().distance
-                val originalTotalDistance = stroke.distancesForWeights.lastOrNull() ?: 0f
-
-                // Find corresponding original distance
-                val targetOriginalDistance = if (totalDrawingDistance > 0f) {
-                    (closestDrawingDistance / totalDrawingDistance) * originalTotalDistance
-                } else {
-                    0f
-                }
-
-                // Find closest polyline vertex by looking at polylineIndices
+                
                 var closestPolylineIdxInArray = 0
-                var minDistToPolylineVertex = Float.MAX_VALUE
+                var minDistToAnchor = Float.MAX_VALUE
 
                 for (i in stroke.polylineIndices.indices) {
-                    val vertexIndexInOriginal = stroke.polylineIndices[i]
-                    if (vertexIndexInOriginal >= 0 && vertexIndexInOriginal < stroke.distancesForWeights.size) {
-                        val vertexDistance = stroke.distancesForWeights[vertexIndexInOriginal]
-                        val distDiff = abs(vertexDistance - targetOriginalDistance)
-                        if (distDiff < minDistToPolylineVertex) {
-                            minDistToPolylineVertex = distDiff
+                    val anchorIndexInOriginal = stroke.polylineIndices[i]
+                    
+                    // The anchor should be at the same index in pointsForDrawing (after smoothing preserves count)
+                    if (anchorIndexInOriginal >= 0 && anchorIndexInOriginal < stroke.pointsForDrawing.size) {
+                        val anchorDistance = stroke.pointsForDrawing[anchorIndexInOriginal].distance
+                        val distDiff = abs(anchorDistance - closestDrawingDistance)
+                        if (distDiff < minDistToAnchor) {
+                            minDistToAnchor = distDiff
                             closestPolylineIdxInArray = i
                         }
                     }
