@@ -714,7 +714,7 @@ class DrawingView @JvmOverloads constructor(
         stroke.analyticalShapeType = AnalyticalShapeType.NONE
         stroke.isPolyline = false
         stroke.needsToRegenerate = false
-        stroke.polylinePoints.clear()
+        stroke.polylineIndices.clear()
         
         // Restore from originalPoints
         stroke.unsmoothedPoints.clear()
