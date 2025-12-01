@@ -1,10 +1,8 @@
 package com.example.bettersketch
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
-import android.util.Log
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
@@ -307,8 +305,8 @@ class DrawingView @JvmOverloads constructor(
         // Get the polyline fit - use the ORIGINAL stroke, not the uniformly sampled one
         val polylineFitResult = ShapeFitter.polylineFit(stroke, stroke)
 
-        // Update the original stroke's polylineIndices if isPolyline is false
-        if (polylineFitResult != null && !stroke.isPolyline) {
+        // Update the original stroke's polylineIndices if renderAsPolyline is false
+        if (polylineFitResult != null && !stroke.renderAsPolyline) {
             stroke.polylineIndices.clear()
             stroke.polylineIndices.addAll(polylineFitResult.fittedStroke.polylineIndices)
         }
@@ -416,7 +414,7 @@ class DrawingView @JvmOverloads constructor(
         val stroke = currentStroke ?: return false
         if (stroke.isGroup) return false
 
-        if (stroke.isPolyline)
+        if (stroke.renderAsPolyline)
             return selectEndpointOfCurrentAnalyticalStroke(tapPoint)
 
         var closestDist = Float.MAX_VALUE
@@ -671,7 +669,7 @@ class DrawingView @JvmOverloads constructor(
             // Check if we should revert instead of delete
             if (highlightedStrokes.size == 1) {
                 val stroke = highlightedStrokes.first()
-                if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.isPolyline) {
+                if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.renderAsPolyline) {
                     // Revert the fitted/approximated stroke to original
                     revertStrokeToOriginal(stroke)
                     redrawHistory()
@@ -684,7 +682,7 @@ class DrawingView @JvmOverloads constructor(
         } else if (selectedStrokeIdx != -1) {
             val stroke = strokes[selectedStrokeIdx]
             // Check if the selected stroke is fitted/approximated
-            if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.isPolyline) {
+            if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.renderAsPolyline) {
                 // Revert the fitted/approximated stroke to original
                 revertStrokeToOriginal(stroke)
                 redrawHistory()
@@ -710,7 +708,7 @@ class DrawingView @JvmOverloads constructor(
     private fun revertStrokeToOriginal(stroke: Stroke) {
         // Reset analytical shape properties
         stroke.analyticalShapeType = AnalyticalShapeType.NONE
-        stroke.isPolyline = false
+        stroke.renderAsPolyline = false
         stroke.needsToRegenerate = false
         stroke.polylineIndices.clear()
         stroke.shapeParameterPoints.clear()

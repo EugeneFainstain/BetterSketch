@@ -3,7 +3,6 @@ package com.example.bettersketch
 import android.graphics.Paint
 import android.graphics.PointF
 import android.graphics.RectF
-import kotlin.math.abs
 import kotlin.math.sqrt
 
 data class PathPoint(var point: PointF, var distance: Float)
@@ -33,7 +32,7 @@ class Stroke(
     var isHighlighted: Boolean = false
 
     var analyticalShapeType: AnalyticalShapeType = AnalyticalShapeType.NONE // Type of analytical shape
-    var isPolyline: Boolean = false // Flag to indicate that the curve has been approximated by a polyline
+    var renderAsPolyline: Boolean = false // Flag to indicate that the curve has been approximated by a polyline
     var needsToRegenerate: Boolean = false // Flag to regenerate unsmoothedPoints from analytical
 
 
@@ -84,7 +83,7 @@ class Stroke(
             regenerateUnsmoothedPointsFromAnalytical()
 
         // Choose the source points based on whether we're in polyline mode
-        val sourcePoints = if (isPolyline && interpolatedPolylinePoints.isNotEmpty()) {
+        val sourcePoints = if (renderAsPolyline && interpolatedPolylinePoints.isNotEmpty()) {
             interpolatedPolylinePoints
         } else {
             unsmoothedPoints
@@ -134,10 +133,10 @@ class Stroke(
             return
         }
 
-        isPolyline = !isPolyline
+        renderAsPolyline = !renderAsPolyline
         isModified = true
 
-        if (isPolyline) {
+        if (renderAsPolyline) {
             // Switch to polyline representation
             analyticalShapeType = AnalyticalShapeType.POLYLINE
             regenerateInterpolatedPolylinePoints()
@@ -203,7 +202,7 @@ class Stroke(
         this.paint.set(other.paint)
         this.smoothness = other.smoothness
         this.analyticalShapeType = other.analyticalShapeType
-        this.isPolyline = other.isPolyline
+        this.renderAsPolyline = other.renderAsPolyline
         this.pointsForDrawing.clear()
         this.pointsForDrawing.addAll(other.pointsForDrawing.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
@@ -386,7 +385,7 @@ class Stroke(
         }
 
         // Always apply smoothing at the end
-        // applySmoothing() will choose between interpolatedPolylinePoints and unsmoothedPoints based on isPolyline flag
+        // applySmoothing() will choose between interpolatedPolylinePoints and unsmoothedPoints based on renderAsPolyline flag
         applySmoothing()
     }
 

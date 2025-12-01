@@ -367,7 +367,7 @@ class PolyLineFitter {
         ): Stroke {
             val stroke = Stroke(paint, 0)
             stroke.analyticalShapeType = AnalyticalShapeType.POLYLINE
-            stroke.isPolyline = true
+            stroke.renderAsPolyline = true
 
             // Store the vertex indices
             stroke.polylineIndices.addAll(indices)
