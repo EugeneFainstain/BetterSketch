@@ -169,7 +169,8 @@ class Stroke(
         this.pointsForDrawing.addAll(finalPoints)
         this.totalDistance = newTotalDistance // Update totalDistance based on smoothed points
     }
-    
+
+
     fun togglePolylineRepresentation() {
         if (polylinePoints.isEmpty()) {
             // Cannot toggle if there's no polyline data
@@ -182,7 +183,7 @@ class Stroke(
         if (isPolyline) {
             // Switch to polyline representation
             analyticalShapeType = AnalyticalShapeType.POLYLINE
-            regenerateUnsmoothedPointsFromAnalytical()
+            regenerateInterpolatedPolylinePoints()
         } else {
             // Switch back to original representation
             analyticalShapeType = AnalyticalShapeType.NONE
@@ -195,11 +196,13 @@ class Stroke(
             unsmoothedPoints.addAll(recalculatedPoints)
             totalDistance = newTotalDistance
 
+            // Clear interpolatedPolylinePoints when switching back to normal mode
+            interpolatedPolylinePoints.clear()
+
             // Re-apply smoothing
             applySmoothing()
         }
     }
-
     fun forEachStroke(action: (Stroke) -> Unit) {
         if (isGroup) {
             childStrokes.forEach { it.forEachStroke(action) }
@@ -360,46 +363,30 @@ class Stroke(
     }
 
     /**
-     * Regenerates unsmoothedPoints from analytical points based on the analytical shape type.
-     * This is useful after transformations to ensure the unsmoothed points accurately
-     * represent the analytical shape geometry.
-     *
-     * @param targetPointCount The desired number of interpolated points
+     * Regenerates unsmoothedPoints from analytical shape points (for SQUARE, CIRCLE, POLYNOMIAL).
+     * This interpolates the analytical shape to match the original point count.
      */
-    fun regenerateUnsmoothedPointsFromAnalytical() {
-
+    fun regenerateUnsmoothedPointsFromAnalyticalShape() {
         needsToRegenerate = false
-
-        if (!isPolyline) return
 
         val pointCount = originalPoints.size
         if (pointCount < 2) return
 
-        val interpolatedPoints = mutableListOf<PointF>()
-
-        when (analyticalShapeType) {
+        val interpolatedPoints = when (analyticalShapeType) {
             AnalyticalShapeType.SQUARE -> {
                 // For squares: polylinePoints contains the 4 corners (+ closed point)
-                interpolatedPoints.addAll(interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount))
+                interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount)
             }
             AnalyticalShapeType.CIRCLE -> {
                 // For circles: polylinePoints contains points around the circle perimeter
-                interpolatedPoints.addAll(interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount))
-            }
-            AnalyticalShapeType.POLYLINE -> {
-                // For polylines: polylinePoints are the vertices
-                val result = interpolateAlongPolyLineWithIndices(polylinePoints.map { it.point }, pointCount)
-                interpolatedPoints.addAll(result.first)
-                // Update polylineIndices to match the new unsmoothedPoints
-                polylineIndices.clear()
-                polylineIndices.addAll(result.second)
+                interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount)
             }
             AnalyticalShapeType.POLYNOMIAL -> {
                 // For polynomials: polylinePoints are the curve points
-                interpolatedPoints.addAll(interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount))
+                interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount)
             }
-            AnalyticalShapeType.NONE -> {
-                // No analytical shape, cannot regenerate
+            else -> {
+                // Not an analytical shape (square/circle/polynomial)
                 return
             }
         }
@@ -408,15 +395,66 @@ class Stroke(
         val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
         unsmoothedPoints.clear()
         unsmoothedPoints.addAll(pathPoints)
-        
-        // Also update interpolatedPolylinePoints for polyline mode
-        interpolatedPolylinePoints.clear()
-        interpolatedPolylinePoints.addAll(pathPoints)
-        
         totalDistance = newTotalDistance
 
         // Reapply smoothing to update pointsForDrawing
         applySmoothing()
+    }
+
+    /**
+     * Regenerates interpolatedPolylinePoints from polylinePoints (vertex-only representation).
+     * This creates a piece-wise linear interpolation between vertices.
+     */
+    fun regenerateInterpolatedPolylinePoints() {
+        if (polylinePoints.isEmpty()) return
+
+        val pointCount = originalPoints.size
+        if (pointCount < 2) return
+
+        // Interpolate along the polyline vertices, tracking where vertices end up
+        val result = interpolateAlongPolyLineWithIndices(polylinePoints.map { it.point }, pointCount)
+        val interpolatedPoints = result.first
+        val newPolylineIndices = result.second
+
+        // Update interpolatedPolylinePoints
+        val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
+        interpolatedPolylinePoints.clear()
+        interpolatedPolylinePoints.addAll(pathPoints)
+
+        // Update polylineIndices to match the new interpolated points
+        polylineIndices.clear()
+        polylineIndices.addAll(newPolylineIndices)
+
+        // In polyline mode, also update unsmoothedPoints to match
+        if (isPolyline) {
+            unsmoothedPoints.clear()
+            unsmoothedPoints.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+            totalDistance = newTotalDistance
+        }
+
+        // Reapply smoothing to update pointsForDrawing
+        applySmoothing()
+    }
+
+    /**
+     * Legacy function for backwards compatibility. Routes to appropriate regeneration function.
+     */
+    fun regenerateUnsmoothedPointsFromAnalytical() {
+        needsToRegenerate = false
+
+        when (analyticalShapeType) {
+            AnalyticalShapeType.SQUARE,
+            AnalyticalShapeType.CIRCLE,
+            AnalyticalShapeType.POLYNOMIAL -> {
+                regenerateUnsmoothedPointsFromAnalyticalShape()
+            }
+            AnalyticalShapeType.POLYLINE -> {
+                regenerateInterpolatedPolylinePoints()
+            }
+            AnalyticalShapeType.NONE -> {
+                // Nothing to regenerate
+            }
+        }
     }
 
     /**
