@@ -367,25 +367,26 @@ class Stroke(
      * This creates a piece-wise linear interpolation between vertices.
      */
 
+
     fun regenerateInterpolatedPolylinePoints() {
         if (polylineParameterPoints.isEmpty()) return
 
         val pointCount = originalPoints.size
         if (pointCount < 2) return
 
-        // Interpolate along the polyline vertices, tracking where vertices end up
-        val result = interpolateAlongPolyLineWithIndices(polylineParameterPoints.map { it.point }, pointCount)
-        val interpolatedPoints = result.first
-        val newPolylineIndices = result.second
+        // The polyline vertices should appear at the indices stored in polylineIndices
+        // Interpolate along the polyline vertices with vertices placed at those specific indices
+        val interpolatedPoints = interpolateAlongPolyLineWithIndices(
+            polylineParameterPoints.map { it.point },
+            polylineIndices
+        )
 
         // Update interpolatedPolylinePoints
         val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
         interpolatedPolylinePoints.clear()
         interpolatedPolylinePoints.addAll(pathPoints)
 
-        // Update polylineIndices to match the new interpolated points
-        polylineIndices.clear()
-        polylineIndices.addAll(newPolylineIndices)
+        // polylineIndices stays the same - vertices are already at the correct indices
 
         // In polyline mode, also update unsmoothedPoints to match
         if (isPolyline) {
@@ -419,64 +420,48 @@ class Stroke(
         }
     }
 
+
+
     /**
-     * Helper function to interpolate points along a polyline WITH tracking of vertex indices.
-     * Returns both the interpolated points and the indices where vertices ended up.
-     * Used by regenerateUnsmoothedPointsFromAnalytical for polylines.
+     * Helper function to interpolate points along a polyline WITH vertex placement at specific indices.
+     * Takes vertices and the indices where they should appear in the output.
+     * Returns the interpolated points only.
      */
-    private fun interpolateAlongPolyLineWithIndices(vertices: List<PointF>, targetPointCount: Int): Pair<List<PointF>, List<Int>> {
-        if (vertices.size < 2 || targetPointCount < 2) return Pair(vertices, vertices.indices.toList())
+    private fun interpolateAlongPolyLineWithIndices(vertices: List<PointF>, vertexIndices: List<Int>): List<PointF> {
+        if (vertices.size < 2 || vertexIndices.size < 2) return vertices
 
-        val interpolatedPoints = mutableListOf<PointF>()
-        val vertexIndices = mutableListOf<Int>()
+        // The target point count is determined by the last index + 1
+        val targetPointCount = vertexIndices.last() + 1
+        if (targetPointCount < 2) return vertices
 
-        // Calculate cumulative distances for each vertex
-        val vertexDistances = mutableListOf(0f)
-        var totalDistance = 0f
-        for (i in 1 until vertices.size) {
-            val dx = vertices[i].x - vertices[i - 1].x
-            val dy = vertices[i].y - vertices[i - 1].y
-            totalDistance += sqrt(dx * dx + dy * dy)
-            vertexDistances.add(totalDistance)
+        val interpolatedPoints = MutableList<PointF?>(targetPointCount) { null }
+
+        // Place each vertex at its designated index
+        for (i in vertices.indices) {
+            val index = vertexIndices[i]
+            interpolatedPoints[index] = vertices[i]
         }
 
-        if (totalDistance <= 0f) {
-            // Degenerate case: all vertices are at the same point
-            return Pair(listOf(vertices.first()), listOf(0))
-        }
+        // Fill in the gaps between vertices with linear interpolation
+        for (i in 0 until vertices.size - 1) {
+            val startIdx = vertexIndices[i]
+            val endIdx = vertexIndices[i + 1]
+            val startPoint = vertices[i]
+            val endPoint = vertices[i + 1]
 
-        // Generate uniform spacing points and include vertex points
-        val targetDistances = mutableListOf<Pair<Float, Int?>>() // (distance, vertexIndex if this is a vertex)
-        val spacing = totalDistance / (targetPointCount - 1)
-        
-        // Add uniformly spaced points
-        for (i in 0 until targetPointCount) {
-            targetDistances.add(Pair(i * spacing, null))
-        }
-        
-        // Add all vertex distances with their indices
-        for (i in vertexDistances.indices) {
-            targetDistances.add(Pair(vertexDistances[i], i))
-        }
+            val segmentPointCount = endIdx - startIdx + 1
 
-        // Sort by distance and remove duplicates (keep vertex marker if present)
-        val sortedDistances = targetDistances
-            .groupBy { it.first }
-            .mapValues { entry -> entry.value.firstOrNull { it.second != null } ?: entry.value.first() }
-            .toSortedMap()
-            .values.toList()
-
-        // Interpolate at all target distances and track vertex indices
-        for ((distance, vertexIdx) in sortedDistances) {
-            val point = interpolatePointOnPolyLine(vertices, distance)
-            interpolatedPoints.add(point)
-            
-            if (vertexIdx != null) {
-                vertexIndices.add(interpolatedPoints.size - 1)
+            // Interpolate points between startIdx and endIdx
+            for (j in 0 until segmentPointCount) {
+                val t = j.toFloat() / (segmentPointCount - 1).toFloat()
+                val x = startPoint.x + t * (endPoint.x - startPoint.x)
+                val y = startPoint.y + t * (endPoint.y - startPoint.y)
+                interpolatedPoints[startIdx + j] = PointF(x, y)
             }
         }
 
-        return Pair(interpolatedPoints, vertexIndices)
+        // Return the list, filtering out any nulls (shouldn't be any, but safe)
+        return interpolatedPoints.filterNotNull()
     }
 
     /**
