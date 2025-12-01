@@ -125,13 +125,20 @@ class Stroke(
         if (needsToRegenerate)
             regenerateUnsmoothedPointsFromAnalytical()
 
+        // Choose the source points based on whether we're in polyline mode
+        val sourcePoints = if (isPolyline && polylinePoints.isNotEmpty()) {
+            polylinePoints
+        } else {
+            unsmoothedPoints
+        }
+
         if (this.smoothness == 0) {
             this.pointsForDrawing.clear()
-            this.pointsForDrawing.addAll(this.unsmoothedPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
+            this.pointsForDrawing.addAll(sourcePoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
             return
         }
 
-        var smoothedPoints = this.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
+        var smoothedPoints = sourcePoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
 
         repeat(this.smoothness) {
             if (smoothedPoints.size < 3) return@repeat
@@ -146,7 +153,7 @@ class Stroke(
 
                 val avgX = (prev.x + next.x) / 2f
                 val avgY = (prev.y + next.y) / 2f
-                
+
                 iterationResult.add(PathPoint(PointF(avgX, avgY), current.distance))
             }
 
@@ -161,7 +168,7 @@ class Stroke(
         this.pointsForDrawing.addAll(finalPoints)
         this.totalDistance = newTotalDistance // Update totalDistance based on smoothed points
     }
-
+    
     fun togglePolylineRepresentation() {
         if (polylinePoints.isEmpty()) {
             // Cannot toggle if there's no polyline data
