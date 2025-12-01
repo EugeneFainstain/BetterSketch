@@ -23,7 +23,8 @@ class Stroke(
     val pointsForDrawing: MutableList<PathPoint> = mutableListOf() // Smoothed points for drawing
     val originalPoints: MutableList<PathPoint> = mutableListOf() // Original points for undo/reset
     val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
-    val polylinePoints: MutableList<PathPoint> = mutableListOf() // Analytical polyline points
+    val polylinePoints: MutableList<PathPoint> = mutableListOf() // Polyline vertex points (just the vertices)
+    val interpolatedPolylinePoints: MutableList<PathPoint> = mutableListOf() // Interpolated polyline points (same count as originalPoints)
     val polylineIndices: MutableList<Int> = mutableListOf() // Indices of the original points that correspond to the polyline vertices
     var totalDistance: Float = 0f
     var isModified: Boolean = false
@@ -126,8 +127,8 @@ class Stroke(
             regenerateUnsmoothedPointsFromAnalytical()
 
         // Choose the source points based on whether we're in polyline mode
-        val sourcePoints = if (isPolyline && polylinePoints.isNotEmpty()) {
-            polylinePoints
+        val sourcePoints = if (isPolyline && interpolatedPolylinePoints.isNotEmpty()) {
+            interpolatedPolylinePoints
         } else {
             unsmoothedPoints
         }
@@ -262,6 +263,9 @@ class Stroke(
 
         this.polylinePoints.clear()
         this.polylinePoints.addAll(other.polylinePoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+
+        this.interpolatedPolylinePoints.clear()
+        this.interpolatedPolylinePoints.addAll(other.interpolatedPolylinePoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
         this.polylineIndices.clear()
         this.polylineIndices.addAll(other.polylineIndices)
@@ -404,6 +408,11 @@ class Stroke(
         val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
         unsmoothedPoints.clear()
         unsmoothedPoints.addAll(pathPoints)
+        
+        // Also update interpolatedPolylinePoints for polyline mode
+        interpolatedPolylinePoints.clear()
+        interpolatedPolylinePoints.addAll(pathPoints)
+        
         totalDistance = newTotalDistance
 
         // Reapply smoothing to update pointsForDrawing

@@ -846,6 +846,7 @@ class DrawingView @JvmOverloads constructor(
         stroke.applySmoothing()
     }
 
+
     private fun moveEditingAnalyticalPoint(stroke: Stroke, dx: Float, dy: Float) {
         // Validate indices
         if (editingAnalyticalPointIndex < 0 || editingAnalyticalPointIndex >= stroke.polylineIndices.size) return
@@ -882,6 +883,12 @@ class DrawingView @JvmOverloads constructor(
                 val (polylinePathPoints, _) = Stroke.calculatePathPointsWithDistances(polylineVertices)
                 stroke.polylinePoints.addAll(polylinePathPoints)
             }
+
+            // Update interpolatedPolylinePoints to match unsmoothedPoints
+            stroke.interpolatedPolylinePoints.clear()
+            stroke.interpolatedPolylinePoints.addAll(recalculatedUnsmoothedPoints.map {
+                PathPoint(PointF(it.point.x, it.point.y), it.distance)
+            })
 
             // Apply smoothing to update pointsForDrawing
             stroke.applySmoothing()
