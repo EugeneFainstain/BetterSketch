@@ -372,9 +372,9 @@ class PolyLineFitter {
             stroke.analyticalShapeType = AnalyticalShapeType.POLYLINE
             stroke.isPolyline = true
             
-            // Store the analytical line vertices
+            // Store the analytical line vertices in polylineParameterPoints
             val (analyticalPathPoints, _) = Stroke.calculatePathPointsWithDistances(vertices)
-            stroke.polylinePoints.addAll(analyticalPathPoints)
+            stroke.polylineParameterPoints.addAll(analyticalPathPoints)
             stroke.polylineIndices.addAll(indices)
             
             // Mark that the stroke needs to regenerate unsmoothedPoints from analytical

@@ -23,7 +23,8 @@ class Stroke(
     val pointsForDrawing: MutableList<PathPoint> = mutableListOf() // Smoothed points for drawing
     val originalPoints: MutableList<PathPoint> = mutableListOf() // Original points for undo/reset
     val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
-    val polylinePoints: MutableList<PathPoint> = mutableListOf() // Polyline vertex points (just the vertices)
+    val polylineParameterPoints: MutableList<PathPoint> = mutableListOf() // Polyline vertex points (ONLY for POLYLINE type)
+    val shapeParameterPoints: MutableList<PathPoint> = mutableListOf() // Shape parameter points (for SQUARE, CIRCLE, POLYNOMIAL)
     val interpolatedPolylinePoints: MutableList<PathPoint> = mutableListOf() // Interpolated polyline points (same count as originalPoints)
     val polylineIndices: MutableList<Int> = mutableListOf() // Indices of the original points that correspond to the polyline vertices
     var totalDistance: Float = 0f
@@ -221,8 +222,11 @@ class Stroke(
         this.unsmoothedPoints.clear()
         this.unsmoothedPoints.addAll(other.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
-        this.polylinePoints.clear()
-        this.polylinePoints.addAll(other.polylinePoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+        this.polylineParameterPoints.clear()
+        this.polylineParameterPoints.addAll(other.polylineParameterPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+
+        this.shapeParameterPoints.clear()
+        this.shapeParameterPoints.addAll(other.shapeParameterPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
         this.interpolatedPolylinePoints.clear()
         this.interpolatedPolylinePoints.addAll(other.interpolatedPolylinePoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
@@ -331,16 +335,16 @@ class Stroke(
 
         val interpolatedPoints = when (analyticalShapeType) {
             AnalyticalShapeType.SQUARE -> {
-                // For squares: polylinePoints contains the 4 corners (+ closed point)
-                interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount)
+                // For squares: shapeParameterPoints contains the 4 corners (+ closed point)
+                interpolateAlongPolyLine(shapeParameterPoints.map { it.point }, pointCount)
             }
             AnalyticalShapeType.CIRCLE -> {
-                // For circles: polylinePoints contains points around the circle perimeter
-                interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount)
+                // For circles: shapeParameterPoints contains points around the circle perimeter
+                interpolateAlongPolyLine(shapeParameterPoints.map { it.point }, pointCount)
             }
             AnalyticalShapeType.POLYNOMIAL -> {
-                // For polynomials: polylinePoints are the curve points
-                interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount)
+                // For polynomials: shapeParameterPoints are the curve points
+                interpolateAlongPolyLine(shapeParameterPoints.map { it.point }, pointCount)
             }
             else -> {
                 // Not an analytical shape (square/circle/polynomial)
@@ -362,14 +366,15 @@ class Stroke(
      * Regenerates interpolatedPolylinePoints from polylinePoints (vertex-only representation).
      * This creates a piece-wise linear interpolation between vertices.
      */
+
     fun regenerateInterpolatedPolylinePoints() {
-        if (polylinePoints.isEmpty()) return
+        if (polylineParameterPoints.isEmpty()) return
 
         val pointCount = originalPoints.size
         if (pointCount < 2) return
 
         // Interpolate along the polyline vertices, tracking where vertices end up
-        val result = interpolateAlongPolyLineWithIndices(polylinePoints.map { it.point }, pointCount)
+        val result = interpolateAlongPolyLineWithIndices(polylineParameterPoints.map { it.point }, pointCount)
         val interpolatedPoints = result.first
         val newPolylineIndices = result.second
 

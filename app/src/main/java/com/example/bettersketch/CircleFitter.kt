@@ -81,6 +81,11 @@ object CircleFitter {
         val (pathPoints, totalDistance) = Stroke.calculatePathPointsWithDistances(circlePoints)
         val stroke = Stroke(pathPoints, Paint(paint), totalDistance, 0)
         stroke.analyticalShapeType = AnalyticalShapeType.CIRCLE
+
+        // Store the circle perimeter points in shapeParameterPoints for regeneration
+        stroke.shapeParameterPoints.clear()
+        stroke.shapeParameterPoints.addAll(pathPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+
         return stroke
     }
 }

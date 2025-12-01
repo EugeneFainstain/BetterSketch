@@ -306,15 +306,15 @@ class DrawingView @JvmOverloads constructor(
         
         // Get the polyline fit
         val polylineFitResult = ShapeFitter.polylineFit(stroke, strokeForFitting)
-        
-        // Update the original stroke's polylinePoints and polylineIndices if isPolyline is false
+
+        // Update the original stroke's polylineParameterPoints and polylineIndices if isPolyline is false
         if (polylineFitResult != null && !stroke.isPolyline) {
-            stroke.polylinePoints.clear()
-            stroke.polylinePoints.addAll(polylineFitResult.fittedStroke.polylinePoints)
+            stroke.polylineParameterPoints.clear()
+            stroke.polylineParameterPoints.addAll(polylineFitResult.fittedStroke.polylineParameterPoints)
             stroke.polylineIndices.clear()
             stroke.polylineIndices.addAll(polylineFitResult.fittedStroke.polylineIndices)
         }
-        
+
         // Get the best shape fit
         val shapeFitResult = ShapeFitter.shapeFit(stroke, strokeForFitting)
 
@@ -715,13 +715,15 @@ class DrawingView @JvmOverloads constructor(
         stroke.isPolyline = false
         stroke.needsToRegenerate = false
         stroke.polylineIndices.clear()
-        
+        stroke.polylineParameterPoints.clear()
+        stroke.shapeParameterPoints.clear()
+
         // Restore from originalPoints
         stroke.unsmoothedPoints.clear()
         stroke.unsmoothedPoints.addAll(
             stroke.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }
         )
-        
+
         // Recalculate distances
         val (recalculatedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
             stroke.unsmoothedPoints.map { it.point }
@@ -729,10 +731,10 @@ class DrawingView @JvmOverloads constructor(
         stroke.unsmoothedPoints.clear()
         stroke.unsmoothedPoints.addAll(recalculatedPoints)
         stroke.totalDistance = newTotalDistance
-        
+
         // Reapply smoothing
         stroke.applySmoothing()
-        
+
         // Re-detect shape for the reverted stroke
         detectShape(stroke)
     }
@@ -893,32 +895,6 @@ class DrawingView @JvmOverloads constructor(
         }
     }
     
-    private fun updateHighlightedPointForAnalyticalStroke(stroke: Stroke) {
-        if (editingAnalyticalPointIndex < 0 || editingAnalyticalPointIndex >= stroke.polylinePoints.size) return
-
-        // Find the corresponding unsmoothed point index based on distance ratio
-        val analyticalPointDistance = stroke.polylinePoints[editingAnalyticalPointIndex].distance
-        val analyticalTotalDistance = stroke.polylinePoints.lastOrNull()?.distance ?: 0f
-
-        if (analyticalTotalDistance > 0f) {
-            val distanceRatio = analyticalPointDistance / analyticalTotalDistance
-            val unsmoothedTotalDistance = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
-            val targetUnsmoothedDistance = distanceRatio * unsmoothedTotalDistance
-
-            // Find the closest unsmoothed point to this target distance
-            var minDistanceDiff = Float.MAX_VALUE
-            var closestUnsmoothedIndex = -1
-            stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
-                val diff = kotlin.math.abs(pathPoint.distance - targetUnsmoothedDistance)
-                if (diff < minDistanceDiff) {
-                    minDistanceDiff = diff
-                    closestUnsmoothedIndex = index
-                }
-            }
-            editingPointIndex = closestUnsmoothedIndex
-        }
-    }
-
     fun setStrokeSmoothness(smoothness: Int) {
         currentSmoothness = smoothness
         val selectedStroke = currentStroke

@@ -358,7 +358,7 @@ object SquareFitter {
         //////////////////////////////////////////////////////////////////////////////////////////////////////
         //////////////////////////////////////////////////////////////////////////////////////////////////////
         val (analyticalPathPoints, _) = Stroke.calculatePathPointsWithDistances(squarePoints)
-        stroke.polylinePoints.addAll(analyticalPathPoints)
+        stroke.shapeParameterPoints.addAll(analyticalPathPoints)
         
         // Mark that the stroke needs to regenerate unsmoothedPoints from analytical
         stroke.needsToRegenerate = true
