@@ -53,56 +53,13 @@ class Stroke(
     }
 
     fun getAssociatedPolylinePointsOnSmoothedCurve(): List<PointF> {
-        if (polylinePoints.isEmpty() || pointsForDrawing.isEmpty()) {
+        if (polylineIndices.isEmpty() || pointsForDrawing.isEmpty()) {
             return emptyList()
         }
 
-        val associatedPoints = mutableListOf<PointF>()
-        val totalDrawingDistance = pointsForDrawing.last().distance
-        val totalPolylineDistance = polylinePoints.last().distance
-
-        if (totalDrawingDistance == 0f || totalPolylineDistance == 0f) {
-            return emptyList()
+        return polylineIndices.mapNotNull { index ->
+            pointsForDrawing.getOrNull(index)?.point
         }
-
-        for (polylinePoint in polylinePoints) {
-            val distanceRatio = polylinePoint.distance / totalPolylineDistance
-            val targetDrawingDistance = distanceRatio * totalDrawingDistance
-
-            // Find the closest point in pointsForDrawing by distance
-            var minDistanceDiff = Float.MAX_VALUE
-            var closestPoint: PointF? = null
-
-            // Find the two points that bracket the target distance
-            var found = false
-            for (i in 1 until pointsForDrawing.size) {
-                val prevPoint = pointsForDrawing[i - 1]
-                val currPoint = pointsForDrawing[i]
-
-                if (targetDrawingDistance >= prevPoint.distance && targetDrawingDistance <= currPoint.distance) {
-                    // Interpolate between prevPoint and currPoint
-                    val segmentLength = currPoint.distance - prevPoint.distance
-                    val t = if (segmentLength == 0f) 0f else (targetDrawingDistance - prevPoint.distance) / segmentLength
-                    val x = prevPoint.point.x + t * (currPoint.point.x - prevPoint.point.x)
-                    val y = prevPoint.point.y + t * (currPoint.point.y - prevPoint.point.y)
-                    closestPoint = PointF(x, y)
-                    found = true
-                    break
-                }
-            }
-
-            if (!found) {
-                // If not found (e.g., for the very last point due to float precision), take the last point
-                closestPoint = pointsForDrawing.last().point
-            }
-
-
-            closestPoint?.let {
-                associatedPoints.add(it)
-            }
-        }
-
-        return associatedPoints
     }
 
     fun addPoint(newPoint: PointF) {
