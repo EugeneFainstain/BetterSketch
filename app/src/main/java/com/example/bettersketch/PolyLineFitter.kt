@@ -131,7 +131,7 @@ class PolyLineFitter {
 
         /**
          * Average corresponding breakpoint pairs from forward and backward passes.
-         * Returns both the averaged indices and averaged coordinates.
+         * Returns the averaged indices of actual points in the original curve.
          */
         private fun averageBreakpoints(
             forward: List<Int>,
@@ -142,7 +142,6 @@ class PolyLineFitter {
 
             val backwardReversed = backward.reversed()
             val averagedIndices = mutableListOf<Int>()
-            val averagedCoords = mutableListOf<PointF>()
             val n = points.size
 
             for (i in forward.indices) {
@@ -150,16 +149,13 @@ class PolyLineFitter {
                 val backwardIdx = n - 1 - backwardReversed[i]
                 val avgIdx = (forward[i] + backwardIdx) / 2
                 averagedIndices.add(avgIdx)
-
-                // Average coordinates for line fitting
-                val forwardPoint = points[forward[i]]
-                val backwardPoint = points[backwardIdx]
-                val avgX = (forwardPoint.x + backwardPoint.x) / 2f
-                val avgY = (forwardPoint.y + backwardPoint.y) / 2f
-                averagedCoords.add(PointF(avgX, avgY))
             }
 
-            return Pair(averagedIndices.distinct().sorted(), averagedCoords)
+            // Return distinct, sorted indices and the actual points at those indices
+            val finalIndices = averagedIndices.distinct().sorted()
+            val actualPoints = finalIndices.map { points[it] }
+            
+            return Pair(finalIndices, actualPoints)
         }
 
         /**
