@@ -219,14 +219,14 @@ class DrawingView @JvmOverloads constructor(
             s.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             s.totalDistance = newTotalDistance
 
-            s.polylinePoints.forEach { pathPoint ->
+            s.interpolatedPolylinePoints.forEach { pathPoint ->
                 val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
                 matrix.mapPoints(point)
                 pathPoint.point.set(point[0], point[1])
             }
-            val (recalculatedAnalyticalPoints, _) = Stroke.calculatePathPointsWithDistances(s.polylinePoints.map { it.point })
-            s.polylinePoints.clear()
-            s.polylinePoints.addAll(recalculatedAnalyticalPoints)
+            val (recalculatedInterpolatedPolylinePoints, _) = Stroke.calculatePathPointsWithDistances(s.interpolatedPolylinePoints.map { it.point })
+            s.interpolatedPolylinePoints.clear()
+            s.interpolatedPolylinePoints.addAll(recalculatedInterpolatedPolylinePoints)
 
             s.applySmoothing()
         }
