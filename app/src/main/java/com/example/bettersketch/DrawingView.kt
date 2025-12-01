@@ -811,57 +811,25 @@ class DrawingView @JvmOverloads constructor(
     private fun moveEditingPoint(dx: Float, dy: Float) {
         currentStroke?.isModified = true
         currentStroke?.let { stroke ->
-            // If this is an analytical stroke, move the analytical point
-            if (stroke.isPolyline && editingAnalyticalPointIndex != -1) {
-                moveEditingAnalyticalPoint(stroke, dx, dy)
-            } else {
-                moveEditingNormalPoint(stroke, dx, dy)
-            }
-            redrawHistory()
-        }
-    }
-
-    private fun moveEditingNormalPoint(stroke: Stroke, dx: Float, dy: Float) {
-        // Original weight-based editing for non-analytical strokes
-        val weights = editingPointInitialWeights
-        if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
-            stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
-                pathPoint.point.offset(dx * weights[index], dy * weights[index])
-            }
-        } else {
-            val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
-            if (totalDistanceOfUnsmoothed == 0f) return
-
-            stroke.unsmoothedPoints.forEach { pathPoint ->
-                val weight = if (selectedEnd == SelectedEnd.START) {
-                    1.0f - (pathPoint.distance / totalDistanceOfUnsmoothed)
-                } else {
-                    pathPoint.distance / totalDistanceOfUnsmoothed
+            // Apply weighted transformation to unsmoothedPoints
+            val weights = editingPointInitialWeights
+            if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
+                stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
+                    pathPoint.point.offset(dx * weights[index], dy * weights[index])
                 }
-                pathPoint.point.offset(dx * weight, dy * weight)
-            }
-        }
+            } else {
+                // Fallback weight calculation for start/end editing
+                val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
+                if (totalDistanceOfUnsmoothed == 0f) return
 
-        val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(stroke.unsmoothedPoints.map { p -> p.point })
-        stroke.unsmoothedPoints.clear()
-        stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-        stroke.totalDistance = newTotalDistance
-
-        stroke.applySmoothing()
-    }
-
-
-    private fun moveEditingAnalyticalPoint(stroke: Stroke, dx: Float, dy: Float) {
-        // Validate indices
-        if (editingAnalyticalPointIndex < 0 || editingAnalyticalPointIndex >= stroke.polylineIndices.size) return
-        if (stroke.polylineIndices.isEmpty() || stroke.polylineParameterPoints.isEmpty()) return
-
-        // Apply weighted transformation to polylineParameterPoints (the actual vertices)
-        val weights = editingPointInitialWeights
-        if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
-            // First, update unsmoothedPoints to calculate the new vertex positions
-            stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
-                pathPoint.point.offset(dx * weights[index], dy * weights[index])
+                stroke.unsmoothedPoints.forEach { pathPoint ->
+                    val weight = if (selectedEnd == SelectedEnd.START) {
+                        1.0f - (pathPoint.distance / totalDistanceOfUnsmoothed)
+                    } else {
+                        pathPoint.distance / totalDistanceOfUnsmoothed
+                    }
+                    pathPoint.point.offset(dx * weight, dy * weight)
+                }
             }
 
             // Recalculate distances for unsmoothed points
@@ -872,23 +840,31 @@ class DrawingView @JvmOverloads constructor(
             stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             stroke.totalDistance = newTotalDistance
 
-            // Update polylineParameterPoints by extracting vertices from the updated unsmoothedPoints
-            stroke.polylineParameterPoints.clear()
-            val updatedVertices = stroke.polylineIndices.map { index ->
-                val idx = index.coerceIn(0, stroke.unsmoothedPoints.size - 1)
-                stroke.unsmoothedPoints[idx].point
+            // If this is a polyline stroke, update polyline data structures
+            if (stroke.isPolyline && stroke.polylineIndices.isNotEmpty() && stroke.polylineParameterPoints.isNotEmpty()) {
+                // Update polylineParameterPoints by extracting vertices from the updated unsmoothedPoints
+                stroke.polylineParameterPoints.clear()
+                val updatedVertices = stroke.polylineIndices.map { index ->
+                    val idx = index.coerceIn(0, stroke.unsmoothedPoints.size - 1)
+                    stroke.unsmoothedPoints[idx].point
+                }
+                val (updatedPolylinePoints, _) = Stroke.calculatePathPointsWithDistances(updatedVertices)
+                stroke.polylineParameterPoints.addAll(updatedPolylinePoints)
+
+                // Regenerate interpolatedPolylinePoints from the updated polylineParameterPoints
+                stroke.regenerateInterpolatedPolylinePoints()
+
+                // Update editingPointIndex to track the moved vertex
+                if (editingAnalyticalPointIndex >= 0 && editingAnalyticalPointIndex < stroke.polylineIndices.size) {
+                    val newUnsmoothedIdx = stroke.polylineIndices[editingAnalyticalPointIndex].coerceIn(0, stroke.unsmoothedPoints.size - 1)
+                    editingPointIndex = newUnsmoothedIdx
+                }
+            } else {
+                // For non-polyline strokes, just apply smoothing directly
+                stroke.applySmoothing()
             }
-            val (updatedPolylinePoints, _) = Stroke.calculatePathPointsWithDistances(updatedVertices)
-            stroke.polylineParameterPoints.addAll(updatedPolylinePoints)
 
-            // Regenerate interpolatedPolylinePoints from the updated polylineParameterPoints
-            stroke.regenerateInterpolatedPolylinePoints()
-        }
-
-        // Update editingPointIndex to track the moved vertex
-        if (editingAnalyticalPointIndex < stroke.polylineIndices.size) {
-            val newUnsmoothedIdx = stroke.polylineIndices[editingAnalyticalPointIndex].coerceIn(0, stroke.unsmoothedPoints.size - 1)
-            editingPointIndex = newUnsmoothedIdx
+            redrawHistory()
         }
     }
     
