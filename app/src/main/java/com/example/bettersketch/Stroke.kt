@@ -129,7 +129,7 @@ class Stroke(
 
 
     fun togglePolylineRepresentation() {
-        if (polylinePoints.isEmpty()) {
+        if (polylineIndices.isEmpty()) {
             // Cannot toggle if there's no polyline data
             return
         }
