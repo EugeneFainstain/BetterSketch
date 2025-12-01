@@ -837,19 +837,15 @@ class DrawingView @JvmOverloads constructor(
             stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
             stroke.totalDistance = newTotalDistance
 
-            // If this is a polyline stroke, regenerate the interpolated polyline points
-            // from the updated vertices in unsmoothedPoints
-            if (stroke.isPolyline && stroke.polylineIndices.isNotEmpty()) {
-                stroke.regenerateInterpolatedPolylinePoints()
+            // Always regenerate interpolatedPolylinePoints (and call applySmoothing internally)
+            // For strokes with polylineIndices: updates interpolatedPolylinePoints from vertices
+            // For strokes without polylineIndices: just calls applySmoothing
+            stroke.regenerateInterpolatedPolylinePoints()
 
-                // Update editingPointIndex to track the moved vertex
-                if (editingAnalyticalPointIndex >= 0 && editingAnalyticalPointIndex < stroke.polylineIndices.size) {
-                    val newUnsmoothedIdx = stroke.polylineIndices[editingAnalyticalPointIndex].coerceIn(0, stroke.unsmoothedPoints.size - 1)
-                    editingPointIndex = newUnsmoothedIdx
-                }
-            } else {
-                // For non-polyline strokes, just apply smoothing
-                stroke.applySmoothing()
+            // Update editingPointIndex to track the moved vertex (for polyline strokes)
+            if (editingAnalyticalPointIndex >= 0 && editingAnalyticalPointIndex < stroke.polylineIndices.size) {
+                val newUnsmoothedIdx = stroke.polylineIndices[editingAnalyticalPointIndex].coerceIn(0, stroke.unsmoothedPoints.size - 1)
+                editingPointIndex = newUnsmoothedIdx
             }
 
             redrawHistory()
