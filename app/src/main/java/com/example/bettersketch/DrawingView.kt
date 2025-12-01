@@ -100,7 +100,7 @@ class DrawingView @JvmOverloads constructor(
 
     // Public properties
     val isStrokeSelected: Boolean get() = selectedStrokeIdx != -1
-    private val currentStroke: Stroke? get() = strokes.getOrNull(selectedStrokeIdx)
+    public val currentStroke: Stroke? get() = strokes.getOrNull(selectedStrokeIdx)
 
     fun isEditing(): Boolean {
         return currentState == State.CHOSEN_STROKE_IN_NORMAL_MODE || currentState == State.STROKE_EDITING
@@ -108,6 +108,10 @@ class DrawingView @JvmOverloads constructor(
 
     fun isCurrentStrokeModified(): Boolean {
         return currentStroke?.isModified ?: false
+    }
+
+    fun currentStrokeHasPolylineData(): Boolean {
+        return currentStroke?.polylineIndices?.isNotEmpty() ?: false
     }
 
     fun exitEditingMode() {
@@ -296,14 +300,22 @@ class DrawingView @JvmOverloads constructor(
         }
 
         val strokeForFitting = stroke.generateUniformSampled(256)
-        
-        // Get the polyline fit - use the ORIGINAL stroke, not the uniformly sampled one
-        val polylineFitResult = ShapeFitter.polylineFit(stroke, stroke)
 
-        // Update the original stroke's polylineIndices if renderAsPolyline is false
-        if (polylineFitResult != null && !stroke.renderAsPolyline) {
-            stroke.polylineIndices.clear()
-            stroke.polylineIndices.addAll(polylineFitResult.fittedStroke.polylineIndices)
+        // Only compute polyline fit if the stroke doesn't already have polyline indices
+        val polylineFitResult = if (stroke.polylineIndices.isEmpty()) {
+            // Get the polyline fit - use the ORIGINAL stroke, not the uniformly sampled one
+            val result = ShapeFitter.polylineFit(stroke, stroke)
+
+            // Update the original stroke's polylineIndices if renderAsPolyline is false
+            if (result != null && !stroke.renderAsPolyline) {
+                stroke.polylineIndices.clear()
+                stroke.polylineIndices.addAll(result.fittedStroke.polylineIndices)
+            }
+
+            result
+        } else {
+            // Stroke already has polyline data, don't recompute
+            null
         }
 
         // Get the best shape fit - use the uniformly sampled stroke for better fitting

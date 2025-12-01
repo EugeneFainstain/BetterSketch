@@ -216,9 +216,17 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         // Show UnGroup button if exactly 1 stroke is highlighted AND that stroke IS a group
         btnUnGroupStrokes.visibility = if (highlightedStrokeCount == 1 && isCurrentStrokeGroup) View.VISIBLE else View.GONE
 
+        // Show polyline button if exactly 1 non-group stroke is highlighted and it has polyline data
+        if (highlightedStrokeCount == 1 && !isCurrentStrokeGroup && drawingView.currentStrokeHasPolylineData()) {
+            val polylineCount = drawingView.currentStroke?.polylineIndices?.size ?: 0
+            btnPolyline.text = "PolyLine($polylineCount)"
+            btnPolyline.visibility = View.VISIBLE
+        } else {
+            btnPolyline.visibility = View.GONE
+        }
+
         if (highlightedStrokeCount != 1) {
             btnShape.visibility = View.GONE
-            btnPolyline.visibility = View.GONE
         }
 
         // Show DEL button if:
