@@ -40,7 +40,7 @@ class PolyLineFitter {
                 }
 
                 // Step 3: Average corresponding breakpoints
-                val (averagedIndices, _) = averageBreakpoints(
+                val averagedIndices = averageBreakpoints(
                     forwardBreakpoints,
                     backwardBreakpoints,
                     points
@@ -137,7 +137,7 @@ class PolyLineFitter {
             forward: List<Int>,
             backward: List<Int>,
             points: List<PointF>
-        ): Pair<List<Int>, List<PointF>> {
+        ): List<Int> {
             require(forward.size == backward.size) { "Forward and backward must have same length" }
 
             val backwardReversed = backward.reversed()
@@ -151,11 +151,7 @@ class PolyLineFitter {
                 averagedIndices.add(avgIdx)
             }
 
-            // Return distinct, sorted indices and the actual points at those indices
-            val finalIndices = averagedIndices.distinct().sorted()
-            val actualPoints = finalIndices.map { points[it] }
-            
-            return Pair(finalIndices, actualPoints)
+            return averagedIndices.distinct().sorted()
         }
 
         /**
