@@ -352,8 +352,8 @@ class Stroke(
     }
 
     /**
-     * Regenerates unsmoothedPoints from analytical shape points (for SQUARE, CIRCLE, POLYNOMIAL).
-     * This interpolates the analytical shape to match the original point count.
+     * Regenerates unsmoothedPoints from analytical shape points.
+     * For now, only POLYLINE is fully supported after phasing out polylinePoints.
      */
     fun regenerateUnsmoothedPointsFromAnalyticalShape() {
         needsToRegenerate = false
@@ -361,24 +361,23 @@ class Stroke(
         val pointCount = originalPoints.size
         if (pointCount < 2) return
 
-        val interpolatedPoints = when (analyticalShapeType) {
-            AnalyticalShapeType.SQUARE -> {
-                // For squares: polylinePoints contains the 4 corners (+ closed point)
-                interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount)
-            }
-            AnalyticalShapeType.CIRCLE -> {
-                // For circles: polylinePoints contains points around the circle perimeter
-                interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount)
-            }
-            AnalyticalShapeType.POLYNOMIAL -> {
-                // For polynomials: polylinePoints are the curve points
-                interpolateAlongPolyLine(polylinePoints.map { it.point }, pointCount)
-            }
-            else -> {
-                // Not an analytical shape (square/circle/polynomial)
-                return
-            }
+        // Only POLYLINE is currently supported (doesn't need polylinePoints)
+        if (analyticalShapeType != AnalyticalShapeType.POLYLINE) {
+            // TODO: Update SQUARE, CIRCLE, POLYNOMIAL to not depend on polylinePoints
+            return
         }
+
+        if (polylineIndices.isEmpty() || unsmoothedPoints.isEmpty()) return
+
+        val polylineVertices = polylineIndices.mapNotNull { idx ->
+            if (idx >= 0 && idx < unsmoothedPoints.size) {
+                unsmoothedPoints[idx].point
+            } else null
+        }
+
+        if (polylineVertices.size < 2) return
+
+        val interpolatedPoints = interpolateAlongPolyLine(polylineVertices, pointCount)
 
         // Update unsmoothed points with regenerated points
         val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
@@ -395,13 +394,22 @@ class Stroke(
      * This creates a piece-wise linear interpolation between vertices.
      */
     fun regenerateInterpolatedPolylinePoints() {
-        if (polylinePoints.isEmpty()) return
+        if (polylineIndices.isEmpty() || unsmoothedPoints.isEmpty()) return
 
         val pointCount = originalPoints.size
         if (pointCount < 2) return
 
+        // Extract polyline vertices from unsmoothedPoints using polylineIndices
+        val polylineVertices = polylineIndices.mapNotNull { idx ->
+            if (idx >= 0 && idx < unsmoothedPoints.size) {
+                unsmoothedPoints[idx].point
+            } else null
+        }
+
+        if (polylineVertices.size < 2) return
+
         // Interpolate along the polyline vertices, tracking where vertices end up
-        val result = interpolateAlongPolyLineWithIndices(polylinePoints.map { it.point }, pointCount)
+        val result = interpolateAlongPolyLineWithIndices(polylineVertices, pointCount)
         val interpolatedPoints = result.first
         val newPolylineIndices = result.second
 
