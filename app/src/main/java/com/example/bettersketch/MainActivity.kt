@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnShape: Button
     private lateinit var btnPolyline: Button
     private lateinit var btnDel: ImageButton
+    private lateinit var btnMoveStroke: ImageButton
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -61,6 +62,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnShape = findViewById(R.id.btnShape)
         btnPolyline = findViewById(R.id.btnPolyline)
         btnDel = findViewById(R.id.btnDel)
+        btnMoveStroke = findViewById(R.id.btnMoveStroke)
 
         setupSliderListeners()
 
@@ -245,6 +247,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
                            (drawingView.selectedStrokeIdx == drawingView.strokes.lastIndex && 
                             drawingView.strokes.isNotEmpty())
         btnDel.visibility = if (shouldShowDel) View.VISIBLE else View.GONE
+
+        btnMoveStroke.visibility = View.VISIBLE
+        btnMoveStroke.isEnabled = shouldShowDel // Same logic as for the DEL button
     }
 }
 
