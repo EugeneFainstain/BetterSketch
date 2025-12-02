@@ -62,7 +62,6 @@ class DrawingView @JvmOverloads constructor(
     public var lastStrokeHighlightedIdx: Int = -1
     private var editingPointIndex: Int = -1
     private var editingPointInitialWeights: List<Float>? = null
-    private var editingAnalyticalPointIndex: Int = -1  // Index of the analytical point being edited
 
     // Transformation state
     private val globalTransform = Matrix() // Matrix for transforming from WORLD-SPACE to SCREEN-SPACE (a.k.a the VIEW MATRIX)
@@ -117,7 +116,6 @@ class DrawingView @JvmOverloads constructor(
     fun exitEditingMode() {
         deselectAndDeHighlight()
         editingPointIndex = -1
-        editingAnalyticalPointIndex = -1
         editingPointInitialWeights = null
         setState(State.NORMAL_DRAWING)
     }
@@ -421,9 +419,6 @@ class DrawingView @JvmOverloads constructor(
         val stroke = currentStroke ?: return false
         if (stroke.isGroup) return false
 
-        if (stroke.renderAsPolyline)
-            return selectEndpointOfCurrentAnalyticalStroke(tapPoint)
-
         var closestDist = Float.MAX_VALUE
         var closestPointIndex = -1
         stroke.pointsForDrawing.forEachIndexed { index, pathPoint ->
@@ -540,112 +535,6 @@ class DrawingView @JvmOverloads constructor(
                     1 - ((relativeDistance - middlePointRelativeDistance) / (1 - middlePointRelativeDistance))
                 }
                 sin(mappedDistance * PI / 2).toFloat()
-            }
-        }
-
-        return true
-    }
-
-
-    private fun selectEndpointOfCurrentAnalyticalStroke(tapPoint: PointF): Boolean {
-        val stroke = currentStroke ?: return false
-        if (stroke.isGroup) return false
-
-        // Safety check
-        if (stroke.polylineIndices.isEmpty() || stroke.unsmoothedPoints.isEmpty()) {
-            return false
-        }
-
-        var closestDrawingPointDist = Float.MAX_VALUE
-        var closestDrawingPointIndex = 0
-
-        // Find closest pointsForDrawing point
-        stroke.pointsForDrawing.forEachIndexed { index, pathPoint ->
-            val d = distance(pathPoint.point, tapPoint)
-            if (d < closestDrawingPointDist) {
-                closestDrawingPointDist = d
-                closestDrawingPointIndex = index
-            }
-        }
-
-        // Map from pointsForDrawing to unsmoothedPoints using distance
-        val closestDrawingDistance = stroke.pointsForDrawing[closestDrawingPointIndex].distance
-        val totalDrawingDistance = stroke.pointsForDrawing.last().distance
-        val unsmoothedTotalDistance = stroke.unsmoothedPoints.lastOrNull()?.distance ?: 0f
-
-        val targetUnsmoothedDistance = if (totalDrawingDistance > 0f) {
-            (closestDrawingDistance / totalDrawingDistance) * unsmoothedTotalDistance
-        } else {
-            0f
-        }
-
-        // Find closest polyline vertex using polylineIndices
-        var closestPolylineIdxInArray = 0
-        var minDistToVertex = Float.MAX_VALUE
-
-        for (i in stroke.polylineIndices.indices) {
-            val vertexIdxInUnsmoothed = stroke.polylineIndices[i]
-            if (vertexIdxInUnsmoothed >= 0 && vertexIdxInUnsmoothed < stroke.unsmoothedPoints.size) {
-                val vertexDistance = stroke.unsmoothedPoints[vertexIdxInUnsmoothed].distance
-                val distDiff = abs(vertexDistance - targetUnsmoothedDistance)
-                if (distDiff < minDistToVertex) {
-                    minDistToVertex = distDiff
-                    closestPolylineIdxInArray = i
-                }
-            }
-        }
-
-        // Validate index
-        if (closestPolylineIdxInArray < 0 || closestPolylineIdxInArray >= stroke.polylineIndices.size) {
-            return false
-        }
-
-        editingAnalyticalPointIndex = closestPolylineIdxInArray
-
-        // Set editingPointIndex to the corresponding unsmoothed point
-        val middleUnsmoothedIdx = stroke.polylineIndices[closestPolylineIdxInArray].coerceIn(0, stroke.unsmoothedPoints.size - 1)
-        editingPointIndex = middleUnsmoothedIdx
-
-        // Build weight function for polyline editing
-        if (stroke.polylineIndices.size >= 3) {
-            val leftPolylineArrayIdx = if (closestPolylineIdxInArray > 0) closestPolylineIdxInArray - 1 else 0
-            val rightPolylineArrayIdx = if (closestPolylineIdxInArray < stroke.polylineIndices.size - 1) {
-                closestPolylineIdxInArray + 1
-            } else {
-                stroke.polylineIndices.size - 1
-            }
-
-            val leftUnsmoothedIdx = stroke.polylineIndices[leftPolylineArrayIdx].coerceIn(0, stroke.unsmoothedPoints.size - 1)
-            val rightUnsmoothedIdx = stroke.polylineIndices[rightPolylineArrayIdx].coerceIn(0, stroke.unsmoothedPoints.size - 1)
-
-            val leftDist = stroke.unsmoothedPoints[leftUnsmoothedIdx].distance
-            val middleDist = stroke.unsmoothedPoints[middleUnsmoothedIdx].distance
-            val rightDist = stroke.unsmoothedPoints[rightUnsmoothedIdx].distance
-
-            // Build weight function using sin(x)^2
-            editingPointInitialWeights = stroke.unsmoothedPoints.map { pathPoint ->
-                val dist = pathPoint.distance
-                when {
-                    dist < leftDist || dist > rightDist -> 0f
-                    dist <= middleDist -> {
-                        val segmentLength = middleDist - leftDist
-                        if (segmentLength == 0f) 1f
-                        else {
-                            val t = (dist - leftDist) / segmentLength
-                            val angle = t * PI.toFloat() / 2f
-                            sin(angle) * sin(angle)
-                        }
-                    }
-                    else -> {
-                        val segmentLength = rightDist - middleDist
-                        if (segmentLength == 0f) 1f
-                        else {
-                            val t = (dist - middleDist) / segmentLength
-                            val angle = (1f - t) * PI.toFloat() / 2f
-                            sin(angle) * sin(angle)
-                        }
-                    }
-                }
             }
         }
 
