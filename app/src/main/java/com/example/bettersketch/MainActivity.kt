@@ -176,9 +176,24 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             }
         }
 
-        // Handle polyline fit button
-        if (polylineFit != null) {
-            btnPolyline.text = "PolyLine(${polylineFit.indices.size})"
+        updateShowPolylineButton() // Handle polyline fit button
+    }
+
+    private fun updateShowPolylineButton()  {
+
+        val highlightedStrokeCount = drawingView.getHighlightedStrokeCount()
+        val isCurrentStrokeGroup = drawingView.isCurrentStrokeGroup()
+        val strokeHasPolylineData = drawingView.currentStrokeHasPolylineData()
+
+        if( highlightedStrokeCount <= 1       &&
+            !isCurrentStrokeGroup             &&
+            strokeHasPolylineData             &&
+            drawingView.currentStroke != null &&
+            drawingView.currentStroke?.polylineIndices != null) {
+            if(drawingView.currentStroke?.renderAsPolyline ?: false)
+                btnPolyline.text = "Restore"
+            else
+                btnPolyline.text = "PolyLine(${drawingView.currentStroke?.polylineIndices?.size})"
             btnPolyline.visibility = View.VISIBLE
         } else {
             btnPolyline.visibility = View.GONE
@@ -217,13 +232,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnUnGroupStrokes.visibility = if (highlightedStrokeCount == 1 && isCurrentStrokeGroup) View.VISIBLE else View.GONE
 
         // Show polyline button if exactly 1 non-group stroke is highlighted and it has polyline data
-        if (highlightedStrokeCount == 1 && !isCurrentStrokeGroup && drawingView.currentStrokeHasPolylineData()) {
-            val polylineCount = drawingView.currentStroke?.polylineIndices?.size ?: 0
-            btnPolyline.text = "PolyLine($polylineCount)"
-            btnPolyline.visibility = View.VISIBLE
-        } else {
-            btnPolyline.visibility = View.GONE
-        }
+        updateShowPolylineButton()
 
         if (highlightedStrokeCount != 1) {
             btnShape.visibility = View.GONE

@@ -575,13 +575,19 @@ class DrawingView @JvmOverloads constructor(
             strokes.removeAt(strokes.lastIndex)
         }
 
-        selectedStrokeIdx = strokes.lastIndex
-        setStrokeHighlighted(currentStroke, strokes.lastIndex)
+        if( currentState == State.NORMAL_DRAWING )
+        {
+            deselectAndDeHighlight() // Deselect everything
+            setState(currentState) // Update screen and UI
+        } else {
+            selectedStrokeIdx = strokes.lastIndex
+            setStrokeHighlighted(currentStroke, strokes.lastIndex)
 
-        if (strokes.size > 0)
-            setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-        else
-            setState(State.NORMAL_DRAWING)
+            if (strokes.size > 0)
+                setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+            else
+                setState(State.NORMAL_DRAWING)
+        }
     }
 
     private fun revertStrokeToOriginal(stroke: Stroke) {
@@ -985,6 +991,7 @@ class DrawingView @JvmOverloads constructor(
             else
                 setState(State.NORMAL_DRAWING)
             threeFingerGestureOccured = false
+            twoFingerGestureOccured = false
             listener?.onStateChanged()
             return true
         }
