@@ -112,8 +112,8 @@ class Stroke(
                 val next = smoothedPoints[i + 1].point
                 val current = smoothedPoints[i]
 
-                val avgX = (prev.x + next.x) / 2f
-                val avgY = (prev.y + next.y) / 2f
+                val avgX = (prev.x + 2*current.point.x + next.x) / 4f
+                val avgY = (prev.y + 2*current.point.y + next.y) / 4f
 
                 iterationResult.add(PathPoint(PointF(avgX, avgY), current.distance))
             }
