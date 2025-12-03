@@ -76,6 +76,7 @@ class DrawingView @JvmOverloads constructor(
     private val haloOffset: Float
     private val selectionPaint: Paint
     private var selectionCircle: Triple<PointF, Float, Path>? = null
+    private var moveStrokeGestureInProgress = false
 
 
     init {
@@ -175,6 +176,11 @@ class DrawingView @JvmOverloads constructor(
 
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // Check if this gesture started from a button
+        val gestureTag = (parent as? MainActivity)?.gestureHelper?.activeGestureTag
+
+        moveStrokeGestureInProgress = (gestureTag == MainActivity.MoveStrokeGesture)
+
         customGestureDetector.onTouchEvent(event)
         return true
     }

@@ -25,10 +25,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnDel: ImageButton
     private lateinit var btnMoveStroke: ImageButton
     
-    private lateinit var gestureHelper: ButtonAugmentedGestureHelper
+    public lateinit var gestureHelper: ButtonAugmentedGestureHelper
     
     // Gesture tags
-    private object MoveStrokeGesture
+    public object MoveStrokeGesture
 
     private val colors = intArrayOf(
         Color.BLACK,
