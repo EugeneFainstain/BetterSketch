@@ -18,6 +18,7 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
 
     private val registrations = mutableListOf<Registration>()
     private var activeRegistration: Registration? = null
+    private var dualTouchSubmitted = false
     private var buttonFingerX: Float = 0f
     private var buttonFingerY: Float = 0f
     private var gestureDownTime: Long = 0L
@@ -46,7 +47,8 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
 
                     view.isPressed = true
                     endThisGesture = false
-                    activeRegistration = registration
+                    activeRegistration = registration // This is the ONLY place it is set to non-null
+                    dualTouchSubmitted = false // This is the ONLY place it is set to false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -141,45 +143,49 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
 
         drawingViewEventHappenedSinceLastEndThisGesture = true
 
+        if( dualTouchSubmitted == false )
+        {
+            dualTouchSubmitted = true // This is the ONLY place it is set to true
+
+            gestureDownTime = event.downTime
+            lastViewFingerX = event.x
+            lastViewFingerY = event.y
+
+            // Create synthetic ACTION_DOWN for button finger (pointer 0)
+            val syntheticDown = createSyntheticEvent(
+                downTime = gestureDownTime,
+                eventTime = event.eventTime - 10,
+                action = MotionEvent.ACTION_DOWN,
+                pointerCount = 1,
+                pointerIndex = 0,
+                x0 = buttonFingerX, y0 = buttonFingerY,
+                x1 = event.x, y1 = event.y,
+                event = event
+            )
+
+            // Create synthetic ACTION_POINTER_DOWN for view finger (pointer 1)
+            val syntheticPointerDown = createSyntheticEvent(
+                downTime = gestureDownTime,
+                eventTime = event.eventTime,
+                action = MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                pointerCount = 2,
+                pointerIndex = 1,
+                x0 = buttonFingerX, y0 = buttonFingerY,
+                x1 = event.x, y1 = event.y,
+                event = event
+            )
+
+            targetView.onTouchEvent(syntheticDown)
+            targetView.onTouchEvent(syntheticPointerDown)
+
+            syntheticDown.recycle()
+            syntheticPointerDown.recycle()
+
+            if( event.actionMasked == MotionEvent.ACTION_DOWN )
+                return true // If this happened on the first finger down event - consume this event
+        }
+
         when (event.actionMasked) {
-
-            MotionEvent.ACTION_DOWN -> {
-                gestureDownTime = event.downTime
-                lastViewFingerX = event.x
-                lastViewFingerY = event.y
-
-                // Create synthetic ACTION_DOWN for button finger (pointer 0)
-                val syntheticDown = createSyntheticEvent(
-                    downTime = gestureDownTime,
-                    eventTime = event.eventTime - 10,
-                    action = MotionEvent.ACTION_DOWN,
-                    pointerCount = 1,
-                    pointerIndex = 0,
-                    x0 = buttonFingerX, y0 = buttonFingerY,
-                    x1 = event.x, y1 = event.y,
-                    event = event
-                )
-
-                // Create synthetic ACTION_POINTER_DOWN for view finger (pointer 1)
-                val syntheticPointerDown = createSyntheticEvent(
-                    downTime = gestureDownTime,
-                    eventTime = event.eventTime,
-                    action = MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
-                    pointerCount = 2,
-                    pointerIndex = 1,
-                    x0 = buttonFingerX, y0 = buttonFingerY,
-                    x1 = event.x, y1 = event.y,
-                    event = event
-                )
-
-                targetView.onTouchEvent(syntheticDown)
-                targetView.onTouchEvent(syntheticPointerDown)
-
-                syntheticDown.recycle()
-                syntheticPointerDown.recycle()
-
-                return true
-            }
 
             MotionEvent.ACTION_MOVE -> {
                 lastViewFingerX = event.x
