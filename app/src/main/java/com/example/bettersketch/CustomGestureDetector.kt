@@ -40,8 +40,6 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
     private var activePointerCount: Int = 0
 
     // Multi-touch state
-    private var aTwoFingerGestureHasOccured = false
-    private var aThreeFingerGestureHasOccured = false
     private var lastMultiTouchDistance = 0f
     private var lastMultiTouchAngle = 0f
     private var lastMultiTouchMidpoint = PointF()
@@ -67,21 +65,17 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 lastMoveX = event.x
                 lastMoveY = event.y
                 isDragging = false
-                aTwoFingerGestureHasOccured = false   // this is the only place it becomes "false"
-                aThreeFingerGestureHasOccured = false // this is the only place it becomes "false"
 
                 listener.onFirstFingerDown(event)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 activePointerCount++
                 if (activePointerCount == 2) {
-                    aTwoFingerGestureHasOccured = true
                     lastMultiTouchDistance = distance(event)
                     lastMultiTouchAngle = angle(event)
                     lastMultiTouchMidpoint = midpoint(event)
                     listener.onSecondFingerDown(event)
                 } else if (activePointerCount == 3) {
-                    aThreeFingerGestureHasOccured = true
                     val centroid = centroid(event)
                     lastThreeFingerCentroid = centroid
                     lastThreeFingerAvgDist = averageDistanceFromCentroid(event, centroid)
@@ -121,7 +115,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                     lastThreeFingerAvgDist = newAvgDist
                     lastThreeFingerAngle = newAngle
                 }
-                else if (pointerCount >= 2 && !aThreeFingerGestureHasOccured) {
+                else if (pointerCount == 2) {
                     val newDist = distance(event)
                     val newAngle = angle(event)
                     val currentMidpoint = midpoint(event)
@@ -142,7 +136,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                     lastMultiTouchDistance = newDist
                     lastMultiTouchAngle = newAngle
                     lastMultiTouchMidpoint.set(currentMidpoint)
-                } else if (!aTwoFingerGestureHasOccured && isDragging) {
+                } else if (isDragging) {
                     listener.onSingleFingerDrag(event, dx, dy)
                 }
             }
@@ -159,7 +153,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
 
                 val isTap = totalDx < touchSlop && totalDy < touchSlop && duration < tapTimeout
 
-                if (isTap && !aTwoFingerGestureHasOccured && !isDragging) {
+                if (isTap && !isDragging) {
                     if (currentTime - lastTapTime < doubleTapTimeout) {
                         lastTapTime = 0
                         listener.onDoubleTapEnd(event)

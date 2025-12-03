@@ -70,6 +70,7 @@ class DrawingView @JvmOverloads constructor(
 
     // Transformation state
     private val globalTransform = Matrix() // Matrix for transforming from WORLD-SPACE to SCREEN-SPACE (a.k.a the VIEW MATRIX)
+    private var dragGestureHasEnded = false
     private var twoFingerGestureOccured = false
     private var threeFingerGestureOccured = false
     private var backedUpGroupStroke: Stroke? = null
@@ -876,7 +877,7 @@ class DrawingView @JvmOverloads constructor(
                     }
                 }
 
-
+                // Do not draw highlighted endpoint during a 2- or 3- finger gesture
                 if (drawEndpoints && !twoFingerGestureOccured && !threeFingerGestureOccured) {
                     val radius = haloPaintToUse.strokeWidth/2f
                     val endpointPaint = Paint().apply {
@@ -937,6 +938,7 @@ class DrawingView @JvmOverloads constructor(
 
         twoFingerGestureOccured   = false // this is the only place it becomes "false"
         threeFingerGestureOccured = false // this is the only place it becomes "false"
+        dragGestureHasEnded       = false // this is the only place it becomes "false"
 
         when (currentState) {
             State.NORMAL_DRAWING -> {
@@ -975,8 +977,8 @@ class DrawingView @JvmOverloads constructor(
                 strokeInProgress = null
             }
         }
-        twoFingerGestureOccured = true
         redrawHistory()
+        twoFingerGestureOccured = true
         return true
     }
 
@@ -986,6 +988,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSomeFingerUp(event: MotionEvent): Boolean {
+        dragGestureHasEnded = true // this is the ONLY place it becomes "true"
         return true
     }
 
@@ -1041,7 +1044,9 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
-        if (twoFingerGestureOccured || threeFingerGestureOccured) return true
+
+        if( dragGestureHasEnded || twoFingerGestureOccured || threeFingerGestureOccured )
+            return true
 
         val inverseGlobalTransform = Matrix()
         globalTransform.invert(inverseGlobalTransform)
@@ -1108,6 +1113,10 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
+
+        if( dragGestureHasEnded || threeFingerGestureOccured )
+            return true
+
         val invertedGlobal = Matrix()
         globalTransform.invert(invertedGlobal)
         val worldDelta = floatArrayOf(dx, dy)
@@ -1169,6 +1178,10 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
+
+        if( dragGestureHasEnded )
+            return true
+
         if (event.pointerCount >= 3) {
             val p1 = toWorldCoordinates(event.getX(0), event.getY(0))
             val p2 = toWorldCoordinates(event.getX(1), event.getY(1))
