@@ -21,6 +21,8 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
     private var buttonFingerX: Float = 0f
     private var buttonFingerY: Float = 0f
     private var gestureDownTime: Long = 0L
+    private var endThisGesture = false
+    private var drawingViewEventHappenedSinceLastEndThisGesture = false
 
     /**
      * Registers a button to trigger augmented gestures.
@@ -36,8 +38,6 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
         button.setOnTouchListener { view, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    activeRegistration = registration
-
                     // Store button coordinates in target view's coordinate space
                     val targetLocation = IntArray(2)
                     targetView.getLocationOnScreen(targetLocation)
@@ -45,6 +45,8 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
                     buttonFingerY = event.rawY - targetLocation[1]
 
                     view.isPressed = true
+                    endThisGesture = false
+                    activeRegistration = registration
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -57,15 +59,12 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
                         true
                     } else false
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (activeRegistration == registration) {
-                        activeRegistration = null
-                        view.isPressed = false
-                        true
-                    } else {
-                        view.isPressed = false
-                        false
-                    }
+                MotionEvent.ACTION_POINTER_UP,
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_CANCEL -> {
+                    view.isPressed = false
+                    endThisGesture = true
+                    true
                 }
                 else -> false
             }
@@ -80,17 +79,74 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
     val activeGestureTag: Any?
         get() = activeRegistration?.gestureTag
 
+    private var lastViewFingerX: Float = 0f
+    private var lastViewFingerY: Float = 0f
+
+    fun EndThisGesture(event: MotionEvent)
+    {
+        endThisGesture = false
+        activeRegistration = null // This is the ONLY place it is set to null
+
+        if( drawingViewEventHappenedSinceLastEndThisGesture == false ) // No need to end any gesture...
+            return
+
+        drawingViewEventHappenedSinceLastEndThisGesture = false
+
+        val syntheticPointerUp1 = createSyntheticEvent(
+            downTime = gestureDownTime,
+            eventTime = event.eventTime,
+            action = MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            pointerCount = 2,
+            pointerIndex = 1,
+            buttonFingerX, buttonFingerY,
+            lastViewFingerX, lastViewFingerY,
+            event
+        )
+
+        val syntheticUp0 = createSyntheticEvent(
+            downTime = gestureDownTime,
+            eventTime = event.eventTime,
+            action = MotionEvent.ACTION_UP,
+            pointerCount = 1,
+            pointerIndex = 0,
+            x0 = buttonFingerX, y0 = buttonFingerY,
+            x1 = 0f, y1 = 0f,
+            event = event
+        )
+
+        targetView.onTouchEvent(syntheticPointerUp1)
+        targetView.onTouchEvent(syntheticUp0)
+
+        syntheticPointerUp1.recycle()
+        syntheticUp0.recycle()
+    }
+
     /**
      * Call this from the target view's setOnTouchListener.
      * Returns true if the event was intercepted and handled (caller should consume it),
      * false if the event should be handled normally.
      */
     fun onTargetViewTouch(event: MotionEvent): Boolean {
-        if (activeRegistration == null) return false
+
+        if( activeRegistration == null ) return false
+
+        if( endThisGesture ||
+            event.actionMasked == MotionEvent.ACTION_POINTER_UP ||
+            event.actionMasked == MotionEvent.ACTION_UP ||
+            event.actionMasked == MotionEvent.ACTION_CANCEL )
+        {
+            EndThisGesture(event)
+            return false // do not consume event
+        }
+
+        drawingViewEventHappenedSinceLastEndThisGesture = true
 
         when (event.actionMasked) {
+
             MotionEvent.ACTION_DOWN -> {
                 gestureDownTime = event.downTime
+                lastViewFingerX = event.x
+                lastViewFingerY = event.y
 
                 // Create synthetic ACTION_DOWN for button finger (pointer 0)
                 val syntheticDown = createSyntheticEvent(
@@ -126,6 +182,9 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
             }
 
             MotionEvent.ACTION_MOVE -> {
+                lastViewFingerX = event.x
+                lastViewFingerY = event.y
+
                 // Forward as two-finger move
                 val syntheticMove = createSyntheticEvent(
                     downTime = gestureDownTime,
@@ -140,24 +199,6 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
 
                 targetView.onTouchEvent(syntheticMove)
                 syntheticMove.recycle()
-                return true
-            }
-
-            MotionEvent.ACTION_UP -> {
-                // View finger lifted, send pointer up for pointer 1
-                val syntheticPointerUp = createSyntheticEvent(
-                    downTime = gestureDownTime,
-                    eventTime = event.eventTime,
-                    action = MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
-                    pointerCount = 2,
-                    pointerIndex = 1,
-                    x0 = buttonFingerX, y0 = buttonFingerY,
-                    x1 = event.x, y1 = event.y,
-                    event = event
-                )
-
-                targetView.onTouchEvent(syntheticPointerUp)
-                syntheticPointerUp.recycle()
                 return true
             }
 

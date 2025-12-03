@@ -38,6 +38,10 @@ class DrawingView @JvmOverloads constructor(
     var listener: DrawingViewListener? = null
     var shapeDetectionListener: ShapeDetectionListener? = null
     var mainGestureHelper: ButtonAugmentedGestureHelper? = null
+        set(value) {
+            field = value
+            customGestureDetector.mainGestureHelper = value  // Pass it to the detector
+        }
 
     private var currentState = State.NORMAL_DRAWING
     private fun setState(newState: State) {

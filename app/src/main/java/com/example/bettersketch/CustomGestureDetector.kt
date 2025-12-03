@@ -23,6 +23,9 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
         fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean
     }
 
+    var mainGestureHelper: ButtonAugmentedGestureHelper? = null
+
+    private var lastKnownGestureTag: Any? = null
     private val touchSlop: Int = ViewConfiguration.get(context).scaledTouchSlop
     private val doubleTapTimeout: Int = ViewConfiguration.getDoubleTapTimeout()
     private val tapTimeout: Int = ViewConfiguration.getTapTimeout()
@@ -50,6 +53,10 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
     fun onTouchEvent(event: MotionEvent): Boolean {
         val pointerCount = event.pointerCount
         val action = event.actionMasked
+
+        val currentGestureTag = mainGestureHelper?.activeGestureTag
+        val gestureTagChanged = currentGestureTag != lastKnownGestureTag
+        lastKnownGestureTag = currentGestureTag
 
         when (action) {
             MotionEvent.ACTION_DOWN -> {
@@ -84,10 +91,15 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 isDragging = false
             }
             MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - lastMoveX
-                val dy = event.y - lastMoveY
+                var dx = event.x - lastMoveX
+                var dy = event.y - lastMoveY
                 lastMoveX = event.x
                 lastMoveY = event.y
+
+                if( gestureTagChanged ) { // Prevents the jump if touching the button second
+                    dx = 0f
+                    dy = 0f
+                }
 
                 if (abs(event.x - downX) > touchSlop || abs(event.y - downY) > touchSlop || (System.currentTimeMillis() - downTime) > 100 ) {
                     isDragging = true
@@ -113,6 +125,12 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                     val newDist = distance(event)
                     val newAngle = angle(event)
                     val currentMidpoint = midpoint(event)
+
+                    if( gestureTagChanged ) { // Prevents the jump if touching the button second
+                        lastMultiTouchDistance = newDist
+                        lastMultiTouchAngle = newAngle
+                        lastMultiTouchMidpoint.set(currentMidpoint)
+                    }
 
                     val scale = if (lastMultiTouchDistance > 0) newDist / lastMultiTouchDistance else 1f
                     val rotate = newAngle - lastMultiTouchAngle
