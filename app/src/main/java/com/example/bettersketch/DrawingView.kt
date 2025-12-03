@@ -878,7 +878,7 @@ class DrawingView @JvmOverloads constructor(
                 }
 
                 // Do not draw highlighted endpoint during a 2- or 3- finger gesture
-                if (drawEndpoints && !twoFingerGestureOccured && !threeFingerGestureOccured) {
+                if (drawEndpoints && !twoFingerGestureOccured && !threeFingerGestureOccured && !moveStrokeGestureInProgress) {
                     val radius = haloPaintToUse.strokeWidth/2f
                     val endpointPaint = Paint().apply {
                         style = Paint.Style.FILL
@@ -1051,6 +1051,30 @@ class DrawingView @JvmOverloads constructor(
         val inverseGlobalTransform = Matrix()
         globalTransform.invert(inverseGlobalTransform)
 
+        // Handle move stroke gesture (translation only)
+        if (moveStrokeGestureInProgress) {
+            // Transform delta from screen-space to world-space
+            val delta = floatArrayOf(dx, dy)
+            inverseGlobalTransform.mapVectors(delta)
+
+            // Get all highlighted strokes or current stroke
+            val strokesToMove = strokes.filter { it.isHighlighted }.toMutableSet()
+            currentStroke?.let { strokesToMove.add(it) }
+
+            if (strokesToMove.isNotEmpty()) {
+                // Create a translation-only matrix in world-space
+                val translationMatrix = Matrix()
+                translationMatrix.setTranslate(delta[0], delta[1])
+
+                // Apply translation to all highlighted strokes
+                strokesToMove.forEach { stroke ->
+                    transformStroke(stroke, translationMatrix)
+                }
+            }
+
+            return true
+        }
+
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 touchMove(event.x, event.y)
@@ -1124,15 +1148,31 @@ class DrawingView @JvmOverloads constructor(
 
         if( moveStrokeGestureInProgress )
         {
-            currentStroke?.let {
+            // Get all highlighted strokes and include currentStroke
+            val strokesToTransform = strokes.filter { it.isHighlighted }.toMutableSet()
+            currentStroke?.let { strokesToTransform.add(it) }
+
+            if (strokesToTransform.isNotEmpty()) {
+                // Calculate common bounding box for all strokes to transform
+                val commonBounds = RectF()
+                strokesToTransform.forEach { stroke ->
+                    commonBounds.union(stroke.getBounds())
+                }
+
+                // Get center of common bounding box
+                val centerX = commonBounds.centerX()
+                val centerY = commonBounds.centerY()
+
+                // Create transformation matrix in world-space
                 val deltaMatrix = Matrix()
-                val bounds = it.getBounds()
-                val centerX = bounds.centerX()
-                val centerY = bounds.centerY()
                 deltaMatrix.postScale(scale, scale, centerX, centerY)
                 deltaMatrix.postRotate(rotate, centerX, centerY)
                 deltaMatrix.postTranslate(worldDelta[0], worldDelta[1])
-                transformStroke(it, deltaMatrix)
+
+                // Apply transformation to all strokes
+                strokesToTransform.forEach { stroke ->
+                    transformStroke(stroke, deltaMatrix)
+                }
             }
         }
         else
