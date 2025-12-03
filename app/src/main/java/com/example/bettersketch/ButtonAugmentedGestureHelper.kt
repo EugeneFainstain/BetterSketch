@@ -23,7 +23,10 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
     private var buttonFingerY: Float = 0f
     private var gestureDownTime: Long = 0L
     private var endThisGesture = false
+    private var gestureEndedBecauseOfView = false
+    private var gestureEndedBecauseOfButton = false
     private var drawingViewEventHappenedSinceLastEndThisGesture = false
+    private var someFingerIsTouchingTheView = false
 
     /**
      * Registers a button to trigger augmented gestures.
@@ -47,7 +50,9 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
 
                     view.isPressed = true
                     endThisGesture = false
-                    activeRegistration = registration // This is the ONLY place it is set to non-null
+                    gestureEndedBecauseOfView   = false // this is the ONLY place it is set to false
+                    gestureEndedBecauseOfButton = false // this is the ONLY place it is set to false
+                    activeRegistration = registration   // This is the ONLY place it is set to non-null
                     dualTouchSubmitted = false // This is the ONLY place it is set to false
                     true
                 }
@@ -66,6 +71,7 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
                 MotionEvent.ACTION_CANCEL -> {
                     view.isPressed = false
                     endThisGesture = true
+                    gestureEndedBecauseOfButton = true
                     true
                 }
                 else -> false
@@ -130,12 +136,22 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
      */
     fun onTargetViewTouch(event: MotionEvent): Boolean {
 
-        if( activeRegistration == null ) return false
+        if( event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL )
+            someFingerIsTouchingTheView = false
+        else
+            someFingerIsTouchingTheView = true
 
-        if( endThisGesture ||
-            event.actionMasked == MotionEvent.ACTION_POINTER_UP ||
+        if( event.actionMasked == MotionEvent.ACTION_POINTER_UP ||
             event.actionMasked == MotionEvent.ACTION_UP ||
             event.actionMasked == MotionEvent.ACTION_CANCEL )
+        {
+            endThisGesture = true
+            gestureEndedBecauseOfView = true
+        }
+
+        if( activeRegistration == null ) return false
+
+        if( endThisGesture )
         {
             EndThisGesture(event)
             return false // do not consume event
