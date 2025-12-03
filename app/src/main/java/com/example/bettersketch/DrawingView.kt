@@ -217,7 +217,6 @@ class DrawingView @JvmOverloads constructor(
         val scale = getScaleFromMatrix(matrix)
         stroke.forEachStroke { s ->
             s.isModified = true
-            s.paint.strokeWidth *= scale
 
             s.unsmoothedPoints.forEach { pathPoint ->
                 val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
@@ -855,7 +854,7 @@ class DrawingView @JvmOverloads constructor(
                 finalPaint.alpha = (finalPaint.alpha * cumulativeOpacityMultiplier).toInt()
 
                 val haloPaintToUse = Paint(haloPaint)
-                haloPaintToUse.strokeWidth = finalPaint.strokeWidth + haloOffset
+                haloPaintToUse.strokeWidth = finalPaint.strokeWidth * 3f
 
                 if (stroke.isHighlighted) {
                     canvas.drawPath(path, haloPaintToUse)
