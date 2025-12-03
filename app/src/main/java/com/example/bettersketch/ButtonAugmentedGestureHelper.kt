@@ -54,6 +54,11 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
                     gestureEndedBecauseOfButton = false // this is the ONLY place it is set to false
                     activeRegistration = registration   // This is the ONLY place it is set to non-null
                     dualTouchSubmitted = false // This is the ONLY place it is set to false
+
+                    // Forward a synthetic ACTION_DOWN to the view at button location
+                    if (!someFingerIsTouchingTheView) {
+                        forwardButtonEventToView(event, MotionEvent.ACTION_DOWN)
+                    }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -63,6 +68,11 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
                         targetView.getLocationOnScreen(targetLocation)
                         buttonFingerX = event.rawX - targetLocation[0]
                         buttonFingerY = event.rawY - targetLocation[1]
+
+                        // Forward move events if no view finger is touching
+                        if (!someFingerIsTouchingTheView) {
+                            forwardButtonEventToView(event, MotionEvent.ACTION_MOVE)
+                        }
                         true
                     } else false
                 }
@@ -72,6 +82,11 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
                     view.isPressed = false
                     endThisGesture = true
                     gestureEndedBecauseOfButton = true
+
+                    // Forward UP event if no view finger is touching
+                    if (!someFingerIsTouchingTheView) {
+                        forwardButtonEventToView(event, MotionEvent.ACTION_UP)
+                    }
                     true
                 }
                 else -> false
@@ -275,5 +290,28 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
             event.source,
             event.flags
         )
+    }
+
+    /**
+     * Forward button motion events to the view as single-finger touch events
+     */
+    private fun forwardButtonEventToView(buttonEvent: MotionEvent, action: Int) {
+        val syntheticEvent = MotionEvent.obtain(
+            buttonEvent.downTime,
+            buttonEvent.eventTime,
+            action,
+            buttonFingerX,
+            buttonFingerY,
+            buttonEvent.pressure,
+            buttonEvent.size,
+            buttonEvent.metaState,
+            buttonEvent.xPrecision,
+            buttonEvent.yPrecision,
+            buttonEvent.deviceId,
+            buttonEvent.edgeFlags
+        )
+
+        targetView.onTouchEvent(syntheticEvent)
+        syntheticEvent.recycle()
     }
 }
