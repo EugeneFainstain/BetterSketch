@@ -37,6 +37,7 @@ class DrawingView @JvmOverloads constructor(
 
     var listener: DrawingViewListener? = null
     var shapeDetectionListener: ShapeDetectionListener? = null
+    var mainGestureHelper: ButtonAugmentedGestureHelper? = null
 
     private var currentState = State.NORMAL_DRAWING
     private fun setState(newState: State) {
@@ -177,9 +178,12 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // Check if this gesture started from a button
-        val gestureTag = (parent as? MainActivity)?.gestureHelper?.activeGestureTag
+        val gestureTag = mainGestureHelper?.activeGestureTag
 
-        moveStrokeGestureInProgress = (gestureTag == MainActivity.MoveStrokeGesture)
+        if( gestureTag == MainActivity.tagMoveStrokeGesture )
+            moveStrokeGestureInProgress = true
+        else
+            moveStrokeGestureInProgress = false
 
         customGestureDetector.onTouchEvent(event)
         return true
@@ -1105,29 +1109,29 @@ class DrawingView @JvmOverloads constructor(
         val worldDelta = floatArrayOf(dx, dy)
         invertedGlobal.mapVectors(worldDelta)
 
-        when (currentState) {
-            State.NORMAL_DRAWING -> {
-                val screenMidPoint = midpoint(event)
-                val worldMidPoint = toWorldCoordinates(screenMidPoint.x, screenMidPoint.y)
-                globalTransform.preTranslate(worldDelta[0], worldDelta[1])
-                globalTransform.preScale(scale, scale, worldMidPoint.x, worldMidPoint.y)
-                globalTransform.preRotate(rotate, worldMidPoint.x, worldMidPoint.y)
-                redrawHistory()
-            }
-            State.CHOSEN_STROKE_IN_NORMAL_MODE,
-            State.STROKE_EDITING -> {
-                currentStroke?.let {
-                    val deltaMatrix = Matrix()
-                    val bounds = it.getBounds()
-                    val centerX = bounds.centerX()
-                    val centerY = bounds.centerY()
-                    deltaMatrix.postScale(scale, scale, centerX, centerY)
-                    deltaMatrix.postRotate(rotate, centerX, centerY)
-                    deltaMatrix.postTranslate(worldDelta[0], worldDelta[1])
-                    transformStroke(it, deltaMatrix)
-                }
+        if( moveStrokeGestureInProgress )
+        {
+            currentStroke?.let {
+                val deltaMatrix = Matrix()
+                val bounds = it.getBounds()
+                val centerX = bounds.centerX()
+                val centerY = bounds.centerY()
+                deltaMatrix.postScale(scale, scale, centerX, centerY)
+                deltaMatrix.postRotate(rotate, centerX, centerY)
+                deltaMatrix.postTranslate(worldDelta[0], worldDelta[1])
+                transformStroke(it, deltaMatrix)
             }
         }
+        else
+        {
+            val screenMidPoint = midpoint(event)
+            val worldMidPoint = toWorldCoordinates(screenMidPoint.x, screenMidPoint.y)
+            globalTransform.preTranslate(worldDelta[0], worldDelta[1])
+            globalTransform.preScale(scale, scale, worldMidPoint.x, worldMidPoint.y)
+            globalTransform.preRotate(rotate, worldMidPoint.x, worldMidPoint.y)
+            redrawHistory()
+        }
+
         return true
     }
 

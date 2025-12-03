@@ -24,11 +24,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnPolyline: Button
     private lateinit var btnDel: ImageButton
     private lateinit var btnMoveStroke: ImageButton
-    
-    public lateinit var gestureHelper: ButtonAugmentedGestureHelper
+    private lateinit var gestureHelper: ButtonAugmentedGestureHelper
     
     // Gesture tags
-    public object MoveStrokeGesture
+    public object tagMoveStrokeGesture
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -72,8 +71,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         
         // Set up button-augmented gesture system
         gestureHelper = ButtonAugmentedGestureHelper(drawingView)
-        gestureHelper.registerButton(btnMoveStroke, MoveStrokeGesture)
-        
+        gestureHelper.registerButton(btnMoveStroke, tagMoveStrokeGesture)
+        drawingView.mainGestureHelper = gestureHelper
+
         // Set up touch listener on DrawingView
         drawingView.setOnTouchListener { _, event ->
             gestureHelper.onTargetViewTouch(event)
