@@ -67,8 +67,8 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 lastMoveX = event.x
                 lastMoveY = event.y
                 isDragging = false
-                aTwoFingerGestureHasOccured = false
-                aThreeFingerGestureHasOccured = false
+                aTwoFingerGestureHasOccured = false   // this is the only place it becomes "false"
+                aThreeFingerGestureHasOccured = false // this is the only place it becomes "false"
 
                 listener.onFirstFingerDown(event)
             }
@@ -168,8 +168,6 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                         listener.onSingleTapEnd(event)
                     }
                 } else {
-                    aTwoFingerGestureHasOccured = false
-                    aThreeFingerGestureHasOccured = false
                     isDragging = false
                     listener.onLastRemainingFingerUp(event)
                 }
@@ -178,8 +176,6 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 activePointerCount = 0
                 isDragging = false
                 lastTapTime = 0
-                aTwoFingerGestureHasOccured = false
-                aThreeFingerGestureHasOccured = false
                 listener.onLastRemainingFingerUp(event)
             }
         }

@@ -934,6 +934,10 @@ class DrawingView @JvmOverloads constructor(
     override fun onFirstFingerDown(event: MotionEvent): Boolean {
         val downPoint = PointF(event.x, event.y)
         val worldPoint = toWorldCoordinates(downPoint.x, downPoint.y)
+
+        twoFingerGestureOccured   = false // this is the only place it becomes "false"
+        threeFingerGestureOccured = false // this is the only place it becomes "false"
+
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 touchStart(downPoint.x, downPoint.y)
@@ -1004,16 +1008,12 @@ class DrawingView @JvmOverloads constructor(
                 setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
             else
                 setState(State.NORMAL_DRAWING)
-            threeFingerGestureOccured = false
-            twoFingerGestureOccured = false
             listener?.onStateChanged()
             return true
         }
 
-        if (twoFingerGestureOccured) {
-            twoFingerGestureOccured = false
+        if (twoFingerGestureOccured)
             return true
-        }
 
         when (currentState) {
             State.NORMAL_DRAWING -> {
