@@ -52,6 +52,13 @@ class DrawingView @JvmOverloads constructor(
         listener?.onStateChanged() // Update UI in any case...
     }
 
+    // Draw mask constants
+    companion object {
+        private const val MASK_DRAW_HALOS_AND_MARKERS = 0x02
+        private const val MASK_DRAW_STROKE_ITSELF = 0x01
+        private const val MASK_DRAW_ALL = MASK_DRAW_HALOS_AND_MARKERS or MASK_DRAW_STROKE_ITSELF
+    }
+
     // Drawing state
     private var backingBitmap: Bitmap? = null
     private var backingCanvas: Canvas? = null
@@ -158,19 +165,45 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        
+
         // Ensure all strokes are up-to-date before drawing
         strokes.forEach { stroke ->
             if (stroke.needsToRegenerate)
                 stroke.regenerateUnsmoothedPointsFromAnalytical()
         }
-        
-        // 1. Draw the pre-rendered, transformed history from the bitmap
-        backingBitmap?.let { canvas.drawBitmap(it, 0f, 0f, null) }
 
-        // 2. Draw the "live" part (the new stroke being created) on top, with transformation.
+        // 1. Draw halos and markers first (if in editing mode)
+        if (isEditing()) {
+            // Draw halos and markers for all strokes
+            for ((index, s) in strokes.withIndex()) {
+                val opacityMultiplier = if (index != selectedStrokeIdx) 0.25f else 1.0f
+                val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
+                drawStroke(canvas, s, opacityMultiplier, 1.0f, drawEndpoints, MASK_DRAW_HALOS_AND_MARKERS)
+            }
+        }
+
+        // 2. Draw the backing bitmap at 25% opacity (or full opacity if not editing)
+        backingBitmap?.let {
+            if (isEditing()) {
+                val bitmapPaint = Paint().apply { alpha = (255 * 0.25f).toInt() }
+                canvas.drawBitmap(it, 0f, 0f, bitmapPaint)
+            } else {
+                canvas.drawBitmap(it, 0f, 0f, null)
+            }
+        }
+
+        // 3. Draw the strokes themselves (if in editing mode)
+        if (isEditing()) {
+            for ((index, s) in strokes.withIndex()) {
+                val opacityMultiplier = if (index != selectedStrokeIdx) 0.25f else 1.0f
+                val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
+                drawStroke(canvas, s, opacityMultiplier, 1.0f, drawEndpoints, MASK_DRAW_STROKE_ITSELF)
+            }
+        }
+
+        // 4. Draw the "live" part (the new stroke being created) on top, with transformation.
         if (currentState == State.NORMAL_DRAWING && strokeInProgress != null) {
-            drawStroke(canvas, strokeInProgress!!, 1.0f, 1.0f, false)
+            drawStroke(canvas, strokeInProgress!!, 1.0f, 1.0f, false, MASK_DRAW_ALL)
         }
 
         selectionCircle?.let {
@@ -809,18 +842,19 @@ class DrawingView @JvmOverloads constructor(
             }
 
             val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
-            drawStroke(c, s, opacityMultiplier, 1.0f, drawEndpoints)
+            drawStroke(c, s, opacityMultiplier, 1.0f, drawEndpoints, MASK_DRAW_ALL)
         }
 
         if (canvas == null) invalidate()
     }
-
+    
     private fun drawStroke(
         canvas: Canvas,
         stroke: Stroke,
         cumulativeOpacityMultiplier: Float,
         cumulativeWidthMultiplier: Float,
-        drawEndpoints: Boolean
+        drawEndpoints: Boolean,
+        drawMask: Int = MASK_DRAW_ALL
     ) {
         if (stroke.isGroup) {
             val groupThicknessMultiplier = stroke.paint.strokeWidth / 10f
@@ -834,7 +868,7 @@ class DrawingView @JvmOverloads constructor(
             }
 
             stroke.childStrokes.forEach { childStroke ->
-                drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints)
+                drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints, drawMask)
             }
         } else {
             if (stroke.pointsForDrawing.size >= 2) {
@@ -856,44 +890,50 @@ class DrawingView @JvmOverloads constructor(
                 val haloPaintToUse = Paint(haloPaint)
                 haloPaintToUse.strokeWidth = finalPaint.strokeWidth * 3f
 
-                if (stroke.isHighlighted) {
-                    canvas.drawPath(path, haloPaintToUse)
+                // Draw halos and markers if mask permits
+                if ((drawMask and MASK_DRAW_HALOS_AND_MARKERS) != 0) {
+                    if (stroke.isHighlighted) {
+                        canvas.drawPath(path, haloPaintToUse)
 
-                    // Draw circles for associated polyline points
-                    if (stroke.polylineIndices.isNotEmpty()) {
-                        val associatedPoints = stroke.getAssociatedPolylinePointsOnSmoothedCurve()
-                        val vertexPaint = Paint().apply {
+                        // Draw circles for associated polyline points
+                        if (stroke.polylineIndices.isNotEmpty()) {
+                            val associatedPoints = stroke.getAssociatedPolylinePointsOnSmoothedCurve()
+                            val vertexPaint = Paint().apply {
+                                style = Paint.Style.FILL
+                                color = Color.BLUE
+                            }
+                            val radius = haloPaintToUse.strokeWidth / 2f
+
+                            associatedPoints.forEach { point ->
+                                val transformedPoint = floatArrayOf(point.x, point.y)
+                                globalTransform.mapPoints(transformedPoint)
+                                canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, vertexPaint)
+                            }
+                        }
+                    }
+
+                    // Do not draw highlighted endpoint during a 2- or 3- finger gesture
+                    if (drawEndpoints && !twoFingerGestureOccured && !threeFingerGestureOccured && !moveStrokeGestureInProgress) {
+                        val radius = haloPaintToUse.strokeWidth/2f
+                        val endpointPaint = Paint().apply {
                             style = Paint.Style.FILL
-                            color = Color.BLUE
+                            color = Color.GREEN
                         }
-                        val radius = haloPaintToUse.strokeWidth / 2f
 
-                        associatedPoints.forEach { point ->
-                            val transformedPoint = floatArrayOf(point.x, point.y)
+                        // Highlight the point from pointsForDrawing (not the analytical point)
+                        if (editingPointIndex != -1 && editingPointIndex < stroke.pointsForDrawing.size) {
+                            val pointToHighlight = stroke.pointsForDrawing[editingPointIndex].point
+                            val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
                             globalTransform.mapPoints(transformedPoint)
-                            canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, vertexPaint)
+                            canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
                         }
                     }
                 }
 
-                // Do not draw highlighted endpoint during a 2- or 3- finger gesture
-                if (drawEndpoints && !twoFingerGestureOccured && !threeFingerGestureOccured && !moveStrokeGestureInProgress) {
-                    val radius = haloPaintToUse.strokeWidth/2f
-                    val endpointPaint = Paint().apply {
-                        style = Paint.Style.FILL
-                        color = Color.GREEN
-                    }
-
-                    // Highlight the point from pointsForDrawing (not the analytical point)
-                    if (editingPointIndex != -1 && editingPointIndex < stroke.pointsForDrawing.size) {
-                        val pointToHighlight = stroke.pointsForDrawing[editingPointIndex].point
-                        val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
-                        globalTransform.mapPoints(transformedPoint)
-                        canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
-                    }
+                // Draw the stroke itself if mask permits
+                if ((drawMask and MASK_DRAW_STROKE_ITSELF) != 0) {
+                    canvas.drawPath(path, finalPaint)
                 }
-
-                canvas.drawPath(path, finalPaint)
             }
         }
     }
