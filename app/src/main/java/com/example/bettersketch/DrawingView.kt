@@ -172,6 +172,10 @@ class DrawingView @JvmOverloads constructor(
                 stroke.regenerateUnsmoothedPointsFromAnalytical()
         }
 
+        if (isEditing()) {
+            canvas.drawColor(Color.argb(25, 255, 165, 0)) // 10% opacity orange
+        }
+
         // 1. Draw halos and markers first (if in editing mode)
         if (isEditing()) {
             // Draw halos and markers for all strokes
@@ -825,27 +829,17 @@ class DrawingView @JvmOverloads constructor(
         listener?.onStateChanged()
     }
 
-    private fun redrawHistory(canvas: Canvas? = null) {
-        val c = canvas ?: backingCanvas ?: return
-        if (canvas == null) {
-            c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
-        }
-
-        if (isEditing()) {
-            c.drawColor(Color.argb(25, 255, 165, 0)) // 10% opacity orange
-        }
+    // Draw stokes to the backing bitmap (at full opacity) + invalidate
+    private fun redrawHistory() {
+        val c = backingCanvas ?: return
+        c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
 
         for ((index, s) in strokes.withIndex()) {
-            val opacityMultiplier = when (currentState) {
-                State.NORMAL_DRAWING -> 1.0f
-                State.CHOSEN_STROKE_IN_NORMAL_MODE, State.STROKE_EDITING -> if (index != selectedStrokeIdx) 0.25f else 1.0f
-            }
-
             val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
-            drawStroke(c, s, opacityMultiplier, 1.0f, drawEndpoints, MASK_DRAW_ALL)
+            drawStroke(c, s, 1.0f, 1.0f, drawEndpoints, MASK_DRAW_ALL)
         }
 
-        if (canvas == null) invalidate()
+        invalidate()
     }
     
     private fun drawStroke(
