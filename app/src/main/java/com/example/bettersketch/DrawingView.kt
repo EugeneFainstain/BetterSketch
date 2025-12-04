@@ -1216,7 +1216,10 @@ class DrawingView @JvmOverloads constructor(
                 return@runCatching true
             }
 
-            if (threeFingerGestureOccured || selectionGestureInProgress) {
+            if( threeFingerGestureOccured )
+                return@runCatching true
+
+            if( selectionGestureInProgress ) {
                 val highlightedStrokes = strokes.filter { it.isHighlighted }
                 if (highlightedStrokes.size == 1) {
                     val singleHighlightedStroke = highlightedStrokes.first()
@@ -1448,31 +1451,6 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    private fun calculateCircleFrom3Points(p1: PointF, p2: PointF, p3: PointF): Triple<PointF, Float, Path> {
-        val points = listOf(p1, p2, p3)
-        var maxDist = 0f
-        var pt1 = p1
-        var pt2 = p2
-
-        for (i in 0..2) {
-            for (j in i + 1..2) {
-                val d = distance(points[i], points[j])
-                if (d > maxDist) {
-                    maxDist = d
-                    pt1 = points[i]
-                    pt2 = points[j]
-                }
-            }
-        }
-        val pt3 = points.first { it != pt1 && it != pt2 }
-
-        val midPoint = PointF((pt1.x + pt2.x) / 2, (pt1.y + pt2.y) / 2)
-        val center = PointF((midPoint.x * 2/3) + (pt3.x * 1/3), (midPoint.y * 2/3) + (pt3.y * 1/3))
-        val radius = maxDist / 2f
-        val path = Path().apply { addCircle(center.x, center.y, radius, Path.Direction.CW) }
-        return Triple(center, radius, path)
-    }
-
     private fun calculateCircleFrom2Points(p1: PointF, p2: PointF): Triple<PointF, Float, Path> {
         val center = PointF((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
         val radius = distance(p1, p2) / 2f
@@ -1486,29 +1464,7 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
 
-        if( dragGestureHasEnded )
-            return true
+        return true // nothing yet
 
-        if (event.pointerCount >= 3) {
-            val p1 = toWorldCoordinates(event.getX(0), event.getY(0))
-            val p2 = toWorldCoordinates(event.getX(1), event.getY(1))
-            val p3 = toWorldCoordinates(event.getX(2), event.getY(2))
-
-            selectionCircle = calculateCircleFrom3Points(p1, p2, p3)
-            selectionCircle?.let { (center, radius, _) ->
-                strokes.forEach { stroke ->
-                    var strokeInCircle = false
-                    stroke.forEachStroke { s ->
-                        if (s.pointsForDrawing.any { isPointInCircle(it.point, center, radius) }) {
-                            strokeInCircle = true
-                        }
-                    }
-
-                    stroke.setHighlightedRecursively(strokeInCircle || (stroke == currentStroke))
-                }
-            }
-            redrawHistory()
-        }
-        return true
     }
 }
