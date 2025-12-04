@@ -126,22 +126,6 @@
             tools:visibility="visible" />
 
         <ImageButton
-            android:id="@+id/btnMoveStroke"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
-            android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginStart="0dp"
-            android:layout_marginBottom="2dp"
-            android:background="@drawable/move_button_background"
-            android:contentDescription="@string/undo"
-            android:src="@drawable/outline_move_icon"
-            android:scaleType="fitCenter"
-            android:padding="2dp"
-            android:elevation="3dp"
-            android:visibility="gone"
-            tools:visibility="visible" />
-
-        <ImageButton
             android:id="@+id/btnSelection"
             android:layout_width="64dp"
             android:layout_height="64dp"
