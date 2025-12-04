@@ -90,6 +90,8 @@ class DrawingView @JvmOverloads constructor(
     private val selectionPaint: Paint
     private var selectionCircle: Triple<PointF, Float, Path>? = null
     private var moveStrokeGestureInProgress = false
+    private var removeAnchorPointGestureInProgress = false
+    private var isFingerOverRemoveButton = false
 
 
     init {
@@ -125,6 +127,35 @@ class DrawingView @JvmOverloads constructor(
 
     fun currentStrokeHasPolylineData(): Boolean {
         return currentStroke?.polylineIndices?.isNotEmpty() ?: false
+    }
+
+    fun removeAnchorPointAtEditingIndex() {
+        val stroke = currentStroke ?: return
+        if (stroke.isGroup) return
+        if (editingPointIndex == -1) return
+        if (stroke.polylineIndices.isEmpty()) return
+
+        // Find which polyline index corresponds to the editing point
+        val polylineIndexToRemove = stroke.polylineIndices.indexOfFirst { it == editingPointIndex }
+        if (polylineIndexToRemove == -1) return
+
+        // Don't allow removing if it would leave fewer than 2 vertices
+        if (stroke.polylineIndices.size <= 2) return
+
+        // Remove the polyline index
+        stroke.polylineIndices.removeAt(polylineIndexToRemove)
+        stroke.isModified = true
+
+        // Regenerate the stroke
+        stroke.regenerateInterpolatedPolylinePoints()
+        stroke.applySmoothing()
+
+        // Clear editing state
+        editingPointIndex = -1
+        editingPointInitialWeights = null
+
+        redrawHistory()
+        listener?.onStateChanged()
     }
 
     fun exitEditingMode() {
@@ -227,8 +258,47 @@ class DrawingView @JvmOverloads constructor(
         else
             moveStrokeGestureInProgress = false
 
+        if( gestureTag == MainActivity.tagRemoveAnchorPointGesture )
+            removeAnchorPointGestureInProgress = true
+        else
+            removeAnchorPointGestureInProgress = false
+
+        // Check if finger is over the remove anchor point button (when in editing mode and dragging an anchor)
+        if (currentState == State.STROKE_EDITING && editingPointIndex != -1) {
+            isFingerOverRemoveButton = isEventOverRemoveAnchorButton(event)
+        } else {
+            isFingerOverRemoveButton = false
+        }
+
         customGestureDetector.onTouchEvent(event)
         return true
+    }
+
+    private fun isEventOverRemoveAnchorButton(event: MotionEvent): Boolean {
+        // Get the button from MainActivity
+        val activity = context as? MainActivity ?: return false
+        val button = activity.findViewById<View>(R.id.btnRemoveAnchorPoint) ?: return false
+
+        if (button.visibility != View.VISIBLE) return false
+
+        // Get button bounds in screen coordinates
+        val buttonLocation = IntArray(2)
+        button.getLocationOnScreen(buttonLocation)
+
+        // Get event coordinates in screen coordinates
+        val screenX = event.rawX
+        val screenY = event.rawY
+
+        // Check if event is within button bounds
+        val isOver = screenX >= buttonLocation[0] &&
+                screenX <= buttonLocation[0] + button.width &&
+                screenY >= buttonLocation[1] &&
+                screenY <= buttonLocation[1] + button.height
+
+        // Provide visual feedback
+        button.isPressed = isOver
+
+        return isOver
     }
 
     override fun performClick(): Boolean {
@@ -1029,6 +1099,14 @@ class DrawingView @JvmOverloads constructor(
         selectionCircle = null
         backedUpGroupStroke = null
 
+        // Check if finger was released over the remove anchor point button while editing
+        if (currentState == State.STROKE_EDITING && isFingerOverRemoveButton) {
+            removeAnchorPointAtEditingIndex()
+            setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+            isFingerOverRemoveButton = false
+            return true
+        }
+
         if (threeFingerGestureOccured) {
             val highlightedStrokes = strokes.filter { it.isHighlighted }
             if (highlightedStrokes.size == 1) {
@@ -1040,10 +1118,10 @@ class DrawingView @JvmOverloads constructor(
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
             } else
-            if (highlightedStrokes.isNotEmpty())
-                setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-            else
-                setState(State.NORMAL_DRAWING)
+                if (highlightedStrokes.isNotEmpty())
+                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+                else
+                    setState(State.NORMAL_DRAWING)
             listener?.onStateChanged()
             return true
         }
