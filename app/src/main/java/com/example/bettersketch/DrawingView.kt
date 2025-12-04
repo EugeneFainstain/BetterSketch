@@ -44,12 +44,14 @@ class DrawingView @JvmOverloads constructor(
         }
 
     private var currentState = State.NORMAL_DRAWING
+    private var globalSetStateIsNeeded = false
     private fun setState(newState: State) {
         if (currentState != newState) {
             currentState = newState
         }
         redrawHistory() // Redraw in any case
         listener?.onStateChanged() // Update UI in any case...
+        globalSetStateIsNeeded = false
     }
 
     // Draw mask constants
@@ -75,6 +77,7 @@ class DrawingView @JvmOverloads constructor(
     private var editingPointIndex: Int = -1
     private var editingPointInitialWeights: List<Float>? = null
     private var snapshotUnsmoothedPoints: MutableList<PathPoint>? = null
+    private var addingAnchorPointIndex: Int = -1
 
     // Transformation state
     private val globalTransform = Matrix() // Matrix for transforming from WORLD-SPACE to SCREEN-SPACE (a.k.a the VIEW MATRIX)
@@ -123,7 +126,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun isAnchorPointDragging(): Boolean {
-        return currentState == State.STROKE_EDITING
+        return (editingPointIndex != -1)
     }
 
     fun isCurrentStrokeModified(): Boolean {
@@ -132,6 +135,60 @@ class DrawingView @JvmOverloads constructor(
 
     fun currentStrokeHasPolylineData(): Boolean {
         return currentStroke?.polylineIndices?.isNotEmpty() ?: false
+    }
+
+    private fun findClosestPointOnCurve(tapPoint: PointF): Int {
+        val stroke = currentStroke ?: return -1
+        if (stroke.isGroup) return -1
+
+        var closestDist = Float.MAX_VALUE
+        var closestPointIndex = -1
+
+        stroke.pointsForDrawing.forEachIndexed { index, pathPoint ->
+            val d = distance(pathPoint.point, tapPoint)
+            if (d < closestDist) {
+                closestDist = d
+                closestPointIndex = index
+            }
+        }
+
+        return closestPointIndex
+    }
+
+    fun addAnchorPointAtIndex(index: Int) {
+        val stroke = currentStroke ?: return
+        if (stroke.isGroup) return
+        if (index == -1) return
+
+        // Initialize polylineIndices if empty (first anchor being added)
+        if (stroke.polylineIndices.isEmpty()) {
+            // Add first and last points as anchors
+            stroke.polylineIndices.add(0)
+            stroke.polylineIndices.add(stroke.unsmoothedPoints.size - 1)
+        }
+
+        // Find where to insert the new anchor in the sorted polylineIndices list
+        var insertPosition = stroke.polylineIndices.size
+        for (i in stroke.polylineIndices.indices) {
+            if (index < stroke.polylineIndices[i]) {
+                insertPosition = i
+                break
+            } else if (index == stroke.polylineIndices[i]) {
+                // Already an anchor at this position, don't add
+                return
+            }
+        }
+
+        // Insert the new anchor
+        stroke.polylineIndices.add(insertPosition, index)
+        stroke.isModified = true
+
+        // Regenerate the stroke
+        stroke.regenerateInterpolatedPolylinePoints()
+        stroke.applySmoothing()
+
+        redrawHistory()
+        listener?.onStateChanged()
     }
 
     fun removeAnchorPointAtEditingIndex() {
@@ -184,7 +241,6 @@ class DrawingView @JvmOverloads constructor(
 
     fun exitEditingMode() {
         deselectAndDeHighlight()
-        editingPointIndex = -1
         editingPointInitialWeights = null
         setState(State.NORMAL_DRAWING)
     }
@@ -497,6 +553,7 @@ class DrawingView @JvmOverloads constructor(
     private fun deselectAndDeHighlight() {
         // Note: doesn't cause a redraw on its own
         selectedStrokeIdx = -1 // First thing - deselect.
+        editingPointIndex = -1 // Don't forget this one too...
         strokes.forEach { it.setHighlightedRecursively(false) } // Second - de-highlight
         lastStrokeHighlightedIdx = -1
     }
@@ -556,6 +613,7 @@ class DrawingView @JvmOverloads constructor(
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
         val stroke = currentStroke ?: return false
         if (stroke.isGroup) return false
+        if( addAnchorPointGestureInProgress ) return false
 
         var closestDist = Float.MAX_VALUE
         var closestPointIndex = -1
@@ -996,6 +1054,21 @@ class DrawingView @JvmOverloads constructor(
                                 canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, vertexPaint)
                             }
                         }
+
+                        // Draw red circle for adding anchor point preview
+                        if (addAnchorPointGestureInProgress && addingAnchorPointIndex != -1 &&
+                            addingAnchorPointIndex < stroke.pointsForDrawing.size) {
+                            val previewPoint = stroke.pointsForDrawing[addingAnchorPointIndex].point
+                            val transformedPoint = floatArrayOf(previewPoint.x, previewPoint.y)
+                            globalTransform.mapPoints(transformedPoint)
+
+                            val previewPaint = Paint().apply {
+                                style = Paint.Style.FILL
+                                color = Color.RED
+                            }
+                            val radius = haloPaintToUse.strokeWidth / 1.5f
+                            canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, previewPaint)
+                        }
                     }
 
                     // Do not draw highlighted endpoint during a 2- or 3- finger gesture
@@ -1044,6 +1117,7 @@ class DrawingView @JvmOverloads constructor(
                 if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 } else {
+                    deselectAndDeHighlight() // Note: doesn't cause a redraw on its own
                     setState(State.NORMAL_DRAWING)
                 }
             }
@@ -1121,60 +1195,77 @@ class DrawingView @JvmOverloads constructor(
         selectionCircle = null
         backedUpGroupStroke = null
 
-        // Check if finger was released over the remove anchor point button while editing
-        if (currentState == State.STROKE_EDITING && isFingerOverRemoveButton) {
-            removeAnchorPointAtEditingIndex()
-            setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-            isFingerOverRemoveButton = false
-            return true
-        }
+        // Make sure setState gets called in the end...
+        globalSetStateIsNeeded = true
 
-        if (threeFingerGestureOccured) {
-            val highlightedStrokes = strokes.filter { it.isHighlighted }
-            if (highlightedStrokes.size == 1) {
-                val singleHighlightedStroke = highlightedStrokes.first()
-                val index = strokes.indexOf(singleHighlightedStroke)
-                if (index != -1) {
-                    selectedStrokeIdx = index
-                    currentPaint = Paint(singleHighlightedStroke.paint)
-                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-                }
-            } else
-                if (highlightedStrokes.isNotEmpty())
-                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-                else
-                    setState(State.NORMAL_DRAWING)
-            listener?.onStateChanged()
-            return true
-        }
-
-        if (twoFingerGestureOccured)
-            return true
-
-        when (currentState) {
-            State.NORMAL_DRAWING -> {
-                strokeInProgress?.let {
-                    touchUp()
-                }
+        return runCatching {
+            // Check if we're adding an anchor point
+            if (addAnchorPointGestureInProgress && addingAnchorPointIndex != -1) {
+                addAnchorPointAtIndex(addingAnchorPointIndex)
+                addingAnchorPointIndex = -1
+                addAnchorPointGestureInProgress = false
+                return@runCatching true
             }
-            State.CHOSEN_STROKE_IN_NORMAL_MODE-> {
-                val screenPoint = PointF(event.x, event.y)
-                if (selectStrokeAt(screenPoint))
-                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-                else
-                    setState(State.NORMAL_DRAWING)
-            }
-            State.STROKE_EDITING -> {
+
+            // Check if finger was released over the remove anchor point button while editing
+            if (currentState == State.STROKE_EDITING && isFingerOverRemoveButton) {
+                removeAnchorPointAtEditingIndex()
                 setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-                editingPointIndex = -1
-                editingPointInitialWeights = null
-                snapshotUnsmoothedPoints = null
+                isFingerOverRemoveButton = false
+                return@runCatching true
             }
-            else -> {}
-        }
 
+            if (threeFingerGestureOccured) {
+                val highlightedStrokes = strokes.filter { it.isHighlighted }
+                if (highlightedStrokes.size == 1) {
+                    val singleHighlightedStroke = highlightedStrokes.first()
+                    val index = strokes.indexOf(singleHighlightedStroke)
+                    if (index != -1) {
+                        selectedStrokeIdx = index
+                        currentPaint = Paint(singleHighlightedStroke.paint)
+                        setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+                    }
+                } else
+                    if (highlightedStrokes.isNotEmpty())
+                        setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+                    else
+                        setState(State.NORMAL_DRAWING)
+                listener?.onStateChanged()
+                return@runCatching true
+            }
 
-        return true
+            if (twoFingerGestureOccured)
+                return@runCatching true
+
+            when (currentState) {
+                State.NORMAL_DRAWING -> {
+                    strokeInProgress?.let {
+                        touchUp()
+                    }
+                }
+                State.CHOSEN_STROKE_IN_NORMAL_MODE-> {
+                    val screenPoint = PointF(event.x, event.y)
+                    if (selectStrokeAt(screenPoint))
+                        setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+                    else
+                        setState(State.NORMAL_DRAWING)
+                }
+                State.STROKE_EDITING -> {
+                    editingPointIndex = -1
+                    editingPointInitialWeights = null
+                    snapshotUnsmoothedPoints = null
+                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+                }
+                else -> {}
+            }
+
+            return@runCatching true
+        }.also {
+            // De-initialization code that ALWAYS runs
+            editingPointIndex = -1
+            if( globalSetStateIsNeeded )
+                setState(currentState) // Update drawing and UI
+        }.getOrDefault(false)
     }
 
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
@@ -1184,6 +1275,14 @@ class DrawingView @JvmOverloads constructor(
 
         val inverseGlobalTransform = Matrix()
         globalTransform.invert(inverseGlobalTransform)
+
+        // Handle add anchor point gesture
+        if( addAnchorPointGestureInProgress ) {
+            val worldPoint = toWorldCoordinates(event.x, event.y)
+            addingAnchorPointIndex = findClosestPointOnCurve(worldPoint)
+            invalidate() // Redraw to show the red circle
+            return true
+        }
 
         // Handle move stroke gesture (translation only)
         if (moveStrokeGestureInProgress) {
