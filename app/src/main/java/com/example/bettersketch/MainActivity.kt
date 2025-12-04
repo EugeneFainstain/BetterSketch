@@ -24,10 +24,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnPolyline: Button
     private lateinit var btnDel: ImageButton
     private lateinit var btnMoveStroke: ImageButton
+    private lateinit var btnRemoveAnchorPoint: ImageButton
     private lateinit var gestureHelper: ButtonAugmentedGestureHelper
     
     // Gesture tags
     public object tagMoveStrokeGesture
+    public object tagRemoveAnchorPointGesture
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -66,12 +68,14 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnPolyline = findViewById(R.id.btnPolyline)
         btnDel = findViewById(R.id.btnDel)
         btnMoveStroke = findViewById(R.id.btnMoveStroke)
+        btnRemoveAnchorPoint = findViewById(R.id.btnRemoveAnchorPoint)
 
         setupSliderListeners()
         
         // Set up button-augmented gesture system
         gestureHelper = ButtonAugmentedGestureHelper(drawingView)
         gestureHelper.registerButton(btnMoveStroke, tagMoveStrokeGesture)
+        gestureHelper.registerButton(btnRemoveAnchorPoint, tagRemoveAnchorPointGesture)
         drawingView.mainGestureHelper = gestureHelper
 
         // Set up touch listener on DrawingView
@@ -263,6 +267,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
 
         btnMoveStroke.visibility = View.VISIBLE
         btnMoveStroke.isEnabled = shouldShowDel // Same logic as for the DEL button
+
+        btnRemoveAnchorPoint.visibility = if( drawingView.isEditing() ) View.VISIBLE else View.GONE
+        btnRemoveAnchorPoint.isEnabled = if( drawingView.currentStroke != null) true else false
     }
 }
 

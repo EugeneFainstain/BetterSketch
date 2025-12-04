@@ -78,6 +78,22 @@
             android:elevation="8dp" />
 
         <ImageButton
+            android:id="@+id/btnRemoveAnchorPoint"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="34dp"
+            android:layout_marginTop="68dp"
+            android:background="@drawable/move_button_background"
+            android:contentDescription="Remove Anchor Point"
+            android:src="@drawable/outline_remove_anchor_point"
+            android:scaleType="fitCenter"
+            android:padding="0dp"
+            android:elevation="3dp"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+        <ImageButton
             android:id="@+id/btnUndoStrokeEdit"
             android:layout_width="64dp"
             android:layout_height="64dp"
