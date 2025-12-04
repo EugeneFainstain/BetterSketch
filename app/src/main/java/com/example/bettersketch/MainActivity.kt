@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnPolyline: Button
     private lateinit var btnDel: ImageButton
     private lateinit var btnMoveStroke: ImageButton
+    private lateinit var btnSelection: ImageButton
     private lateinit var btnRemoveAnchorPoint: ImageButton
     private lateinit var btnAddAnchorPoint: ImageButton
     private lateinit var gestureHelper: ButtonAugmentedGestureHelper
@@ -31,6 +32,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     // Gesture tags
     public object tagMoveStrokeGesture
     public object tagAddAnchorPointGesture
+    public object tagSelectionGesture
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -69,6 +71,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnPolyline = findViewById(R.id.btnPolyline)
         btnDel = findViewById(R.id.btnDel)
         btnMoveStroke = findViewById(R.id.btnMoveStroke)
+        btnSelection = findViewById(R.id.btnSelection)
         btnRemoveAnchorPoint = findViewById(R.id.btnRemoveAnchorPoint)
         btnAddAnchorPoint = findViewById(R.id.btnAddAnchorPoint)
 
@@ -77,6 +80,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         // Set up button-augmented gesture system
         gestureHelper = ButtonAugmentedGestureHelper(drawingView)
         gestureHelper.registerButton(btnMoveStroke, tagMoveStrokeGesture)
+        gestureHelper.registerButton(btnSelection, tagSelectionGesture)
         gestureHelper.registerButton(btnAddAnchorPoint, tagAddAnchorPointGesture)
         drawingView.mainGestureHelper = gestureHelper
 
@@ -289,6 +293,9 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             btnRemoveAnchorPoint.visibility = View.GONE
             btnAddAnchorPoint.visibility = View.GONE
         }
+
+        btnSelection.visibility = View.VISIBLE
+        btnSelection.isEnabled = drawingView.strokes.isNotEmpty() // As long as there are some strokes to select...
     }
 }
 

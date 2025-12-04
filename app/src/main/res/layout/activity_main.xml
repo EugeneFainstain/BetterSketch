@@ -141,6 +141,22 @@
             android:visibility="gone"
             tools:visibility="visible" />
 
+        <ImageButton
+            android:id="@+id/btnSelection"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_gravity="bottom|start"
+            android:layout_marginStart="34dp"
+            android:layout_marginBottom="2dp"
+            android:background="@drawable/move_button_background"
+            android:contentDescription="Selection"
+            android:src="@drawable/outline_selection"
+            android:scaleType="fitCenter"
+            android:padding="6dp"
+            android:elevation="3dp"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
         <Button
             android:id="@+id/btnGroupStrokes"
             android:layout_width="wrap_content"

@@ -94,6 +94,7 @@ class DrawingView @JvmOverloads constructor(
     private val selectionPaint: Paint
     private var selectionCircle: Triple<PointF, Float, Path>? = null
     private var moveStrokeGestureInProgress = false
+    private var selectionGestureInProgress = false
     private var addAnchorPointGestureInProgress = false
     private var isFingerOverRemoveButton = false
 
@@ -328,12 +329,12 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // Check if this gesture started from a button
         val gestureTag = mainGestureHelper?.activeGestureTag
 
         moveStrokeGestureInProgress     = (gestureTag == MainActivity.tagMoveStrokeGesture)
+        selectionGestureInProgress      = (gestureTag == MainActivity.tagSelectionGesture)
         addAnchorPointGestureInProgress = (gestureTag == MainActivity.tagAddAnchorPointGesture)
 
         // Check if finger is over the remove anchor point button (when in editing mode and dragging an anchor)
@@ -1215,7 +1216,7 @@ class DrawingView @JvmOverloads constructor(
                 return@runCatching true
             }
 
-            if (threeFingerGestureOccured) {
+            if (threeFingerGestureOccured || selectionGestureInProgress) {
                 val highlightedStrokes = strokes.filter { it.isHighlighted }
                 if (highlightedStrokes.size == 1) {
                     val singleHighlightedStroke = highlightedStrokes.first()
@@ -1271,6 +1272,9 @@ class DrawingView @JvmOverloads constructor(
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
 
         if( dragGestureHasEnded || twoFingerGestureOccured || threeFingerGestureOccured )
+            return true
+
+        if( selectionGestureInProgress )
             return true
 
         val inverseGlobalTransform = Matrix()
@@ -1379,6 +1383,29 @@ class DrawingView @JvmOverloads constructor(
         val worldDelta = floatArrayOf(dx, dy)
         invertedGlobal.mapVectors(worldDelta)
 
+        if( selectionGestureInProgress )
+        {
+            if (event.pointerCount >= 2) {
+                val p1 = toWorldCoordinates(event.getX(0), event.getY(0))
+                val p2 = toWorldCoordinates(event.getX(1), event.getY(1))
+
+                selectionCircle = calculateCircleFrom2Points(p1, p2)
+                selectionCircle?.let { (center, radius, _) ->
+                    strokes.forEach { stroke ->
+                        var strokeInCircle = false
+                        stroke.forEachStroke { s ->
+                            if (s.pointsForDrawing.any { isPointInCircle(it.point, center, radius) }) {
+                                strokeInCircle = true
+                            }
+                        }
+
+                        stroke.setHighlightedRecursively(strokeInCircle || (stroke == currentStroke))
+                    }
+                }
+                redrawHistory()
+            }
+        }
+        else
         if( moveStrokeGestureInProgress )
         {
             // Get all highlighted strokes and include currentStroke
@@ -1421,7 +1448,7 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    private fun calculateCircle(p1: PointF, p2: PointF, p3: PointF): Triple<PointF, Float, Path> {
+    private fun calculateCircleFrom3Points(p1: PointF, p2: PointF, p3: PointF): Triple<PointF, Float, Path> {
         val points = listOf(p1, p2, p3)
         var maxDist = 0f
         var pt1 = p1
@@ -1446,6 +1473,13 @@ class DrawingView @JvmOverloads constructor(
         return Triple(center, radius, path)
     }
 
+    private fun calculateCircleFrom2Points(p1: PointF, p2: PointF): Triple<PointF, Float, Path> {
+        val center = PointF((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
+        val radius = distance(p1, p2) / 2f
+        val path = Path().apply { addCircle(center.x, center.y, radius, Path.Direction.CW) }
+        return Triple(center, radius, path)
+    }
+
     private fun isPointInCircle(point: PointF, circleCenter: PointF, circleRadius: Float): Boolean {
         return distance(point, circleCenter) < circleRadius
     }
@@ -1460,7 +1494,7 @@ class DrawingView @JvmOverloads constructor(
             val p2 = toWorldCoordinates(event.getX(1), event.getY(1))
             val p3 = toWorldCoordinates(event.getX(2), event.getY(2))
 
-            selectionCircle = calculateCircle(p1, p2, p3)
+            selectionCircle = calculateCircleFrom3Points(p1, p2, p3)
             selectionCircle?.let { (center, radius, _) ->
                 strokes.forEach { stroke ->
                     var strokeInCircle = false
