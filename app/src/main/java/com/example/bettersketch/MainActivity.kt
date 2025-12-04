@@ -25,11 +25,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnDel: ImageButton
     private lateinit var btnMoveStroke: ImageButton
     private lateinit var btnRemoveAnchorPoint: ImageButton
+    private lateinit var btnAddAnchorPoint: ImageButton
     private lateinit var gestureHelper: ButtonAugmentedGestureHelper
     
     // Gesture tags
     public object tagMoveStrokeGesture
-    public object tagRemoveAnchorPointGesture
+    public object tagAddAnchorPointGesture
 
     private val colors = intArrayOf(
         Color.BLACK,
@@ -69,13 +70,14 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnDel = findViewById(R.id.btnDel)
         btnMoveStroke = findViewById(R.id.btnMoveStroke)
         btnRemoveAnchorPoint = findViewById(R.id.btnRemoveAnchorPoint)
+        btnAddAnchorPoint = findViewById(R.id.btnAddAnchorPoint)
 
         setupSliderListeners()
         
         // Set up button-augmented gesture system
         gestureHelper = ButtonAugmentedGestureHelper(drawingView)
         gestureHelper.registerButton(btnMoveStroke, tagMoveStrokeGesture)
-        gestureHelper.registerButton(btnRemoveAnchorPoint, tagRemoveAnchorPointGesture)
+        gestureHelper.registerButton(btnAddAnchorPoint, tagAddAnchorPointGesture)
         drawingView.mainGestureHelper = gestureHelper
 
         // Set up touch listener on DrawingView
@@ -268,8 +270,25 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnMoveStroke.visibility = View.VISIBLE
         btnMoveStroke.isEnabled = shouldShowDel // Same logic as for the DEL button
 
-        btnRemoveAnchorPoint.visibility = if( drawingView.isEditing() ) View.VISIBLE else View.GONE
-        btnRemoveAnchorPoint.isEnabled = if( drawingView.currentStroke != null) true else false
+        // Show remove/add anchor point buttons based on whether stroke has polyline data
+        val currentStroke = drawingView.currentStroke
+        val hasPolylineData = currentStroke?.polylineIndices?.isNotEmpty() ?: false
+
+        if (drawingView.isEditing() && currentStroke != null && hasPolylineData) {
+            if (drawingView.isAnchorPointDragging()) {
+                // Show remove button, hide add button
+                btnRemoveAnchorPoint.visibility = View.VISIBLE
+                btnAddAnchorPoint.visibility = View.GONE
+            } else {
+                // Show add button, hide remove button
+                btnRemoveAnchorPoint.visibility = View.GONE
+                btnAddAnchorPoint.visibility = View.VISIBLE
+            }
+        } else {
+            // Hide both buttons
+            btnRemoveAnchorPoint.visibility = View.GONE
+            btnAddAnchorPoint.visibility = View.GONE
+        }
     }
 }
 

@@ -91,7 +91,7 @@ class DrawingView @JvmOverloads constructor(
     private val selectionPaint: Paint
     private var selectionCircle: Triple<PointF, Float, Path>? = null
     private var moveStrokeGestureInProgress = false
-    private var removeAnchorPointGestureInProgress = false
+    private var addAnchorPointGestureInProgress = false
     private var isFingerOverRemoveButton = false
 
 
@@ -120,6 +120,10 @@ class DrawingView @JvmOverloads constructor(
 
     fun isEditing(): Boolean {
         return currentState == State.CHOSEN_STROKE_IN_NORMAL_MODE || currentState == State.STROKE_EDITING
+    }
+
+    fun isAnchorPointDragging(): Boolean {
+        return currentState == State.STROKE_EDITING
     }
 
     fun isCurrentStrokeModified(): Boolean {
@@ -273,19 +277,12 @@ class DrawingView @JvmOverloads constructor(
         // Check if this gesture started from a button
         val gestureTag = mainGestureHelper?.activeGestureTag
 
-        if( gestureTag == MainActivity.tagMoveStrokeGesture )
-            moveStrokeGestureInProgress = true
-        else
-            moveStrokeGestureInProgress = false
-
-        if( gestureTag == MainActivity.tagRemoveAnchorPointGesture )
-            removeAnchorPointGestureInProgress = true
-        else
-            removeAnchorPointGestureInProgress = false
+        moveStrokeGestureInProgress     = (gestureTag == MainActivity.tagMoveStrokeGesture)
+        addAnchorPointGestureInProgress = (gestureTag == MainActivity.tagAddAnchorPointGesture)
 
         // Check if finger is over the remove anchor point button (when in editing mode and dragging an anchor)
         if (currentState == State.STROKE_EDITING && editingPointIndex != -1) {
-            isFingerOverRemoveButton = isEventOverRemoveAnchorButton(event)
+            isFingerOverRemoveButton = isEventOverRemoveAnchorButton(event) and (addAnchorPointGestureInProgress == false)
         } else {
             isFingerOverRemoveButton = false
         }

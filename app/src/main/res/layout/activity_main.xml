@@ -94,6 +94,22 @@
             tools:visibility="visible" />
 
         <ImageButton
+            android:id="@+id/btnAddAnchorPoint"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="34dp"
+            android:layout_marginTop="68dp"
+            android:background="@drawable/move_button_background"
+            android:contentDescription="Add Anchor Point"
+            android:src="@drawable/outline_add_anchor_point"
+            android:scaleType="fitCenter"
+            android:padding="0dp"
+            android:elevation="3dp"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+        <ImageButton
             android:id="@+id/btnUndoStrokeEdit"
             android:layout_width="64dp"
             android:layout_height="64dp"
