@@ -74,6 +74,7 @@ class DrawingView @JvmOverloads constructor(
     public var lastStrokeHighlightedIdx: Int = -1
     private var editingPointIndex: Int = -1
     private var editingPointInitialWeights: List<Float>? = null
+    private var snapshotUnsmoothedPoints: MutableList<PathPoint>? = null
 
     // Transformation state
     private val globalTransform = Matrix() // Matrix for transforming from WORLD-SPACE to SCREEN-SPACE (a.k.a the VIEW MATRIX)
@@ -142,6 +143,24 @@ class DrawingView @JvmOverloads constructor(
         // Don't allow removing if it would leave fewer than 2 vertices
         if (stroke.polylineIndices.size <= 2) return
 
+        // Restore unsmoothedPoints to the snapshot taken when editing started
+        if (snapshotUnsmoothedPoints != null) {
+            stroke.unsmoothedPoints.clear()
+            stroke.unsmoothedPoints.addAll(
+                snapshotUnsmoothedPoints!!.map {
+                    PathPoint(PointF(it.point.x, it.point.y), it.distance)
+                }
+            )
+
+            // Recalculate distances
+            val (recalculatedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
+                stroke.unsmoothedPoints.map { it.point }
+            )
+            stroke.unsmoothedPoints.clear()
+            stroke.unsmoothedPoints.addAll(recalculatedPoints)
+            stroke.totalDistance = newTotalDistance
+        }
+
         // Remove the polyline index
         stroke.polylineIndices.removeAt(polylineIndexToRemove)
         stroke.isModified = true
@@ -153,6 +172,7 @@ class DrawingView @JvmOverloads constructor(
         // Clear editing state
         editingPointIndex = -1
         editingPointInitialWeights = null
+        snapshotUnsmoothedPoints = null
 
         redrawHistory()
         listener?.onStateChanged()
@@ -555,6 +575,11 @@ class DrawingView @JvmOverloads constructor(
         }
 
         editingPointIndex = closestPointIndex
+
+        // Save snapshot of unsmoothedPoints before editing
+        snapshotUnsmoothedPoints = stroke.unsmoothedPoints.map {
+            PathPoint(PointF(it.point.x, it.point.y), it.distance)
+        }.toMutableList()
 
         // NEW APPROACH: Find closest polyline anchor in pointsForDrawing
         if (stroke.polylineIndices.isNotEmpty() && stroke.polylineIndices.size >= 2 &&
@@ -1146,6 +1171,7 @@ class DrawingView @JvmOverloads constructor(
                 setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 editingPointIndex = -1
                 editingPointInitialWeights = null
+                snapshotUnsmoothedPoints = null
             }
             else -> {}
         }
