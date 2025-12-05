@@ -50,7 +50,7 @@ class DrawingView @JvmOverloads constructor(
             currentState = newState
         }
         redrawHistory() // Redraw in any case
-        listener?.onStateChanged() // Update UI in any case...
+        listener?.onStateChanged() // This is the only place this is called
         globalSetStateIsNeeded = false
     }
 
@@ -189,9 +189,6 @@ class DrawingView @JvmOverloads constructor(
         // Regenerate the stroke
         stroke.regenerateInterpolatedPolylinePoints()
         stroke.applySmoothing()
-
-        redrawHistory()
-        listener?.onStateChanged()
     }
 
     fun removeAnchorPointAtEditingIndex() {
@@ -238,8 +235,7 @@ class DrawingView @JvmOverloads constructor(
         editingPointInitialWeights = null
         snapshotUnsmoothedPoints = null
 
-        redrawHistory()
-        listener?.onStateChanged()
+        setState(currentState) // Refresh UI and Canvas
     }
 
     fun exitEditingMode() {
@@ -259,8 +255,7 @@ class DrawingView @JvmOverloads constructor(
             it.applySmoothing()
             it.isModified = false
         }
-        redrawHistory()
-        listener?.onStateChanged()
+        setState(currentState) // Refresh UI and Canvas
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -421,8 +416,6 @@ class DrawingView @JvmOverloads constructor(
 
             s.applySmoothing()
         }
-        listener?.onStateChanged()
-        redrawHistory()
     }
 
     private fun getScaleFromMatrix(matrix: Matrix): Float {
@@ -536,8 +529,7 @@ class DrawingView @JvmOverloads constructor(
     fun toggleCurrentStrokePolyline() {
         currentStroke?.let {
             it.togglePolylineRepresentation()
-            redrawHistory()
-            listener?.onStateChanged()
+            setState(currentState) // Refresh UI and Canvas
         }
     }
 
@@ -754,8 +746,7 @@ class DrawingView @JvmOverloads constructor(
                 if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.renderAsPolyline) {
                     // Revert the fitted/approximated stroke to original
                     revertStrokeToOriginal(stroke)
-                    redrawHistory()
-                    listener?.onStateChanged()
+                    setState(currentState) // Refresh UI and Canvas
                     return
                 }
             }
@@ -767,8 +758,7 @@ class DrawingView @JvmOverloads constructor(
             if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.renderAsPolyline) {
                 // Revert the fitted/approximated stroke to original
                 revertStrokeToOriginal(stroke)
-                redrawHistory()
-                listener?.onStateChanged()
+                setState(currentState) // Refresh UI and Canvas
                 return
             }
             // Delete the selected stroke if not fitted
@@ -850,7 +840,6 @@ class DrawingView @JvmOverloads constructor(
             selectedStrokeIdx = strokes.lastIndex
 
             setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-            listener?.onStateChanged()
         }
     }
 
@@ -863,7 +852,6 @@ class DrawingView @JvmOverloads constructor(
             selectedStrokeIdx = strokes.lastIndex
             newGroup.setHighlightedRecursively(true)
             setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-            listener?.onStateChanged()
         }
     }
 
@@ -877,7 +865,6 @@ class DrawingView @JvmOverloads constructor(
                     groupStroke.childStrokes.forEach { it.setHighlightedRecursively(true) }
                     selectedStrokeIdx = -1
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-                    listener?.onStateChanged()
                 }
             }
         }
@@ -920,7 +907,7 @@ class DrawingView @JvmOverloads constructor(
             // Don't update editingPointIndex - keep it at the originally selected point
             // This ensures the green circle stays at the correct visual location
 
-            redrawHistory()
+            invalidate()
         }
     }
     
@@ -934,9 +921,8 @@ class DrawingView @JvmOverloads constructor(
                 it.applySmoothing()
                 it.isModified = true
             }
-            redrawHistory()
+            invalidate()
         }
-        listener?.onStateChanged()
     }
 
     fun setColor(color: Int, applyToSelected: Boolean) {
@@ -964,7 +950,7 @@ class DrawingView @JvmOverloads constructor(
             }
         }
         currentPaint.color = color
-        listener?.onStateChanged()
+        invalidate()
     }
 
     fun setStrokeWidth(px: Float, applyToSelected: Boolean) {
@@ -978,7 +964,7 @@ class DrawingView @JvmOverloads constructor(
             }
         }
         currentPaint.strokeWidth = max(1f, min(120f, px))
-        listener?.onStateChanged()
+        invalidate()
     }
 
     // Draw stokes to the backing bitmap (at full opacity) + invalidate
@@ -986,9 +972,13 @@ class DrawingView @JvmOverloads constructor(
         val c = backingCanvas ?: return
         c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
 
-        for ((index, s) in strokes.withIndex()) {
-            val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
-            drawStroke(c, s, 1.0f, 1.0f, drawEndpoints, MASK_DRAW_ALL)
+        for ((index, s) in strokes.withIndex())
+        {
+            val doDraw = (currentState == State.NORMAL_DRAWING) || (index != selectedStrokeIdx)
+            if( doDraw ) {
+                val drawEndpoints = (currentState == State.STROKE_EDITING) && (index == selectedStrokeIdx)
+                drawStroke(c, s, 1.0f, 1.0f, drawEndpoints, MASK_DRAW_ALL)
+            }
         }
 
         invalidate()
@@ -1141,10 +1131,10 @@ class DrawingView @JvmOverloads constructor(
         threeFingerGestureOccured = false // this is the only place it becomes "false"
         dragGestureHasEnded       = false // this is the only place it becomes "false"
 
+        globalSetStateIsNeeded = true
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 touchStart(downPoint.x, downPoint.y)
-                setState(currentState)
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
                 if (selectEndpointOfCurrentStroke(worldPoint)) {
@@ -1161,12 +1151,10 @@ class DrawingView @JvmOverloads constructor(
                 }
             }
             State.STROKE_EDITING -> {
-                if (selectEndpointOfCurrentStroke(worldPoint)) {
-                    redrawHistory()
-                }
+                selectEndpointOfCurrentStroke(worldPoint)
             }
         }
-        listener?.onStateChanged()
+        if( globalSetStateIsNeeded ) setState(currentState) // Refresh UI and Canvas
         return true
     }
 
@@ -1207,17 +1195,15 @@ class DrawingView @JvmOverloads constructor(
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
         selectionCircle = null
         backedUpGroupStroke = null
+        globalSetStateIsNeeded = true // Make sure setState gets called in the end...
 
-        // Make sure setState gets called in the end...
-        globalSetStateIsNeeded = true
-
-        return runCatching {
+        run {
             // Check if we're adding an anchor point
             if (addAnchorPointGestureInProgress && addingAnchorPointIndex != -1) {
                 addAnchorPointAtIndex(addingAnchorPointIndex)
                 addingAnchorPointIndex = -1
                 addAnchorPointGestureInProgress = false
-                return@runCatching true
+                return@run
             }
 
             // Check if finger was released over the remove anchor point button while editing
@@ -1225,11 +1211,11 @@ class DrawingView @JvmOverloads constructor(
                 removeAnchorPointAtEditingIndex()
                 setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 isFingerOverRemoveButton = false
-                return@runCatching true
+                return@run
             }
 
             if( threeFingerGestureOccured )
-                return@runCatching true
+                return@run
 
             if( selectionGestureInProgress ) {
                 val highlightedStrokes = strokes.filter { it.isHighlighted }
@@ -1246,12 +1232,11 @@ class DrawingView @JvmOverloads constructor(
                         setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                     else
                         setState(State.NORMAL_DRAWING)
-                listener?.onStateChanged()
-                return@runCatching true
+                return@run
             }
 
             if (twoFingerGestureOccured)
-                return@runCatching true
+                return@run
 
             when (currentState) {
                 State.NORMAL_DRAWING -> {
@@ -1274,15 +1259,13 @@ class DrawingView @JvmOverloads constructor(
                 }
                 else -> {}
             }
+        }
 
-            return@runCatching true
-        }.also {
-            // De-initialization code that ALWAYS runs
-            editingPointIndex = -1
-            strokesToTransform.clear()
-            if( globalSetStateIsNeeded )
-                setState(currentState) // Update drawing and UI
-        }.getOrDefault(false)
+        // De-initialization code that ALWAYS runs
+        editingPointIndex = -1
+        strokesToTransform.clear()
+        if( globalSetStateIsNeeded ) setState(currentState) // Update drawing and UI
+        return true
     }
 
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
@@ -1355,6 +1338,10 @@ class DrawingView @JvmOverloads constructor(
             }
             else -> {}
         }
+        if( threeFingerGestureOccured ) // We'll need this for later
+            redrawHistory()
+        else
+            invalidate()
         return true
     }
 
@@ -1394,7 +1381,6 @@ class DrawingView @JvmOverloads constructor(
                         stroke.setHighlightedRecursively(strokeInCircle || (stroke == currentStroke))
                     }
                 }
-                redrawHistory()
             }
         }
         else if (threeFingerGestureOccured) {
@@ -1427,9 +1413,9 @@ class DrawingView @JvmOverloads constructor(
             globalTransform.preTranslate(worldDelta[0], worldDelta[1])
             globalTransform.preScale(scale, scale, worldMidPoint.x, worldMidPoint.y)
             globalTransform.preRotate(rotate, worldMidPoint.x, worldMidPoint.y)
-            redrawHistory()
         }
 
+        redrawHistory()
         return true
     }
 
@@ -1481,6 +1467,8 @@ class DrawingView @JvmOverloads constructor(
             strokesToTransform.forEach { stroke ->
                 transformStroke(stroke, deltaMatrix)
             }
+
+            redrawHistory()
         }
 
         return true
