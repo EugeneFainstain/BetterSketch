@@ -143,6 +143,33 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
             MotionEvent.ACTION_POINTER_UP -> {
                 activePointerCount--
                 listener.onSomeFingerUp(event)
+
+                // Seamless transition: when going from 3 to 2 fingers, reinitialize 2-finger state
+                if (activePointerCount == 2 && event.pointerCount == 3) {
+                    // Need to reinitialize 2-finger tracking with the remaining 2 fingers
+                    // The event still has 3 pointers, but we need to find which 2 remain
+                    val upPointerIndex = event.actionIndex
+
+                    // Get indices of the two remaining fingers (not the one that's lifting)
+                    val remainingIndices = mutableListOf<Int>()
+                    for (i in 0 until event.pointerCount) {
+                        if (i != upPointerIndex) {
+                            remainingIndices.add(i)
+                        }
+                    }
+
+                    if (remainingIndices.size == 2) {
+                        val idx0 = remainingIndices[0]
+                        val idx1 = remainingIndices[1]
+
+                        val dx = event.getX(idx0) - event.getX(idx1)
+                        val dy = event.getY(idx0) - event.getY(idx1)
+                        lastMultiTouchDistance = sqrt(dx * dx + dy * dy)
+                        lastMultiTouchAngle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble()).toDouble()).toFloat()
+                        lastMultiTouchMidpoint.x = (event.getX(idx0) + event.getX(idx1)) / 2f
+                        lastMultiTouchMidpoint.y = (event.getY(idx0) + event.getY(idx1)) / 2f
+                    }
+                }
             }
             MotionEvent.ACTION_UP -> {
                 activePointerCount = 0

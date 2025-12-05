@@ -67,6 +67,9 @@ class DrawingView @JvmOverloads constructor(
 
     // Stroke in progress
     private var strokeInProgress: Stroke? = null
+
+    private var strokesToTransform = mutableSetOf<Stroke>()
+
     var currentPaint = defaultPaint()
     var currentSmoothness: Int = 0
 
@@ -1186,8 +1189,19 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSomeFingerUp(event: MotionEvent): Boolean {
+
+        val dragGestureHasEnded_saved = dragGestureHasEnded
         dragGestureHasEnded = true // this is the ONLY place it becomes "true"
+
+        // This is a big overkill - we don't need all these conditions, this is redundant
+        if( threeFingerGestureOccured )                       // 3-finger gesture occured
+            if( event.pointerCount == 3 )                     // Only doing this for a 3->2 fingers transition
+                if( strokesToTransform.isNotEmpty() )         // Are there even strokes for transforming?
+                    if( dragGestureHasEnded_saved == false )  // If we were dragging before - continue dragging...
+                        dragGestureHasEnded = false           // Allow continuation with 2 fingers
+
         return true
+
     }
 
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
@@ -1265,6 +1279,7 @@ class DrawingView @JvmOverloads constructor(
         }.also {
             // De-initialization code that ALWAYS runs
             editingPointIndex = -1
+            strokesToTransform.clear()
             if( globalSetStateIsNeeded )
                 setState(currentState) // Update drawing and UI
         }.getOrDefault(false)
@@ -1352,7 +1367,7 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
 
-        if( dragGestureHasEnded || threeFingerGestureOccured )
+        if( dragGestureHasEnded )
             return true
 
         val invertedGlobal = Matrix()
@@ -1380,6 +1395,29 @@ class DrawingView @JvmOverloads constructor(
                     }
                 }
                 redrawHistory()
+            }
+        }
+        else if (threeFingerGestureOccured) {
+            // Continue transforming strokes even after transitioning from 3 to 2 fingers
+            if (strokesToTransform.isNotEmpty()) {
+                // Calculate common bounding box for all strokes to transform
+                val commonBounds = RectF()
+                strokesToTransform.forEach { stroke ->
+                    commonBounds.union(stroke.getBounds())
+                }
+
+                // Get center of common bounding box
+                val centerX = commonBounds.centerX()
+                val centerY = commonBounds.centerY()
+
+                // Create transformation matrix in world-space
+                val deltaMatrix = Matrix()
+                deltaMatrix.postScale(scale, scale, centerX, centerY)
+                deltaMatrix.postRotate(rotate, centerX, centerY)
+                deltaMatrix.postTranslate(worldDelta[0], worldDelta[1])
+
+                // Apply transformation to all strokes
+                strokesToTransform.forEach { stroke -> transformStroke(stroke, deltaMatrix) }
             }
         }
         else
@@ -1417,8 +1455,10 @@ class DrawingView @JvmOverloads constructor(
         invertedGlobal.mapVectors(worldDelta)
 
         // Get all highlighted strokes and include currentStroke
-        val strokesToTransform = strokes.filter { it.isHighlighted }.toMutableSet()
-        currentStroke?.let { strokesToTransform.add(it) }
+        if( strokesToTransform.isEmpty()) {
+            strokesToTransform = strokes.filter { it.isHighlighted }.toMutableSet()
+            currentStroke?.let { strokesToTransform.add(it) }
+        }
 
         if (strokesToTransform.isNotEmpty()) {
             // Calculate common bounding box for all strokes to transform
