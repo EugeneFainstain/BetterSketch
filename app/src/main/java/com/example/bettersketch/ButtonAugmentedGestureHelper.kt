@@ -92,6 +92,11 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
 
                     activeRegistration = null // this needs to be done AFTER the forwarding of the message to the view
 
+                    // Call performClick for accessibility when it's an UP event
+                    if (event.actionMasked == MotionEvent.ACTION_UP) {
+                        view.performClick()
+                    }
+                    
                     true
                 }
                 else -> false
