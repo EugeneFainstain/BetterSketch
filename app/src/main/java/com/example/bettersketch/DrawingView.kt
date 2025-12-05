@@ -1293,6 +1293,23 @@ class DrawingView @JvmOverloads constructor(
             return true
         }
 
+        if( twoFingerGestureOccured ) {
+            val worldDelta = floatArrayOf(dx, dy)
+            inverseGlobalTransform.mapVectors(worldDelta)
+
+            // Create transformation matrix with translation only (no scale or rotation)
+            val deltaMatrix = Matrix()
+            deltaMatrix.postTranslate(worldDelta[0], worldDelta[1])
+
+            val screenMidPoint = midpoint(event)
+            val worldMidPoint = toWorldCoordinates(screenMidPoint.x, screenMidPoint.y)
+
+            globalTransform.preTranslate(worldDelta[0], worldDelta[1])
+
+            setState(currentState)
+            return true
+        }
+
         when (currentState) {
             State.NORMAL_DRAWING -> {
                 touchMove(event.x, event.y)
