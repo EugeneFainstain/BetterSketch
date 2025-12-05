@@ -18,6 +18,7 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
 
     private val registrations = mutableListOf<Registration>()
     private var activeRegistration: Registration? = null
+    private var activeRegistration_skip_onTargetViewTouch = true
     private var dualTouchSubmitted = false
     private var buttonFingerX: Float = 0f
     private var buttonFingerY: Float = 0f
@@ -53,6 +54,7 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
                     gestureEndedBecauseOfView   = false // this is the ONLY place it is set to false
                     gestureEndedBecauseOfButton = false // this is the ONLY place it is set to false
                     activeRegistration = registration   // This is the ONLY place it is set to non-null
+                    activeRegistration_skip_onTargetViewTouch = false // This is the ONLY place it is set to false
                     dualTouchSubmitted = false // This is the ONLY place it is set to false
 
                     // Forward a synthetic ACTION_DOWN to the view at button location
@@ -87,6 +89,9 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
                     if (!someFingerIsTouchingTheView) {
                         forwardButtonEventToView(event, MotionEvent.ACTION_UP)
                     }
+
+                    activeRegistration = null // this needs to be done AFTER the forwarding of the message to the view
+
                     true
                 }
                 else -> false
@@ -108,7 +113,8 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
     fun EndThisGesture(event: MotionEvent)
     {
         endThisGesture = false
-        activeRegistration = null // This is the ONLY place it is set to null
+        activeRegistration = null
+        activeRegistration_skip_onTargetViewTouch = true // This is the ONLY place it is set to null
 
         if( drawingViewEventHappenedSinceLastEndThisGesture == false ) // No need to end any gesture...
             return
@@ -164,7 +170,7 @@ class ButtonAugmentedGestureHelper(private val targetView: View) {
             gestureEndedBecauseOfView = true
         }
 
-        if( activeRegistration == null ) return false
+        if( activeRegistration_skip_onTargetViewTouch ) return false
 
         if( endThisGesture )
         {

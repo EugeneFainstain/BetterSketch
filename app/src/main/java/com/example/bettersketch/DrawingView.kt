@@ -96,6 +96,7 @@ class DrawingView @JvmOverloads constructor(
     private val haloOffset: Float
     private val selectionPaint: Paint
     private var selectionCircle: Triple<PointF, Float, Path>? = null
+    private var advancedGestureInProgress = false
     private var selectionGestureInProgress = false
     private var addAnchorPointGestureInProgress = false
     private var isFingerOverRemoveButton = false
@@ -332,6 +333,8 @@ class DrawingView @JvmOverloads constructor(
 
         selectionGestureInProgress      = (gestureTag == MainActivity.tagSelectionGesture)
         addAnchorPointGestureInProgress = (gestureTag == MainActivity.tagAddAnchorPointGesture)
+
+        advancedGestureInProgress = selectionGestureInProgress || addAnchorPointGestureInProgress
 
         // Check if finger is over the remove anchor point button (when in editing mode and dragging an anchor)
         if (currentState == State.STROKE_EDITING && editingPointIndex != -1) {
@@ -1100,6 +1103,10 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSingleTapEnd(event: MotionEvent): Boolean {
+
+        if( advancedGestureInProgress )
+            return true
+
         performClick()
         val screenPoint = PointF(event.x, event.y)
         when (currentState) {
@@ -1118,18 +1125,26 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onDoubleTapEnd(event: MotionEvent): Boolean {
+
+        if( advancedGestureInProgress )
+            return true
+
         deselectAndDeHighlight() // Note: doesn't cause a redraw on its own
         setState(State.NORMAL_DRAWING)
         return true
     }
 
     override fun onFirstFingerDown(event: MotionEvent): Boolean {
-        val downPoint = PointF(event.x, event.y)
-        val worldPoint = toWorldCoordinates(downPoint.x, downPoint.y)
 
         twoFingerGestureOccured   = false // this is the only place it becomes "false"
         threeFingerGestureOccured = false // this is the only place it becomes "false"
         dragGestureHasEnded       = false // this is the only place it becomes "false"
+
+        if( advancedGestureInProgress )
+            return true
+
+        val downPoint = PointF(event.x, event.y)
+        val worldPoint = toWorldCoordinates(downPoint.x, downPoint.y)
 
         globalSetStateIsNeeded = true
         when (currentState) {
@@ -1187,10 +1202,9 @@ class DrawingView @JvmOverloads constructor(
 
         run {
             // Check if we're adding an anchor point
-            if (addAnchorPointGestureInProgress && addingAnchorPointIndex != -1) {
+            if( addAnchorPointGestureInProgress && addingAnchorPointIndex != -1 ) {
                 addAnchorPointAtIndex(addingAnchorPointIndex)
                 addingAnchorPointIndex = -1
-                addAnchorPointGestureInProgress = false
                 return@run
             }
 
