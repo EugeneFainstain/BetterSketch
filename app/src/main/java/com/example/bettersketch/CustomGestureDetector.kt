@@ -170,6 +170,16 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                         lastMultiTouchMidpoint.y = (event.getY(idx0) + event.getY(idx1)) / 2f
                     }
                 }
+
+                // Seamless transition: when going from 2 to 1 finger, reinitialize 1-finger state
+                if (activePointerCount == 1 && event.pointerCount == 2) {
+                    // The event still has 2 pointers, but we need to find which one remains
+                    val upPointerIndex = event.actionIndex
+                    val remainingIndex = if (upPointerIndex == 0) 1 else 0
+
+                    lastMoveX = event.getX(remainingIndex)
+                    lastMoveY = event.getY(remainingIndex)
+                }
             }
             MotionEvent.ACTION_UP -> {
                 activePointerCount = 0

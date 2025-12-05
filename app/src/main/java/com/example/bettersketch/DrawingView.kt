@@ -1177,19 +1177,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSomeFingerUp(event: MotionEvent): Boolean {
-
-        val dragGestureHasEnded_saved = dragGestureHasEnded
-        dragGestureHasEnded = true // this is the ONLY place it becomes "true"
-
-        // This is a big overkill - we don't need all these conditions, this is redundant
-        if( threeFingerGestureOccured )                       // 3-finger gesture occured
-            if( event.pointerCount == 3 )                     // Only doing this for a 3->2 fingers transition
-                if( strokesToTransform.isNotEmpty() )         // Are there even strokes for transforming?
-                    if( dragGestureHasEnded_saved == false )  // If we were dragging before - continue dragging...
-                        dragGestureHasEnded = false           // Allow continuation with 2 fingers
-
         return true
-
     }
 
     override fun onLastRemainingFingerUp(event: MotionEvent): Boolean {
@@ -1264,13 +1252,14 @@ class DrawingView @JvmOverloads constructor(
         // De-initialization code that ALWAYS runs
         editingPointIndex = -1
         strokesToTransform.clear()
+        dragGestureHasEnded = true // this is the ONLY place it becomes "true"
         if( globalSetStateIsNeeded ) setState(currentState) // Update drawing and UI
         return true
     }
 
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
 
-        if( dragGestureHasEnded || twoFingerGestureOccured || threeFingerGestureOccured )
+        if( dragGestureHasEnded )
             return true
 
         if( selectionGestureInProgress )
@@ -1284,6 +1273,23 @@ class DrawingView @JvmOverloads constructor(
             val worldPoint = toWorldCoordinates(event.x, event.y)
             addingAnchorPointIndex = findClosestPointOnCurve(worldPoint)
             invalidate() // Redraw to show the red circle
+            return true
+        }
+
+        // Continue transforming strokes (translation only) after transitioning from 2 to 1 finger
+        if ( threeFingerGestureOccured && strokesToTransform.isNotEmpty()) {
+            val worldDelta = floatArrayOf(dx, dy)
+            inverseGlobalTransform.mapVectors(worldDelta)
+
+            // Create transformation matrix with translation only (no scale or rotation)
+            val deltaMatrix = Matrix()
+            deltaMatrix.postTranslate(worldDelta[0], worldDelta[1])
+
+            // Apply transformation to all strokes
+            strokesToTransform.forEach { stroke ->
+                transformStroke(stroke, deltaMatrix)
+            }
+            redrawHistory()
             return true
         }
 
@@ -1338,10 +1344,7 @@ class DrawingView @JvmOverloads constructor(
             }
             else -> {}
         }
-        if( threeFingerGestureOccured ) // We'll need this for later
-            redrawHistory()
-        else
-            invalidate()
+        invalidate()
         return true
     }
 
