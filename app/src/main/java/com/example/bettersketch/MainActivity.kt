@@ -262,9 +262,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         // Show DEL button if:
         // 1. There are highlighted strokes, OR
         // 2. selectedStrokeIdx == strokes.lastIndex (but only if there are strokes)
-        val shouldShowDel = highlightedStrokeCount > 0 || 
-                           (drawingView.selectedStrokeIdx == drawingView.strokes.lastIndex && 
-                            drawingView.strokes.isNotEmpty())
+        val shouldShowDel = highlightedStrokeCount > 0
         btnDel.visibility = if (shouldShowDel) View.VISIBLE else View.GONE
 
         // Show remove/add anchor point buttons based on whether stroke has polyline data

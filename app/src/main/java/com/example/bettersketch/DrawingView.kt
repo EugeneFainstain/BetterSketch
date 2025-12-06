@@ -75,7 +75,6 @@ class DrawingView @JvmOverloads constructor(
 
     // Data
     val strokes = mutableListOf<Stroke>()
-    public var selectedStrokeIdx: Int = -1
     private var editingPointIndex: Int = -1
     private var editingPointInitialWeights: List<Float>? = null
     private var addingAnchorPointIndex: Int = -1
@@ -558,8 +557,7 @@ class DrawingView @JvmOverloads constructor(
 
     private fun deselectAndDeHighlight() {
         // Note: doesn't cause a redraw on its own
-        selectedStrokeIdx = -1 // First thing - deselect.
-        editingPointIndex = -1 // Don't forget this one too...
+        editingPointIndex = -1 // Don't forget this one...
         strokes.forEach { it.setHighlightedRecursively(false) } // Second - de-highlight
     }
 
@@ -771,7 +769,6 @@ class DrawingView @JvmOverloads constructor(
             duplicatedStroke.setHighlightedRecursively(true)
 
             strokes.add(duplicatedStroke)
-            selectedStrokeIdx = strokes.lastIndex
 
             setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
         }
