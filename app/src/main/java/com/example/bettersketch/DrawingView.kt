@@ -75,7 +75,7 @@ class DrawingView @JvmOverloads constructor(
 
     // Data
     val strokes = mutableListOf<Stroke>()
-    private var editingPointIndex: Int = -1
+    private var anchorPointBeingEdited: AnchorPointLocation? = null
     private var editingPointInitialWeights: List<Float>? = null
     private var addAnchorPointHere: AnchorPointLocation? = null  // Combined stroke + index
 
@@ -147,7 +147,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun isAnchorPointDragging(): Boolean {
-        return (editingPointIndex != -1)
+        return anchorPointBeingEdited != null
     }
 
     fun areAnyHighlightedStrokesModified(): Boolean {
@@ -280,7 +280,7 @@ class DrawingView @JvmOverloads constructor(
 
         // Clear editing state
         anchorPointsToEdit.clear()
-        editingPointIndex = -1
+        anchorPointBeingEdited = null
         editingPointInitialWeights = null
 
         setState(currentState) // Refresh UI and Canvas
@@ -387,8 +387,8 @@ class DrawingView @JvmOverloads constructor(
         advancedGestureInProgress = selectionGestureInProgress || addAnchorPointGestureInProgress
 
         // Check if finger is over the remove anchor point button (when in editing mode and dragging an anchor)
-        if (currentState == State.STROKE_EDITING && editingPointIndex != -1) {
-            isFingerOverRemoveButton = isEventOverRemoveAnchorButton(event) and (addAnchorPointGestureInProgress == false)
+        if (currentState == State.STROKE_EDITING && anchorPointBeingEdited != null) {
+            isFingerOverRemoveButton = isEventOverRemoveAnchorButton(event) && !addAnchorPointGestureInProgress
         } else {
             isFingerOverRemoveButton = false
         }
@@ -595,8 +595,8 @@ class DrawingView @JvmOverloads constructor(
 
     private fun deselectAndDeHighlight() {
         // Note: doesn't cause a redraw on its own
-        editingPointIndex = -1 // Don't forget this one...
-        strokes.forEach { it.setHighlightedRecursively(false) } // Second - de-highlight
+        anchorPointBeingEdited = null  // Clear anchor point editing
+        strokes.forEach { it.setHighlightedRecursively(false) } // De-highlight
     }
 
     private fun selectStrokeAt(tapPointScreen: PointF): Boolean {
@@ -653,15 +653,15 @@ class DrawingView @JvmOverloads constructor(
 
         // Clear previous editing state
         anchorPointsToEdit.clear()
-        editingPointIndex = -1
+        anchorPointBeingEdited = null
         editingPointInitialWeights = null
 
         // Find the absolute nearest ANCHOR point (not just any point) across all highlighted strokes
         val nearestResult = findClosestAnchorPointAcrossAllStrokes(tapPoint) ?: return false
         val (primaryStroke, primaryIndex) = nearestResult
 
-        // Store the primary stroke for drawing the green circle
-        editingPointIndex = primaryIndex
+        // Store the anchor point being edited
+        anchorPointBeingEdited = AnchorPointLocation(primaryStroke, primaryIndex)
 
         // Get the primary point from UNSMOOTHED points (this is an anchor point)
         val primaryPoint = primaryStroke.unsmoothedPoints[primaryIndex].point
@@ -1190,11 +1190,11 @@ class DrawingView @JvmOverloads constructor(
                     val singleHighlightedStroke = highlightedStrokes.first()
                     currentPaint = Paint(singleHighlightedStroke.paint)
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-                } else
-                    if (highlightedStrokes.isNotEmpty())
-                        setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-                    else
-                        setState(State.NORMAL_DRAWING)
+                } else if (highlightedStrokes.isNotEmpty()) {
+                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
+                } else {
+                    setState(State.NORMAL_DRAWING)
+                }
                 return@run
             }
 
@@ -1216,7 +1216,7 @@ class DrawingView @JvmOverloads constructor(
                 }
                 State.STROKE_EDITING -> {
                     anchorPointsToEdit.clear()
-                    editingPointIndex = -1
+                    anchorPointBeingEdited = null
                     editingPointInitialWeights = null
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
@@ -1225,7 +1225,7 @@ class DrawingView @JvmOverloads constructor(
         }
 
         // De-initialization code that ALWAYS runs
-        editingPointIndex = -1
+        anchorPointBeingEdited = null  // Clear anchor point editing
         addAnchorPointHere = null  // Clear the location
         strokesToTransform.clear()
         dragGestureHasEnded = true
