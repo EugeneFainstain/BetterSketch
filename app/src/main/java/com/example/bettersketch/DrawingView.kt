@@ -596,6 +596,7 @@ class DrawingView @JvmOverloads constructor(
     private fun deselectAndDeHighlight() {
         // Note: doesn't cause a redraw on its own
         anchorPointBeingEdited = null  // Clear anchor point editing
+        anchorPointsToEdit.clear()
         strokes.forEach { it.setHighlightedRecursively(false) } // De-highlight
     }
 
@@ -658,6 +659,7 @@ class DrawingView @JvmOverloads constructor(
 
         // Find the absolute nearest ANCHOR point (not just any point) across all highlighted strokes
         val nearestResult = findClosestAnchorPointAcrossAllStrokes(tapPoint) ?: return false
+        // Primary stroke is the stroke who's endpoint has been selected for editing
         val (primaryStroke, primaryIndex) = nearestResult
 
         // Store the anchor point being edited
@@ -1225,7 +1227,6 @@ class DrawingView @JvmOverloads constructor(
         }
 
         // De-initialization code that ALWAYS runs
-        anchorPointBeingEdited = null  // Clear anchor point editing
         addAnchorPointHere = null  // Clear the location
         strokesToTransform.clear()
         dragGestureHasEnded = true
