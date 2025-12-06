@@ -296,11 +296,11 @@ class DrawingView @JvmOverloads constructor(
 
         // 1. Draw halos and markers first (if in editing mode)
         if (isEditing()) {
-            // Draw halos and markers for all strokes
-            for ((index, s) in strokes.withIndex()) {
-                val opacityMultiplier = if (index != selectedStrokeIdx) 0.25f else 1.0f
-                val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
-                drawStroke(canvas, s, opacityMultiplier, 1.0f, drawEndpoints, MASK_DRAW_HALOS_AND_MARKERS)
+            // Draw halos and markers for highlighted strokes only
+            strokes.forEach { stroke ->
+                if (stroke.isHighlighted) {
+                    drawStroke(canvas, stroke, 1.0f, 1.0f, true, MASK_DRAW_HALOS_AND_MARKERS)
+                }
             }
         }
 
@@ -314,12 +314,12 @@ class DrawingView @JvmOverloads constructor(
             }
         }
 
-        // 3. Draw the strokes themselves (if in editing mode)
+        // 3. Draw the highlighted strokes themselves (if in editing mode)
         if (isEditing()) {
-            for ((index, s) in strokes.withIndex()) {
-                val opacityMultiplier = if (index != selectedStrokeIdx) 0.25f else 1.0f
-                val drawEndpoints = currentState == State.STROKE_EDITING && index == selectedStrokeIdx
-                drawStroke(canvas, s, opacityMultiplier, 1.0f, drawEndpoints, MASK_DRAW_STROKE_ITSELF)
+            strokes.forEach { stroke ->
+                if (stroke.isHighlighted) {
+                    drawStroke(canvas, stroke, 1.0f, 1.0f, true, MASK_DRAW_STROKE_ITSELF)
+                }
             }
         }
 
@@ -910,12 +910,11 @@ class DrawingView @JvmOverloads constructor(
         val c = backingCanvas ?: return
         c.drawColor(Color.WHITE, PorterDuff.Mode.SRC)
 
-        for ((index, s) in strokes.withIndex())
-        {
-            val doDraw = (currentState == State.NORMAL_DRAWING) || (index != selectedStrokeIdx)
-            if( doDraw ) {
-                val drawEndpoints = (currentState == State.STROKE_EDITING) && (index == selectedStrokeIdx)
-                drawStroke(c, s, 1.0f, 1.0f, drawEndpoints, MASK_DRAW_ALL)
+        // Draw all non-highlighted strokes to the backing bitmap
+        strokes.forEach { stroke ->
+            val shouldDrawToBitmap = (currentState == State.NORMAL_DRAWING) || !stroke.isHighlighted
+            if (shouldDrawToBitmap) {
+                drawStroke(c, stroke, 1.0f, 1.0f, false, MASK_DRAW_ALL)
             }
         }
 
