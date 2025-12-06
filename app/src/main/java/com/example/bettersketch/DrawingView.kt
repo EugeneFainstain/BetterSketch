@@ -77,13 +77,18 @@ class DrawingView @JvmOverloads constructor(
     val strokes = mutableListOf<Stroke>()
     private var editingPointIndex: Int = -1
     private var editingPointInitialWeights: List<Float>? = null
-    private var addingAnchorPointIndex: Int = -1
+    private var addAnchorPointHere: AnchorPointLocation? = null  // Combined stroke + index
 
     private data class AnchorPointToEdit(
         val stroke: Stroke,
         val pointIndex: Int,
         val snapshotUnsmoothedPoints: MutableList<PathPoint>,
         val weights: List<Float>
+    )
+
+    private data class AnchorPointLocation(
+        val stroke: Stroke,
+        val pointIndex: Int
     )
 
     private var anchorPointsToEdit = mutableListOf<AnchorPointToEdit>()
@@ -154,8 +159,34 @@ class DrawingView @JvmOverloads constructor(
         return singleHighlightedStroke?.polylineIndices?.isNotEmpty() ?: false
     }
 
-    private fun findClosestPointOnCurve(tapPoint: PointF): Int {
-        val stroke = singleHighlightedStroke ?: return -1
+    // Data class to hold the result of finding closest point across multiple strokes
+    private data class ClosestPointResult(val stroke: Stroke, val pointIndex: Int, val distance: Float)
+
+    private fun findClosestPointAcrossHighlightedStrokes(tapPoint: PointF): ClosestPointResult? {
+        val highlighted = getHighlightedStrokes
+        var bestResult: ClosestPointResult? = null
+        var minDistance = Float.MAX_VALUE
+
+        highlighted.forEach { stroke ->
+            stroke.forEachStroke { s ->
+                if (!s.isGroup) {
+                    val pointIndex = findClosestPointOnCurve(s, tapPoint)
+                    if (pointIndex != -1 && pointIndex < s.pointsForDrawing.size) {
+                        val point = s.pointsForDrawing[pointIndex].point
+                        val dist = distance(point, tapPoint)
+                        if (dist < minDistance) {
+                            minDistance = dist
+                            bestResult = ClosestPointResult(s, pointIndex, dist)
+                        }
+                    }
+                }
+            }
+        }
+
+        return bestResult
+    }
+
+    private fun findClosestPointOnCurve(stroke: Stroke, tapPoint: PointF): Int {
         if (stroke.isGroup) return -1
 
         var closestDist = Float.MAX_VALUE
@@ -173,7 +204,9 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun addAnchorPointAtIndex(index: Int) {
-        val stroke = singleHighlightedStroke ?: return
+        // Use the stored location from the preview
+        val location = addAnchorPointHere ?: return
+        val stroke = location.stroke
         if (stroke.isGroup) return
         if (index == -1) return
 
@@ -974,19 +1007,23 @@ class DrawingView @JvmOverloads constructor(
                             }
                         }
 
-                        // Draw red circle for adding anchor point preview
-                        if (addAnchorPointGestureInProgress && addingAnchorPointIndex != -1 &&
-                            addingAnchorPointIndex < stroke.pointsForDrawing.size) {
-                            val previewPoint = stroke.pointsForDrawing[addingAnchorPointIndex].point
-                            val transformedPoint = floatArrayOf(previewPoint.x, previewPoint.y)
-                            globalTransform.mapPoints(transformedPoint)
+                        // Draw red circle for adding anchor point preview - check if THIS stroke matches
+                        addAnchorPointHere?.let { location ->
+                            if (addAnchorPointGestureInProgress &&
+                                location.stroke == stroke &&
+                                location.pointIndex != -1 &&
+                                location.pointIndex < stroke.pointsForDrawing.size) {
+                                val previewPoint = stroke.pointsForDrawing[location.pointIndex].point
+                                val transformedPoint = floatArrayOf(previewPoint.x, previewPoint.y)
+                                globalTransform.mapPoints(transformedPoint)
 
-                            val previewPaint = Paint().apply {
-                                style = Paint.Style.FILL
-                                color = Color.RED
+                                val previewPaint = Paint().apply {
+                                    style = Paint.Style.FILL
+                                    color = Color.RED
+                                }
+                                val radius = haloPaintToUse.strokeWidth / 1.5f
+                                canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, previewPaint)
                             }
-                            val radius = haloPaintToUse.strokeWidth / 1.5f
-                            canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, previewPaint)
                         }
                     }
 
@@ -1130,9 +1167,9 @@ class DrawingView @JvmOverloads constructor(
 
         run {
             // Check if we're adding an anchor point
-            if( addAnchorPointGestureInProgress && addingAnchorPointIndex != -1 ) {
-                addAnchorPointAtIndex(addingAnchorPointIndex)
-                addingAnchorPointIndex = -1
+            if( addAnchorPointGestureInProgress && addAnchorPointHere != null ) {
+                addAnchorPointAtIndex(addAnchorPointHere!!.pointIndex)
+                addAnchorPointHere = null
                 return@run
             }
 
@@ -1189,8 +1226,9 @@ class DrawingView @JvmOverloads constructor(
 
         // De-initialization code that ALWAYS runs
         editingPointIndex = -1
+        addAnchorPointHere = null  // Clear the location
         strokesToTransform.clear()
-        dragGestureHasEnded = true // this is the ONLY place it becomes "true"
+        dragGestureHasEnded = true
         if( globalSetStateIsNeeded ) setState(currentState) // Update drawing and UI
         return true
     }
@@ -1206,10 +1244,17 @@ class DrawingView @JvmOverloads constructor(
         val inverseGlobalTransform = Matrix()
         globalTransform.invert(inverseGlobalTransform)
 
-        // Handle add anchor point gesture
+        // Handle add anchor point gesture - find closest point across ALL highlighted strokes
         if( addAnchorPointGestureInProgress ) {
             val worldPoint = toWorldCoordinates(event.x, event.y)
-            addingAnchorPointIndex = findClosestPointOnCurve(worldPoint)
+            val result = findClosestPointAcrossHighlightedStrokes(worldPoint)
+            
+            addAnchorPointHere = if (result != null) {
+                AnchorPointLocation(result.stroke, result.pointIndex)
+            } else {
+                null
+            }
+            
             invalidate() // Redraw to show the red circle
             return true
         }

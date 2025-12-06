@@ -264,17 +264,15 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         val shouldShowDel = highlightedStrokeCount > 0
         btnDel.visibility = if (shouldShowDel) View.VISIBLE else View.GONE
 
-        // Show remove/add anchor point buttons based on whether stroke has polyline data
-        val currentStroke = drawingView.singleHighlightedStroke
-        val hasPolylineData = currentStroke?.polylineIndices?.isNotEmpty() ?: false
-
-        if (drawingView.isEditing() && currentStroke != null && hasPolylineData) {
+        // Show add anchor point button if ANY highlighted strokes are present
+        // (Remove button still requires dragging an anchor point)
+        if (drawingView.isEditing() && highlightedStrokeCount > 0) {
             if (drawingView.isAnchorPointDragging()) {
                 // Show remove button, hide add button
                 btnRemoveAnchorPoint.visibility = View.VISIBLE
                 btnAddAnchorPoint.visibility = View.GONE
             } else {
-                // Show add button, hide remove button
+                // Show add button if any strokes are highlighted
                 btnRemoveAnchorPoint.visibility = View.GONE
                 btnAddAnchorPoint.visibility = View.VISIBLE
             }
