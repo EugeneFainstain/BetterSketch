@@ -79,9 +79,16 @@ class DrawingView @JvmOverloads constructor(
     public var lastStrokeHighlightedIdx: Int = -1
     private var editingPointIndex: Int = -1
     private var editingPointInitialWeights: List<Float>? = null
-    private var snapshotUnsmoothedPoints: MutableList<PathPoint>? = null
     private var addingAnchorPointIndex: Int = -1
 
+    private data class AnchorPointToEdit(
+        val stroke: Stroke,
+        val pointIndex: Int,
+        val snapshotUnsmoothedPoints: MutableList<PathPoint>,
+        val weights: List<Float>
+    )
+
+    private var anchorPointsToEdit = mutableListOf<AnchorPointToEdit>()
     // Transformation state
     private val globalTransform = Matrix() // Matrix for transforming from WORLD-SPACE to SCREEN-SPACE (a.k.a the VIEW MATRIX)
     private var dragGestureHasEnded = false
@@ -193,23 +200,24 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun removeAnchorPointAtEditingIndex() {
-        val stroke = currentStroke ?: return
-        if (stroke.isGroup) return
-        if (editingPointIndex == -1) return
-        if (stroke.polylineIndices.isEmpty()) return
+        if (anchorPointsToEdit.isEmpty()) return
 
-        // Find which polyline index corresponds to the editing point
-        val polylineIndexToRemove = stroke.polylineIndices.indexOfFirst { it == editingPointIndex }
-        if (polylineIndexToRemove == -1) return
+        // Remove anchor points from all affected strokes
+        anchorPointsToEdit.forEach { anchor ->
+            val stroke = anchor.stroke
+            if (stroke.polylineIndices.isEmpty()) return@forEach
 
-        // Don't allow removing if it would leave fewer than 2 vertices
-        if (stroke.polylineIndices.size <= 2) return
+            // Find which polyline index corresponds to the editing point
+            val polylineIndexToRemove = stroke.polylineIndices.indexOfFirst { it == anchor.pointIndex }
+            if (polylineIndexToRemove == -1) return@forEach
 
-        // Restore unsmoothedPoints to the snapshot taken when editing started
-        if (snapshotUnsmoothedPoints != null) {
+            // Don't allow removing if it would leave fewer than 2 vertices
+            if (stroke.polylineIndices.size <= 2) return@forEach
+
+            // Restore unsmoothedPoints to the snapshot
             stroke.unsmoothedPoints.clear()
             stroke.unsmoothedPoints.addAll(
-                snapshotUnsmoothedPoints!!.map {
+                anchor.snapshotUnsmoothedPoints.map {
                     PathPoint(PointF(it.point.x, it.point.y), it.distance)
                 }
             )
@@ -221,20 +229,20 @@ class DrawingView @JvmOverloads constructor(
             stroke.unsmoothedPoints.clear()
             stroke.unsmoothedPoints.addAll(recalculatedPoints)
             stroke.totalDistance = newTotalDistance
+
+            // Remove the polyline index
+            stroke.polylineIndices.removeAt(polylineIndexToRemove)
+            stroke.isModified = true
+
+            // Regenerate the stroke
+            stroke.regenerateInterpolatedPolylinePoints()
+            stroke.applySmoothing()
         }
 
-        // Remove the polyline index
-        stroke.polylineIndices.removeAt(polylineIndexToRemove)
-        stroke.isModified = true
-
-        // Regenerate the stroke
-        stroke.regenerateInterpolatedPolylinePoints()
-        stroke.applySmoothing()
-
         // Clear editing state
+        anchorPointsToEdit.clear()
         editingPointIndex = -1
         editingPointInitialWeights = null
-        snapshotUnsmoothedPoints = null
 
         setState(currentState) // Refresh UI and Canvas
     }
@@ -606,137 +614,69 @@ class DrawingView @JvmOverloads constructor(
         return false
     }
 
-
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
-        val stroke = currentStroke ?: return false
-        if (stroke.isGroup) return false
-        if( addAnchorPointGestureInProgress ) return false
+        if (addAnchorPointGestureInProgress) return false
 
-        var closestDist = Float.MAX_VALUE
-        var closestPointIndex = -1
-        stroke.pointsForDrawing.forEachIndexed { index, pathPoint ->
-            val d = distance(pathPoint.point, tapPoint)
-            if (d < closestDist) {
-                closestDist = d
-                closestPointIndex = index
-            }
-        }
+        // Clear previous editing state
+        anchorPointsToEdit.clear()
+        editingPointIndex = -1
+        editingPointInitialWeights = null
 
-        if (closestPointIndex == -1) {
-            return false
-        }
+        // Find the absolute nearest ANCHOR point (not just any point) across all highlighted strokes
+        val nearestResult = findClosestAnchorPointAcrossAllStrokes(tapPoint) ?: return false
+        val (primaryStroke, primaryIndex) = nearestResult
 
-        editingPointIndex = closestPointIndex
+        // Store the primary stroke for drawing the green circle
+        editingPointIndex = primaryIndex
 
-        // Save snapshot of unsmoothedPoints before editing
-        snapshotUnsmoothedPoints = stroke.unsmoothedPoints.map {
-            PathPoint(PointF(it.point.x, it.point.y), it.distance)
-        }.toMutableList()
+        // Get the primary point from UNSMOOTHED points (this is an anchor point)
+        val primaryPoint = primaryStroke.unsmoothedPoints[primaryIndex].point
 
-        // NEW APPROACH: Find closest polyline anchor in pointsForDrawing
-        if (stroke.polylineIndices.isNotEmpty() && stroke.polylineIndices.size >= 2 &&
-            stroke.distancesForWeights.isNotEmpty() && stroke.pointsForDrawing.isNotEmpty()) {
+        // Now find all co-located anchor points on other strokes
+        val highlightedStrokes = strokes.filter { it.isHighlighted }
 
-            // Find which polyline anchor (vertex) in pointsForDrawing is closest to the tap
-            val closestDrawingDistance = stroke.pointsForDrawing[closestPointIndex].distance
+        highlightedStrokes.forEach { stroke ->
+            stroke.forEachStroke { s ->
+                if (!s.isGroup && s.polylineIndices.isNotEmpty()) {
+                    // Find the closest ANCHOR point on this stroke to the primary point
+                    var closestAnchorIdx = -1
+                    var closestDist = Float.MAX_VALUE
 
-            var closestPolylineIdxInArray = 0
-            var minDistToAnchor = Float.MAX_VALUE
-
-            for (i in stroke.polylineIndices.indices) {
-                val anchorIndexInOriginal = stroke.polylineIndices[i]
-
-                // The anchor should be at the same index in pointsForDrawing (after smoothing preserves count)
-                if (anchorIndexInOriginal >= 0 && anchorIndexInOriginal < stroke.pointsForDrawing.size) {
-                    val anchorDistance = stroke.pointsForDrawing[anchorIndexInOriginal].distance
-                    val distDiff = abs(anchorDistance - closestDrawingDistance)
-                    if (distDiff < minDistToAnchor) {
-                        minDistToAnchor = distDiff
-                        closestPolylineIdxInArray = i
-                    }
-                }
-            }
-
-            // Validate that closestPolylineIdxInArray is within bounds
-            if (closestPolylineIdxInArray >= 0 && closestPolylineIdxInArray < stroke.polylineIndices.size) {
-                // Get the left, middle, and right polyline vertex indices
-                val leftPolylineArrayIdx = if (closestPolylineIdxInArray > 0) closestPolylineIdxInArray - 1 else 0
-                val rightPolylineArrayIdx = if (closestPolylineIdxInArray < stroke.polylineIndices.size - 1) {
-                    closestPolylineIdxInArray + 1
-                } else {
-                    stroke.polylineIndices.size - 1
-                }
-
-                // Convert to actual indices in the original stroke
-                val leftOriginalIdx = stroke.polylineIndices[leftPolylineArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
-                val middleOriginalIdx = stroke.polylineIndices[closestPolylineIdxInArray].coerceIn(0, stroke.distancesForWeights.size - 1)
-                val rightOriginalIdx = stroke.polylineIndices[rightPolylineArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
-
-                editingPointIndex = middleOriginalIdx
-
-                // Get distances from the ORIGINAL stroke using distancesForWeights
-                val leftDist = stroke.distancesForWeights[leftOriginalIdx]
-                val middleDist = stroke.distancesForWeights[middleOriginalIdx]
-                val rightDist = stroke.distancesForWeights[rightOriginalIdx]
-
-                // Build weight function using sin(x)^2 for affected segments based on ORIGINAL distances
-                editingPointInitialWeights = stroke.distancesForWeights.mapIndexed { index, dist ->
-                    when {
-                        dist < leftDist || dist > rightDist -> 0f // Outside affected range
-                        dist <= middleDist -> {
-                            // Left segment: 1/4 period of sin(x)^2
-                            val segmentLength = middleDist - leftDist
-                            if (segmentLength == 0f) 1f
-                            else {
-                                val t = (dist - leftDist) / segmentLength // 0 to 1
-                                val angle = t * PI.toFloat() / 2f // 0 to π/2
-                                sin(angle) * sin(angle) // sin^2(x)
-                            }
-                        }
-                        else -> {
-                            // Right segment: symmetrically flipped sin(x)^2
-                            val segmentLength = rightDist - middleDist
-                            if (segmentLength == 0f) 1f
-                            else {
-                                val t = (dist - middleDist) / segmentLength // 0 to 1
-                                val angle = (1f - t) * PI.toFloat() / 2f // π/2 to 0 (flipped)
-                                sin(angle) * sin(angle) // sin^2(x)
+                    s.polylineIndices.forEach { anchorIndex ->
+                        if (anchorIndex >= 0 && anchorIndex < s.unsmoothedPoints.size) {
+                            val anchorPoint = s.unsmoothedPoints[anchorIndex].point
+                            val d = distance(anchorPoint, primaryPoint)
+                            if (d < closestDist) {
+                                closestDist = d
+                                closestAnchorIdx = anchorIndex
                             }
                         }
                     }
-                }
-            } else {
-                // Fallback if index is invalid - use distancesForWeights
-                val originalTotalDistance = stroke.distancesForWeights.lastOrNull() ?: 0f
-                if (editingPointIndex < stroke.distancesForWeights.size && originalTotalDistance > 0f) {
-                    val middlePointRelativeDistance = stroke.distancesForWeights[editingPointIndex] / originalTotalDistance
-                    editingPointInitialWeights = stroke.distancesForWeights.map { dist ->
-                        val relativeDistance = dist / originalTotalDistance
-                        val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
-                            relativeDistance / middlePointRelativeDistance
-                        } else {
-                            1 - ((relativeDistance - middlePointRelativeDistance) / (1 - middlePointRelativeDistance))
-                        }
-                        sin(mappedDistance * PI / 2).toFloat()
+
+                    // Check if this anchor point is within the stroke width threshold
+                    if (closestAnchorIdx != -1 && closestDist < s.paint.strokeWidth) {
+                        // Save snapshot of unsmoothed points before editing
+                        val snapshot = s.unsmoothedPoints.map {
+                            PathPoint(PointF(it.point.x, it.point.y), it.distance)
+                        }.toMutableList()
+
+                        // Calculate weights for this anchor point
+                        val weights = calculateWeightsForAnchorPoint(s, closestAnchorIdx)
+
+                        anchorPointsToEdit.add(
+                            AnchorPointToEdit(
+                                stroke = s,
+                                pointIndex = closestAnchorIdx,
+                                snapshotUnsmoothedPoints = snapshot,
+                                weights = weights
+                            )
+                        )
                     }
                 }
             }
-        } else {
-            // Fallback to original behavior if no polyline indices or distancesForWeights
-            val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.last().distance
-            val middlePointRelativeDistance = stroke.unsmoothedPoints[editingPointIndex].distance / totalDistanceOfUnsmoothed
-            editingPointInitialWeights = stroke.unsmoothedPoints.map {
-                val relativeDistance = it.distance / totalDistanceOfUnsmoothed
-                val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
-                    relativeDistance / middlePointRelativeDistance
-                } else {
-                    1 - ((relativeDistance - middlePointRelativeDistance) / (1 - middlePointRelativeDistance))
-                }
-                sin(mappedDistance * PI / 2).toFloat()
-            }
         }
 
-        return true
+        return anchorPointsToEdit.isNotEmpty()
     }
 
     fun deleteStrokes() {
@@ -881,37 +821,32 @@ class DrawingView @JvmOverloads constructor(
         return currentStroke?.isGroup ?: false
     }
 
-
     private fun moveEditingPoint(dx: Float, dy: Float) {
-        currentStroke?.isModified = true
-        currentStroke?.let { stroke ->
+        // Move all co-located anchor points
+        anchorPointsToEdit.forEach { anchor ->
+            anchor.stroke.isModified = true
+
             // Apply weighted transformation to unsmoothedPoints
-            val weights = editingPointInitialWeights
-            if (weights != null && weights.size == stroke.unsmoothedPoints.size) {
-                stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
-                    pathPoint.point.offset(dx * weights[index], dy * weights[index])
+            if (anchor.weights.size == anchor.stroke.unsmoothedPoints.size) {
+                anchor.stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
+                    pathPoint.point.offset(dx * anchor.weights[index], dy * anchor.weights[index])
                 }
             }
 
             // Recalculate distances for unsmoothed points
             val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
-                stroke.unsmoothedPoints.map { it.point }
+                anchor.stroke.unsmoothedPoints.map { it.point }
             )
-            stroke.unsmoothedPoints.clear()
-            stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-            stroke.totalDistance = newTotalDistance
+            anchor.stroke.unsmoothedPoints.clear()
+            anchor.stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+            anchor.stroke.totalDistance = newTotalDistance
 
-            // Always regenerate interpolatedPolylinePoints (and call applySmoothing internally)
-            // For strokes with polylineIndices: updates interpolatedPolylinePoints from vertices
-            // For strokes without polylineIndices: just calls applySmoothing
-            stroke.regenerateInterpolatedPolylinePoints()
-            stroke.applySmoothing()
-
-            // Don't update editingPointIndex - keep it at the originally selected point
-            // This ensures the green circle stays at the correct visual location
-
-            invalidate()
+            // Regenerate interpolated polyline points and apply smoothing
+            anchor.stroke.regenerateInterpolatedPolylinePoints()
+            anchor.stroke.applySmoothing()
         }
+
+        invalidate()
     }
     
     fun setStrokeSmoothness(smoothness: Int) {
@@ -986,7 +921,7 @@ class DrawingView @JvmOverloads constructor(
 
         invalidate()
     }
-    
+
     private fun drawStroke(
         canvas: Canvas,
         stroke: Stroke,
@@ -1066,20 +1001,24 @@ class DrawingView @JvmOverloads constructor(
                         }
                     }
 
-                    // Do not draw highlighted endpoint during a 2- or 3- finger gesture
-                    if (drawEndpoints && !twoFingerGestureOccured && !threeFingerGestureOccured) {
+                    // Draw green circles for all anchor points being edited
+                    // Check independently of drawEndpoints and gesture flags
+                    if (!twoFingerGestureOccured && !threeFingerGestureOccured) { // Do not draw highlighted endpoint during a 2- or 3- finger gesture
                         val radius = haloPaintToUse.strokeWidth/2f
                         val endpointPaint = Paint().apply {
                             style = Paint.Style.FILL
                             color = Color.GREEN
                         }
 
-                        // Highlight the point from pointsForDrawing (not the analytical point)
-                        if (editingPointIndex != -1 && editingPointIndex < stroke.pointsForDrawing.size) {
-                            val pointToHighlight = stroke.pointsForDrawing[editingPointIndex].point
-                            val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
-                            globalTransform.mapPoints(transformedPoint)
-                            canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
+                        // Check if this stroke has any anchor points being edited
+                        anchorPointsToEdit.forEach { anchor ->
+                            if (anchor.stroke == stroke && anchor.pointIndex < stroke.pointsForDrawing.size) {
+                                // Draw green circle on the SMOOTHED position of this anchor point
+                                val pointToHighlight = stroke.pointsForDrawing[anchor.pointIndex].point
+                                val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
+                                globalTransform.mapPoints(transformedPoint)
+                                canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
+                            }
                         }
                     }
                 }
@@ -1254,9 +1193,9 @@ class DrawingView @JvmOverloads constructor(
                         setState(State.NORMAL_DRAWING)
                 }
                 State.STROKE_EDITING -> {
+                    anchorPointsToEdit.clear()
                     editingPointIndex = -1
                     editingPointInitialWeights = null
-                    snapshotUnsmoothedPoints = null
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
                 else -> {}
@@ -1375,7 +1314,7 @@ class DrawingView @JvmOverloads constructor(
             }
             else -> {}
         }
-        invalidate()
+        redrawHistory()
         return true
     }
 
@@ -1506,5 +1445,128 @@ class DrawingView @JvmOverloads constructor(
         }
 
         return true
+    }
+
+    private fun findClosestAnchorPointAcrossAllStrokes(tapPoint: PointF): Pair<Stroke, Int>? {
+        // Returns (stroke, pointIndex) of the closest ANCHOR point across all highlighted strokes
+        // Only searches through polylineIndices, not all unsmoothed points
+        var closestStroke: Stroke? = null
+        var closestPointIndex = -1
+        var closestDist = Float.MAX_VALUE
+
+        // Get all highlighted strokes
+        val highlightedStrokes = strokes.filter { it.isHighlighted }
+        if (highlightedStrokes.isEmpty()) return null
+
+        highlightedStrokes.forEach { stroke ->
+            stroke.forEachStroke { s ->
+                if (!s.isGroup && s.polylineIndices.isNotEmpty()) {
+                    // Only search through anchor points (polylineIndices)
+                    s.polylineIndices.forEach { anchorIndex ->
+                        if (anchorIndex >= 0 && anchorIndex < s.unsmoothedPoints.size) {
+                            val anchorPoint = s.unsmoothedPoints[anchorIndex].point
+                            val d = distance(anchorPoint, tapPoint)
+                            if (d < closestDist) {
+                                closestDist = d
+                                closestPointIndex = anchorIndex
+                                closestStroke = s
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return if (closestStroke != null && closestPointIndex != -1) {
+            Pair(closestStroke!!, closestPointIndex)
+        } else null
+    }
+
+    private fun calculateWeightsForAnchorPoint(stroke: Stroke, pointIndex: Int): List<Float> {
+        // Calculate weight function for this specific anchor point
+        if (stroke.polylineIndices.isNotEmpty() && stroke.polylineIndices.size >= 2 &&
+            stroke.distancesForWeights.isNotEmpty()) {
+
+            // Find which polyline anchor this corresponds to
+            val closestDrawingDistance = if (pointIndex < stroke.distancesForWeights.size) {
+                stroke.distancesForWeights[pointIndex]
+            } else {
+                return List(stroke.unsmoothedPoints.size) { 0f }
+            }
+
+            var closestPolylineIdxInArray = 0
+            var minDistToAnchor = Float.MAX_VALUE
+
+            for (i in stroke.polylineIndices.indices) {
+                val anchorIndexInOriginal = stroke.polylineIndices[i]
+                if (anchorIndexInOriginal >= 0 && anchorIndexInOriginal < stroke.distancesForWeights.size) {
+                    val anchorDistance = stroke.distancesForWeights[anchorIndexInOriginal]
+                    val distDiff = abs(anchorDistance - closestDrawingDistance)
+                    if (distDiff < minDistToAnchor) {
+                        minDistToAnchor = distDiff
+                        closestPolylineIdxInArray = i
+                    }
+                }
+            }
+
+            if (closestPolylineIdxInArray >= 0 && closestPolylineIdxInArray < stroke.polylineIndices.size) {
+                val leftPolylineArrayIdx = if (closestPolylineIdxInArray > 0) closestPolylineIdxInArray - 1 else 0
+                val rightPolylineArrayIdx = if (closestPolylineIdxInArray < stroke.polylineIndices.size - 1) {
+                    closestPolylineIdxInArray + 1
+                } else {
+                    stroke.polylineIndices.size - 1
+                }
+
+                val leftOriginalIdx = stroke.polylineIndices[leftPolylineArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
+                val middleOriginalIdx = stroke.polylineIndices[closestPolylineIdxInArray].coerceIn(0, stroke.distancesForWeights.size - 1)
+                val rightOriginalIdx = stroke.polylineIndices[rightPolylineArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
+
+                val leftDist = stroke.distancesForWeights[leftOriginalIdx]
+                val middleDist = stroke.distancesForWeights[middleOriginalIdx]
+                val rightDist = stroke.distancesForWeights[rightOriginalIdx]
+
+                return stroke.distancesForWeights.mapIndexed { index, dist ->
+                    when {
+                        dist < leftDist || dist > rightDist -> 0f
+                        dist <= middleDist -> {
+                            val segmentLength = middleDist - leftDist
+                            if (segmentLength == 0f) 1f
+                            else {
+                                val t = (dist - leftDist) / segmentLength
+                                val angle = t * PI.toFloat() / 2f
+                                sin(angle) * sin(angle)
+                            }
+                        }
+                        else -> {
+                            val segmentLength = rightDist - middleDist
+                            if (segmentLength == 0f) 1f
+                            else {
+                                val t = (dist - middleDist) / segmentLength
+                                val angle = (1f - t) * PI.toFloat() / 2f
+                                sin(angle) * sin(angle)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback to original behavior
+        val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.lastOrNull()?.distance ?: return List(stroke.unsmoothedPoints.size) { 0f }
+        val middlePointRelativeDistance = if (pointIndex < stroke.unsmoothedPoints.size) {
+            stroke.unsmoothedPoints[pointIndex].distance / totalDistanceOfUnsmoothed
+        } else {
+            0.5f
+        }
+
+        return stroke.unsmoothedPoints.map {
+            val relativeDistance = it.distance / totalDistanceOfUnsmoothed
+            val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
+                relativeDistance / middlePointRelativeDistance
+            } else {
+                1 - ((relativeDistance - middlePointRelativeDistance) / (1 - middlePointRelativeDistance))
+            }
+            sin(mappedDistance * PI / 2).toFloat()
+        }
     }
 }
