@@ -3,7 +3,6 @@ package com.example.bettersketch
 import android.annotation.SuppressLint
 import android.graphics.Color
 import android.os.Bundle
-import android.view.MotionEvent
 import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
@@ -90,7 +89,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         }
 
         btnUndoStrokeEdit.setOnClickListener {
-            drawingView.undoStrokeModifications()
+            drawingView.undoModificationsForHighlightedStrokes()
         }
 
         btnDuplicateStroke.setOnClickListener {
@@ -209,12 +208,12 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         if( highlightedStrokeCount <= 1       &&
             !isCurrentStrokeGroup             &&
             strokeHasPolylineData             &&
-            drawingView.currentStroke != null &&
-            drawingView.currentStroke?.polylineIndices != null) {
-            if(drawingView.currentStroke?.renderAsPolyline ?: false)
+            drawingView.singleHighlightedStroke != null &&
+            drawingView.singleHighlightedStroke?.polylineIndices != null) {
+            if(drawingView.singleHighlightedStroke?.renderAsPolyline ?: false)
                 btnPolyline.text = "Restore"
             else
-                btnPolyline.text = "PolyLine(${drawingView.currentStroke?.polylineIndices?.size})"
+                btnPolyline.text = "PolyLine(${drawingView.singleHighlightedStroke?.polylineIndices?.size})"
             btnPolyline.visibility = View.VISIBLE
         } else {
             btnPolyline.visibility = View.GONE
@@ -243,7 +242,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         val isCurrentStrokeGroup = drawingView.isCurrentStrokeGroup()
 
         btnUndoStrokeEdit.visibility = if (isEditing) View.VISIBLE else View.GONE
-        btnUndoStrokeEdit.isEnabled = drawingView.isCurrentStrokeModified()
+        btnUndoStrokeEdit.isEnabled = drawingView.areAnyHighlightedStrokesModified()
         btnDuplicateStroke.visibility = if (isEditing) View.VISIBLE else View.GONE
         btnDuplicateStroke.isEnabled = highlightedStrokeCount == 1
 
@@ -266,7 +265,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnDel.visibility = if (shouldShowDel) View.VISIBLE else View.GONE
 
         // Show remove/add anchor point buttons based on whether stroke has polyline data
-        val currentStroke = drawingView.currentStroke
+        val currentStroke = drawingView.singleHighlightedStroke
         val hasPolylineData = currentStroke?.polylineIndices?.isNotEmpty() ?: false
 
         if (drawingView.isEditing() && currentStroke != null && hasPolylineData) {

@@ -127,9 +127,10 @@ class DrawingView @JvmOverloads constructor(
     }
 
     // Public properties
-    public val currentStroke: Stroke? get() {
+    public val getHighlightedStrokes: List<Stroke> get() = strokes.filter { it.isHighlighted }
+    public val singleHighlightedStroke: Stroke? get() {
         // Return the single highlighted stroke if exactly one is highlighted
-        val highlighted = strokes.filter { it.isHighlighted }
+        val highlighted = getHighlightedStrokes
         return when (highlighted.size) {
             1 -> highlighted.first()
             else -> null
@@ -144,16 +145,17 @@ class DrawingView @JvmOverloads constructor(
         return (editingPointIndex != -1)
     }
 
-    fun isCurrentStrokeModified(): Boolean {
-        return currentStroke?.isModified ?: false
+    fun areAnyHighlightedStrokesModified(): Boolean {
+        val highlightedAndModifiedStrokes = strokes.filter { it.isHighlighted && it.isModified }
+        return highlightedAndModifiedStrokes.isNotEmpty()
     }
 
     fun currentStrokeHasPolylineData(): Boolean {
-        return currentStroke?.polylineIndices?.isNotEmpty() ?: false
+        return singleHighlightedStroke?.polylineIndices?.isNotEmpty() ?: false
     }
 
     private fun findClosestPointOnCurve(tapPoint: PointF): Int {
-        val stroke = currentStroke ?: return -1
+        val stroke = singleHighlightedStroke ?: return -1
         if (stroke.isGroup) return -1
 
         var closestDist = Float.MAX_VALUE
@@ -171,7 +173,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun addAnchorPointAtIndex(index: Int) {
-        val stroke = currentStroke ?: return
+        val stroke = singleHighlightedStroke ?: return
         if (stroke.isGroup) return
         if (index == -1) return
 
@@ -257,18 +259,21 @@ class DrawingView @JvmOverloads constructor(
         setState(State.NORMAL_DRAWING)
     }
 
-    fun undoStrokeModifications() {
-        currentStroke?.forEachStroke {
-            it.unsmoothedPoints.clear()
-            it.unsmoothedPoints.addAll(it.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
-            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(it.unsmoothedPoints.map { p -> p.point })
-            it.unsmoothedPoints.clear()
-            it.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-            it.totalDistance = newTotalDistance
-            it.applySmoothing()
-            it.isModified = false
+    fun undoModificationsForHighlightedStrokes() {
+        val highlightedStrokes = getHighlightedStrokes
+        highlightedStrokes.forEach { stroke ->
+            stroke.forEachStroke {
+                it.unsmoothedPoints.clear()
+                it.unsmoothedPoints.addAll(it.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
+                val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(it.unsmoothedPoints.map { p -> p.point })
+                it.unsmoothedPoints.clear()
+                it.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+                it.totalDistance = newTotalDistance
+                it.applySmoothing()
+                it.isModified = false
+            }
         }
-        setState(currentState) // Refresh UI and Canvas
+        setState(currentState)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -539,7 +544,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun toggleCurrentStrokePolyline() {
-        currentStroke?.let {
+        singleHighlightedStroke?.let {
             it.togglePolylineRepresentation()
             setState(currentState) // Refresh UI and Canvas
         }
@@ -629,7 +634,7 @@ class DrawingView @JvmOverloads constructor(
         val primaryPoint = primaryStroke.unsmoothedPoints[primaryIndex].point
 
         // Now find all co-located anchor points on other strokes
-        val highlightedStrokes = strokes.filter { it.isHighlighted }
+        val highlightedStrokes = getHighlightedStrokes
 
         highlightedStrokes.forEach { stroke ->
             stroke.forEachStroke { s ->
@@ -676,7 +681,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun deleteStrokes() {
-        val highlightedStrokes = strokes.filter { it.isHighlighted }
+        val highlightedStrokes = getHighlightedStrokes
         
         if (highlightedStrokes.isNotEmpty()) {
             // Check if we should revert instead of delete
@@ -745,7 +750,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun duplicateCurrentStroke() {
-        currentStroke?.let { originalStroke ->
+        singleHighlightedStroke?.let { originalStroke ->
             strokes.forEach { it.setHighlightedRecursively(false) }
 
             val duplicatedStroke = originalStroke.newFrom() // Create a copy of the original stroke
@@ -775,7 +780,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun groupSelectedStrokes() {
-        val highlightedStrokes = strokes.filter { it.isHighlighted }
+        val highlightedStrokes = getHighlightedStrokes
         if (highlightedStrokes.size > 1) {
             val newGroup = Stroke(highlightedStrokes.toMutableList(), defaultPaint())
             strokes.removeAll(highlightedStrokes)
@@ -786,7 +791,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun ungroupSelectedStrokes() {
-        currentStroke?.let { groupStroke ->
+        singleHighlightedStroke?.let { groupStroke ->
             if (groupStroke.isGroup) {
                 val index = strokes.indexOf(groupStroke)
                 if (index != -1) {
@@ -804,7 +809,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun isCurrentStrokeGroup(): Boolean {
-        return currentStroke?.isGroup ?: false
+        return singleHighlightedStroke?.isGroup ?: false
     }
 
     private fun moveEditingPoint(dx: Float, dy: Float) {
@@ -837,7 +842,7 @@ class DrawingView @JvmOverloads constructor(
     
     fun setStrokeSmoothness(smoothness: Int) {
         currentSmoothness = smoothness
-        val selectedStroke = currentStroke
+        val selectedStroke = singleHighlightedStroke
         if (selectedStroke != null && !selectedStroke.isGroup) {
             selectedStroke.forEachStroke {
                 it.smoothness = smoothness
@@ -850,7 +855,7 @@ class DrawingView @JvmOverloads constructor(
 
     fun setColor(color: Int, applyToSelected: Boolean) {
         if (applyToSelected) {
-            val highlightedStrokes = strokes.filter { it.isHighlighted }
+            val highlightedStrokes = getHighlightedStrokes
             
             if (highlightedStrokes.isNotEmpty()) {
                 // Get the common color from the first stroke
@@ -877,9 +882,9 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun setStrokeWidth(px: Float, applyToSelected: Boolean) {
-        if (applyToSelected && currentStroke != null) {
+        if (applyToSelected && singleHighlightedStroke != null) {
             val w = max(1f, min(120f, px))
-            val selectedStroke = currentStroke
+            val selectedStroke = singleHighlightedStroke
             if (selectedStroke != null) {
                 selectedStroke.isModified = true
                 selectedStroke.paint.strokeWidth = w
@@ -1078,7 +1083,7 @@ class DrawingView @JvmOverloads constructor(
                 if (selectEndpointOfCurrentStroke(worldPoint)) {
                     setState(State.STROKE_EDITING)
                 } else {
-                    currentStroke?.let {
+                    singleHighlightedStroke?.let {
                         if (it.isGroup) {
                             backedUpGroupStroke = it.newFrom()
                             backedUpGroupStroke?.setHighlightedRecursively(true)
@@ -1143,7 +1148,7 @@ class DrawingView @JvmOverloads constructor(
                 return@run
 
             if( selectionGestureInProgress ) {
-                val highlightedStrokes = strokes.filter { it.isHighlighted }
+                val highlightedStrokes = getHighlightedStrokes
                 if (highlightedStrokes.size == 1) {
                     val singleHighlightedStroke = highlightedStrokes.first()
                     currentPaint = Paint(singleHighlightedStroke.paint)
@@ -1253,7 +1258,7 @@ class DrawingView @JvmOverloads constructor(
                 moveEditingPoint(delta[0], delta[1])
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
-                currentStroke?.let { current ->
+                singleHighlightedStroke?.let { current ->
                     if (current.isGroup) {
                         backedUpGroupStroke?.let { backup ->
                             current.copyFrom(backup, false)
@@ -1331,7 +1336,7 @@ class DrawingView @JvmOverloads constructor(
                             }
                         }
 
-                        stroke.setHighlightedRecursively(strokeInCircle || (stroke == currentStroke))
+                        stroke.setHighlightedRecursively(strokeInCircle || (stroke == singleHighlightedStroke))
                     }
                 }
             }
@@ -1395,8 +1400,8 @@ class DrawingView @JvmOverloads constructor(
 
         // Get all highlighted strokes and include currentStroke
         if( strokesToTransform.isEmpty()) {
-            strokesToTransform = strokes.filter { it.isHighlighted }.toMutableSet()
-            currentStroke?.let { strokesToTransform.add(it) }
+            strokesToTransform = getHighlightedStrokes.toMutableSet()
+            singleHighlightedStroke?.let { strokesToTransform.add(it) }
         }
 
         if (strokesToTransform.isNotEmpty()) {
@@ -1435,7 +1440,7 @@ class DrawingView @JvmOverloads constructor(
         var closestDist = Float.MAX_VALUE
 
         // Get all highlighted strokes
-        val highlightedStrokes = strokes.filter { it.isHighlighted }
+        val highlightedStrokes = getHighlightedStrokes
         if (highlightedStrokes.isEmpty()) return null
 
         highlightedStrokes.forEach { stroke ->
