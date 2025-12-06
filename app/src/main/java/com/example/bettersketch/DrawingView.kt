@@ -128,8 +128,14 @@ class DrawingView @JvmOverloads constructor(
     }
 
     // Public properties
-    val isStrokeSelected: Boolean get() = selectedStrokeIdx != -1
-    public val currentStroke: Stroke? get() = strokes.getOrNull(selectedStrokeIdx)
+    public val currentStroke: Stroke? get() {
+        // Return the single highlighted stroke if exactly one is highlighted
+        val highlighted = strokes.filter { it.isHighlighted }
+        return when (highlighted.size) {
+            1 -> highlighted.first()
+            else -> null
+        }
+    }
 
     fun isEditing(): Boolean {
         return currentState == State.CHOSEN_STROKE_IN_NORMAL_MODE || currentState == State.STROKE_EDITING
@@ -483,7 +489,6 @@ class DrawingView @JvmOverloads constructor(
             val newStroke = Stroke(finalUnsmoothedPoints, Paint(currentStrokeInProgress.paint), totalDistanceForNewStroke, currentStrokeInProgress.smoothness)
             strokes.add(newStroke)
             strokeInProgress = null
-            selectedStrokeIdx = strokes.lastIndex
             setState(State.NORMAL_DRAWING)
 
             detectShape(newStroke)
@@ -529,7 +534,6 @@ class DrawingView @JvmOverloads constructor(
         val index = strokes.indexOf(originalStroke)
         if (index != -1) {
             strokes[index] = fittedStroke
-            selectedStrokeIdx = index
             fittedStroke.setHighlightedRecursively(true)
         }
         setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
@@ -595,8 +599,7 @@ class DrawingView @JvmOverloads constructor(
                 return false
             }
 
-            selectedStrokeIdx = closestStrokeIndex
-            val selected = currentStroke
+            val selected = strokes.getOrNull(closestStrokeIndex)
             if (selected != null) {
                 setStrokeHighlighted(selected)
                 currentPaint = Paint(selected.paint)
@@ -682,7 +685,6 @@ class DrawingView @JvmOverloads constructor(
             if (highlightedStrokes.size == 1) {
                 val stroke = highlightedStrokes.first()
                 if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.renderAsPolyline) {
-                    // Revert the fitted/approximated stroke to original
                     revertStrokeToOriginal(stroke)
                     setState(currentState) // Refresh UI and Canvas
                     return
@@ -690,19 +692,14 @@ class DrawingView @JvmOverloads constructor(
             }
             // Delete all highlighted strokes
             strokes.removeAll(highlightedStrokes)
-        } else if (selectedStrokeIdx != -1) {
-            val stroke = strokes[selectedStrokeIdx]
-            // Check if the selected stroke is fitted/approximated
-            if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.renderAsPolyline) {
-                // Revert the fitted/approximated stroke to original
-                revertStrokeToOriginal(stroke)
-                setState(currentState) // Refresh UI and Canvas
-                return
-            }
-            // Delete the selected stroke if not fitted
-            strokes.removeAt(selectedStrokeIdx)
         } else if (strokes.isNotEmpty()) {
             // Delete the last stroke as fallback
+            val lastStroke = strokes.last()
+            if (lastStroke.analyticalShapeType != AnalyticalShapeType.NONE || lastStroke.renderAsPolyline) {
+                revertStrokeToOriginal(lastStroke)
+                setState(currentState)
+                return
+            }
             strokes.removeAt(strokes.lastIndex)
         }
 
@@ -711,12 +708,11 @@ class DrawingView @JvmOverloads constructor(
             deselectAndDeHighlight() // Deselect everything
             setState(currentState) // Update screen and UI
         } else {
-            selectedStrokeIdx = strokes.lastIndex
-            setStrokeHighlighted(currentStroke)
-
-            if (strokes.size > 0)
+            // Highlight the last stroke
+            if (strokes.isNotEmpty()) {
+                strokes.last().setHighlightedRecursively(true)
                 setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-            else
+            } else
                 setState(State.NORMAL_DRAWING)
         }
     }
@@ -787,7 +783,6 @@ class DrawingView @JvmOverloads constructor(
             val newGroup = Stroke(highlightedStrokes.toMutableList(), defaultPaint())
             strokes.removeAll(highlightedStrokes)
             strokes.add(newGroup)
-            selectedStrokeIdx = strokes.lastIndex
             newGroup.setHighlightedRecursively(true)
             setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
         }
@@ -801,7 +796,6 @@ class DrawingView @JvmOverloads constructor(
                     strokes.removeAt(index)
                     strokes.addAll(index, groupStroke.childStrokes)
                     groupStroke.childStrokes.forEach { it.setHighlightedRecursively(true) }
-                    selectedStrokeIdx = -1
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
             }
@@ -1155,12 +1149,8 @@ class DrawingView @JvmOverloads constructor(
                 val highlightedStrokes = strokes.filter { it.isHighlighted }
                 if (highlightedStrokes.size == 1) {
                     val singleHighlightedStroke = highlightedStrokes.first()
-                    val index = strokes.indexOf(singleHighlightedStroke)
-                    if (index != -1) {
-                        selectedStrokeIdx = index
-                        currentPaint = Paint(singleHighlightedStroke.paint)
-                        setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
-                    }
+                    currentPaint = Paint(singleHighlightedStroke.paint)
+                    setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 } else
                     if (highlightedStrokes.isNotEmpty())
                         setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)

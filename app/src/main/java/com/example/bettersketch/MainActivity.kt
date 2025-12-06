@@ -117,7 +117,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         widthSlider.listener = object : MySlider.OnSliderValueChangedListener {
             override fun onValueChanged(value: Float) {
                 val strokeWidth = 2f + value * 30f // 2...32
-                drawingView.setStrokeWidth(strokeWidth, applyToSelected = drawingView.isStrokeSelected)
+                drawingView.setStrokeWidth(strokeWidth, applyToSelected = drawingView.getHighlightedStrokeCount() > 0)
             }
 
             override fun onValueEdit(value: Float) {
@@ -133,7 +133,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             override fun onValueChanged(value: Float) {
                 val colorIndex = (value * (colors.size - 1)).roundToInt()
                 val color = colors[colorIndex]
-                drawingView.setColor(color, applyToSelected = drawingView.isStrokeSelected)
+                drawingView.setColor(color, applyToSelected = drawingView.getHighlightedStrokeCount() > 0)
                 widthSlider.color = color
             }
 
