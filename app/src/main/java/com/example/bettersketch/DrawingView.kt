@@ -76,7 +76,6 @@ class DrawingView @JvmOverloads constructor(
     // Data
     val strokes = mutableListOf<Stroke>()
     public var selectedStrokeIdx: Int = -1
-    public var lastStrokeHighlightedIdx: Int = -1
     private var editingPointIndex: Int = -1
     private var editingPointInitialWeights: List<Float>? = null
     private var addingAnchorPointIndex: Int = -1
@@ -532,7 +531,6 @@ class DrawingView @JvmOverloads constructor(
             strokes[index] = fittedStroke
             selectedStrokeIdx = index
             fittedStroke.setHighlightedRecursively(true)
-            lastStrokeHighlightedIdx = index
         }
         setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
     }
@@ -550,9 +548,8 @@ class DrawingView @JvmOverloads constructor(
         return sqrt(dx * dx + dy * dy)
     }
 
-    private fun setStrokeHighlighted(stroke: Stroke?, idx: Int?) {
+    private fun setStrokeHighlighted(stroke: Stroke?) {
         stroke?.setHighlightedRecursively(true)
-        idx?.let { lastStrokeHighlightedIdx = it }
     }
 
     private fun deselectAndDeHighlight() {
@@ -560,7 +557,6 @@ class DrawingView @JvmOverloads constructor(
         selectedStrokeIdx = -1 // First thing - deselect.
         editingPointIndex = -1 // Don't forget this one too...
         strokes.forEach { it.setHighlightedRecursively(false) } // Second - de-highlight
-        lastStrokeHighlightedIdx = -1
     }
 
     private fun selectStrokeAt(tapPointScreen: PointF): Boolean {
@@ -600,10 +596,9 @@ class DrawingView @JvmOverloads constructor(
             }
 
             selectedStrokeIdx = closestStrokeIndex
-            lastStrokeHighlightedIdx = selectedStrokeIdx
             val selected = currentStroke
             if (selected != null) {
-                setStrokeHighlighted(selected, selectedStrokeIdx)
+                setStrokeHighlighted(selected)
                 currentPaint = Paint(selected.paint)
                 if (!selected.isGroup) {
                     detectShape(selected)
@@ -717,7 +712,7 @@ class DrawingView @JvmOverloads constructor(
             setState(currentState) // Update screen and UI
         } else {
             selectedStrokeIdx = strokes.lastIndex
-            setStrokeHighlighted(currentStroke, strokes.lastIndex)
+            setStrokeHighlighted(currentStroke)
 
             if (strokes.size > 0)
                 setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
@@ -852,7 +847,6 @@ class DrawingView @JvmOverloads constructor(
     fun setStrokeSmoothness(smoothness: Int) {
         currentSmoothness = smoothness
         val selectedStroke = currentStroke
-        if (lastStrokeHighlightedIdx != -1)
         if (selectedStroke != null && !selectedStroke.isGroup) {
             selectedStroke.forEachStroke {
                 it.smoothness = smoothness
@@ -892,7 +886,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun setStrokeWidth(px: Float, applyToSelected: Boolean) {
-        if (applyToSelected && (lastStrokeHighlightedIdx != -1)) {
+        if (applyToSelected && currentStroke != null) {
             val w = max(1f, min(120f, px))
             val selectedStroke = currentStroke
             if (selectedStroke != null) {
