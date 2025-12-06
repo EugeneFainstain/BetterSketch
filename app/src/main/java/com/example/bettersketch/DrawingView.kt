@@ -75,8 +75,7 @@ class DrawingView @JvmOverloads constructor(
 
     // Data
     val strokes = mutableListOf<Stroke>()
-    private var anchorPointBeingEdited: AnchorPointLocation? = null
-    private var editingPointInitialWeights: List<Float>? = null
+    private var anchorPointsToEdit = mutableListOf<AnchorPointToEdit>()
     private var addAnchorPointHere: AnchorPointLocation? = null  // Combined stroke + index
 
     private data class AnchorPointToEdit(
@@ -91,7 +90,6 @@ class DrawingView @JvmOverloads constructor(
         val pointIndex: Int
     )
 
-    private var anchorPointsToEdit = mutableListOf<AnchorPointToEdit>()
     // Transformation state
     private val globalTransform = Matrix() // Matrix for transforming from WORLD-SPACE to SCREEN-SPACE (a.k.a the VIEW MATRIX)
     private var dragGestureHasEnded = false
@@ -147,7 +145,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun isAnchorPointDragging(): Boolean {
-        return anchorPointBeingEdited != null
+        return anchorPointsToEdit.isNotEmpty()
     }
 
     fun areAnyHighlightedStrokesModified(): Boolean {
@@ -280,15 +278,12 @@ class DrawingView @JvmOverloads constructor(
 
         // Clear editing state
         anchorPointsToEdit.clear()
-        anchorPointBeingEdited = null
-        editingPointInitialWeights = null
 
         setState(currentState) // Refresh UI and Canvas
     }
 
     fun exitEditingMode() {
         deselectAndDeHighlight()
-        editingPointInitialWeights = null
         setState(State.NORMAL_DRAWING)
     }
 
@@ -387,7 +382,7 @@ class DrawingView @JvmOverloads constructor(
         advancedGestureInProgress = selectionGestureInProgress || addAnchorPointGestureInProgress
 
         // Check if finger is over the remove anchor point button (when in editing mode and dragging an anchor)
-        if (currentState == State.STROKE_EDITING && anchorPointBeingEdited != null) {
+        if (currentState == State.STROKE_EDITING && anchorPointsToEdit.isNotEmpty()) {
             isFingerOverRemoveButton = isEventOverRemoveAnchorButton(event) && !addAnchorPointGestureInProgress
         } else {
             isFingerOverRemoveButton = false
@@ -595,9 +590,8 @@ class DrawingView @JvmOverloads constructor(
 
     private fun deselectAndDeHighlight() {
         // Note: doesn't cause a redraw on its own
-        anchorPointBeingEdited = null  // Clear anchor point editing
-        anchorPointsToEdit.clear()
-        strokes.forEach { it.setHighlightedRecursively(false) } // De-highlight
+        anchorPointsToEdit.clear()  // Just clear the list
+        strokes.forEach { it.setHighlightedRecursively(false) }
     }
 
     private fun selectStrokeAt(tapPointScreen: PointF): Boolean {
@@ -654,16 +648,12 @@ class DrawingView @JvmOverloads constructor(
 
         // Clear previous editing state
         anchorPointsToEdit.clear()
-        anchorPointBeingEdited = null
-        editingPointInitialWeights = null
 
         // Find the absolute nearest ANCHOR point (not just any point) across all highlighted strokes
         val nearestResult = findClosestAnchorPointAcrossAllStrokes(tapPoint) ?: return false
         // Primary stroke is the stroke who's endpoint has been selected for editing
         val (primaryStroke, primaryIndex) = nearestResult
 
-        // Store the anchor point being edited
-        anchorPointBeingEdited = AnchorPointLocation(primaryStroke, primaryIndex)
 
         // Get the primary point from UNSMOOTHED points (this is an anchor point)
         val primaryPoint = primaryStroke.unsmoothedPoints[primaryIndex].point
@@ -1218,8 +1208,6 @@ class DrawingView @JvmOverloads constructor(
                 }
                 State.STROKE_EDITING -> {
                     anchorPointsToEdit.clear()
-                    anchorPointBeingEdited = null
-                    editingPointInitialWeights = null
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
                 else -> {}
