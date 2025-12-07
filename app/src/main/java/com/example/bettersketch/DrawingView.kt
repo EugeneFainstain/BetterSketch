@@ -77,12 +77,22 @@ class DrawingView @JvmOverloads constructor(
     val strokes = mutableListOf<Stroke>()
     private var anchorPointsToEdit = mutableListOf<AnchorPointToEdit>()
     private var addAnchorPointHere: AnchorPointLocation? = null  // Combined stroke + index
+    
+    // Track second finger for bezier control point editing
+    private var secondFingerControlEdit: ControlPointToEdit? = null
+    private var isSecondFingerEditing = false
 
     private data class AnchorPointToEdit(
         val stroke: Stroke,
         val pointIndex: Int,
         val snapshotUnsmoothedPoints: MutableList<PathPoint>,
         val weights: List<Float>
+    )
+    
+    data class ControlPointToEdit(
+        val stroke: Stroke,
+        val controlIndex: Int,  // Index into bezierControlPoints
+        val snapshotControlPoints: MutableList<PointF>
     )
 
     private data class AnchorPointLocation(
@@ -1093,6 +1103,7 @@ class DrawingView @JvmOverloads constructor(
                         canvas.drawPath(path, haloPaintToUse)
 
                         // Draw circles for associated polyline points
+                        if (!stroke.renderAsBezier)
                         if (stroke.polylineIndices.isNotEmpty()) {
                             val associatedPoints = stroke.getAssociatedPolylinePointsOnSmoothedCurve()
                             val vertexPaint = Paint().apply {
@@ -1342,6 +1353,20 @@ class DrawingView @JvmOverloads constructor(
                 strokeInProgress = null
             }
         }
+        
+        // Handle second finger for bezier control point editing
+        if (currentState == State.STROKE_EDITING && anchorPointsToEdit.isNotEmpty()) {
+            val primaryAnchor = anchorPointsToEdit.firstOrNull()
+            if (primaryAnchor != null && primaryAnchor.stroke.renderAsBezier && primaryAnchor.weights.isEmpty()) {
+                // We're in bezier mode - find closest control point for second finger
+                if (event.pointerCount >= 2) {
+                    val secondFingerWorldPoint = toWorldCoordinates(event.getX(1), event.getY(1))
+                    selectSecondFingerControlPoint(secondFingerWorldPoint, primaryAnchor.stroke, primaryAnchor.pointIndex)
+                }
+                // Don't return here - let the gesture continue normally
+            }
+        }
+        
         redrawHistory()
         twoFingerGestureOccured = true
         return true
@@ -1360,6 +1385,10 @@ class DrawingView @JvmOverloads constructor(
         selectionCircle = null
         backedUpGroupStroke = null
         globalSetStateIsNeeded = true // Make sure setState gets called in the end...
+
+        // Clear second finger editing state
+        secondFingerControlEdit = null
+        isSecondFingerEditing = false
 
         run {
             // Check if we're adding an anchor point
@@ -1426,6 +1455,7 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
+
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
 
         if( dragGestureHasEnded )
@@ -1441,13 +1471,13 @@ class DrawingView @JvmOverloads constructor(
         if( addAnchorPointGestureInProgress ) {
             val worldPoint = toWorldCoordinates(event.x, event.y)
             val result = findClosestPointAcrossHighlightedStrokes(worldPoint)
-            
+
             addAnchorPointHere = if (result != null) {
                 AnchorPointLocation(result.stroke, result.pointIndex)
             } else {
                 null
             }
-            
+
             invalidate() // Redraw to show the red circle
             return true
         }
@@ -1493,6 +1523,8 @@ class DrawingView @JvmOverloads constructor(
             State.STROKE_EDITING -> {
                 val delta = floatArrayOf(dx, dy)
                 inverseGlobalTransform.mapVectors(delta) // Transform delta into world-space
+
+                // Only move first finger anchor point(s) - not the second finger control point
                 moveEditingPoint(delta[0], delta[1])
             }
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
@@ -1541,6 +1573,74 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
+    private fun selectSecondFingerControlPoint(tapPoint: PointF, primaryStroke: Stroke, editingAnchorIndex: Int) {
+        if (!primaryStroke.renderAsBezier || primaryStroke.bezierControlPoints.isEmpty()) return
+
+        // Find the closest control point to the tap point
+        var closestDist = Float.MAX_VALUE
+        var closestIndex = -1
+
+        // Get control points associated with the anchor being edited
+        val numSegments = primaryStroke.bezierAnchorPoints.size - 1
+        val relevantControlIndices = mutableListOf<Int>()
+
+        // If editing anchor is not first, add incoming control point
+        if (editingAnchorIndex > 0) {
+            val incomingControlIndex = (editingAnchorIndex - 1) * 2 + 1
+            if (incomingControlIndex < primaryStroke.bezierControlPoints.size) {
+                relevantControlIndices.add(incomingControlIndex)
+            }
+        }
+
+        // If editing anchor is not last, add outgoing control point
+        if (editingAnchorIndex < numSegments) {
+            val outgoingControlIndex = editingAnchorIndex * 2
+            if (outgoingControlIndex < primaryStroke.bezierControlPoints.size) {
+                relevantControlIndices.add(outgoingControlIndex)
+            }
+        }
+
+        // Find closest control point among relevant ones
+        relevantControlIndices.forEach { controlIndex ->
+            val controlPoint = primaryStroke.bezierControlPoints[controlIndex]
+            val d = distance(controlPoint, tapPoint)
+            if (d < closestDist) {
+                closestDist = d
+                closestIndex = controlIndex
+            }
+        }
+
+        if (closestIndex != -1) {
+            // Save snapshot for undo
+            val snapshot = primaryStroke.bezierControlPoints.map { PointF(it.x, it.y) }.toMutableList()
+
+            secondFingerControlEdit = ControlPointToEdit(
+                stroke = primaryStroke,
+                controlIndex = closestIndex,
+                snapshotControlPoints = snapshot
+            )
+            isSecondFingerEditing = true
+            invalidate()
+        }
+    }
+
+    private fun moveSecondFingerControlPoint(dx: Float, dy: Float) {
+        val controlEdit = secondFingerControlEdit ?: return
+
+        controlEdit.stroke.isModified = true
+
+        // Move only the selected control point
+        if (controlEdit.controlIndex >= 0 && controlEdit.controlIndex < controlEdit.stroke.bezierControlPoints.size) {
+            controlEdit.stroke.bezierControlPoints[controlEdit.controlIndex].offset(dx, dy)
+
+            // Regenerate the curve from the modified bezier data
+            controlEdit.stroke.regenerateBezierPoints()
+            controlEdit.stroke.applySmoothing()
+        }
+
+        invalidate()
+    }
+
     private fun midpoint(event: MotionEvent): PointF {
         if (event.pointerCount < 2) return PointF(event.x, event.y)
         val x = (event.getX(0) + event.getX(1)) / 2f
@@ -1558,6 +1658,28 @@ class DrawingView @JvmOverloads constructor(
         val worldDelta = floatArrayOf(dx, dy)
         invertedGlobal.mapVectors(worldDelta)
 
+        // Handle second finger for bezier control point editing
+        // Get the second finger's delta separately
+        if (currentState == State.STROKE_EDITING && isSecondFingerEditing && secondFingerControlEdit != null) {
+            if (event.pointerCount >= 2) {
+                // Calculate delta for the second finger (pointer index 1)
+                val prevX = event.getX(1) - dx
+                val prevY = event.getY(1) - dy
+
+                // Transform to world coordinates
+                val prevWorld = toWorldCoordinates(prevX, prevY)
+                val currWorld = toWorldCoordinates(event.getX(1), event.getY(1))
+
+                val secondFingerDx = currWorld.x - prevWorld.x
+                val secondFingerDy = currWorld.y - prevWorld.y
+
+                // Move the second finger's control point
+                moveSecondFingerControlPoint(secondFingerDx, secondFingerDy)
+            }
+        }
+
+        // Continue with normal two-finger processing
+        // This allows the first finger to continue moving the anchor point
         if( selectionGestureInProgress )
         {
             if (event.pointerCount >= 2) {
