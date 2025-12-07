@@ -914,9 +914,36 @@ class DrawingView @JvmOverloads constructor(
 
             // Check if this is a bezier anchor (empty weights list is the signal)
             if (anchor.weights.isEmpty() && anchor.stroke.renderAsBezier) {
-                // Bezier mode: move the bezier anchor directly
+                // Bezier mode: move the bezier anchor AND its associated control points
                 if (anchor.pointIndex >= 0 && anchor.pointIndex < anchor.stroke.bezierAnchorPoints.size) {
+                    // Move the anchor point itself
                     anchor.stroke.bezierAnchorPoints[anchor.pointIndex].offset(dx, dy)
+
+                    // Move the control points associated with this anchor
+                    val numSegments = anchor.stroke.bezierAnchorPoints.size - 1
+
+                    // Each segment has 2 control points: control[segIndex * 2] and control[segIndex * 2 + 1]
+                    // Anchor[i] is the END of segment[i-1] and the START of segment[i]
+
+                    // If this is NOT the first anchor, move the "incoming" control point
+                    // (the second control point of the previous segment)
+                    if (anchor.pointIndex > 0) {
+                        val prevSegmentIndex = anchor.pointIndex - 1
+                        val incomingControlIndex = prevSegmentIndex * 2 + 1
+                        if (incomingControlIndex >= 0 && incomingControlIndex < anchor.stroke.bezierControlPoints.size) {
+                            anchor.stroke.bezierControlPoints[incomingControlIndex].offset(dx, dy)
+                        }
+                    }
+
+                    // If this is NOT the last anchor, move the "outgoing" control point
+                    // (the first control point of the current segment)
+                    if (anchor.pointIndex < numSegments) {
+                        val currentSegmentIndex = anchor.pointIndex
+                        val outgoingControlIndex = currentSegmentIndex * 2
+                        if (outgoingControlIndex >= 0 && outgoingControlIndex < anchor.stroke.bezierControlPoints.size) {
+                            anchor.stroke.bezierControlPoints[outgoingControlIndex].offset(dx, dy)
+                        }
+                    }
 
                     // Regenerate the curve from the modified bezier data
                     anchor.stroke.regenerateBezierPoints()
