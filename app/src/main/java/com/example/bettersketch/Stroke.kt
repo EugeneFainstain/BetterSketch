@@ -101,6 +101,10 @@ class Stroke(
     /**
      * Interpolate points along the bezier curve
      */
+
+    /**
+     * Interpolate points along the bezier curve
+     */
     private fun interpolateAlongBezierCurve(targetPointCount: Int): List<PointF> {
         if (bezierAnchorPoints.size < 2) return emptyList()
 
@@ -109,8 +113,9 @@ class Stroke(
             return emptyList()
         }
 
-        val interpolatedPoints = mutableListOf<PointF>()
-        val pointsPerSegment = targetPointCount / numSegments
+        // First, estimate the arc length of each segment
+        val segmentLengths = mutableListOf<Float>()
+        var totalLength = 0f
 
         for (segIndex in 0 until numSegments) {
             val p0 = bezierAnchorPoints[segIndex]
@@ -118,21 +123,81 @@ class Stroke(
             val p2 = bezierControlPoints[segIndex * 2 + 1]
             val p3 = bezierAnchorPoints[segIndex + 1]
 
-            val numPoints = if (segIndex == numSegments - 1) {
-                // Last segment gets remaining points
-                targetPointCount - interpolatedPoints.size
-            } else {
-                pointsPerSegment
-            }
-
-            for (i in 0 until numPoints) {
-                val t = i.toFloat() / (numPoints - 1).toFloat()
-                val point = evaluateCubicBezier(p0, p1, p2, p3, t)
-                interpolatedPoints.add(point)
-            }
+            // Estimate arc length by sampling the curve
+            val length = estimateBezierArcLength(p0, p1, p2, p3)
+            segmentLengths.add(length)
+            totalLength += length
         }
 
-        return interpolatedPoints
+        if (totalLength <= 0f) return listOf(bezierAnchorPoints.first())
+
+        // Distribute points proportionally to arc length
+        val interpolatedPoints = mutableListOf<PointF>()
+        val spacing = totalLength / (targetPointCount - 1)
+
+        var currentDistance = 0f
+        var segIndex = 0
+        var segmentStartDistance = 0f
+
+        for (i in 0 until targetPointCount) {
+            val targetDistance = i * spacing
+
+            // Find which segment contains this distance
+            while (segIndex < numSegments && targetDistance > segmentStartDistance + segmentLengths[segIndex]) {
+                segmentStartDistance += segmentLengths[segIndex]
+                segIndex++
+            }
+
+            if (segIndex >= numSegments) {
+                // We've gone past the last segment, add the last anchor point
+                interpolatedPoints.add(PointF(bezierAnchorPoints.last().x, bezierAnchorPoints.last().y))
+                break
+            }
+
+            // Interpolate within the current segment
+            val distanceIntoSegment = targetDistance - segmentStartDistance
+            val t = if (segmentLengths[segIndex] > 0) {
+                (distanceIntoSegment / segmentLengths[segIndex]).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+
+            val p0 = bezierAnchorPoints[segIndex]
+            val p1 = bezierControlPoints[segIndex * 2]
+            val p2 = bezierControlPoints[segIndex * 2 + 1]
+            val p3 = bezierAnchorPoints[segIndex + 1]
+
+            val point = evaluateCubicBezier(p0, p1, p2, p3, t)
+            interpolatedPoints.add(point)
+        }
+
+        // Ensure we have exactly targetPointCount points
+        while (interpolatedPoints.size < targetPointCount) {
+            interpolatedPoints.add(PointF(bezierAnchorPoints.last().x, bezierAnchorPoints.last().y))
+        }
+
+        return interpolatedPoints.take(targetPointCount)
+    }
+
+    /**
+     * Estimate the arc length of a cubic Bezier curve
+     */
+    private fun estimateBezierArcLength(p0: PointF, p1: PointF, p2: PointF, p3: PointF): Float {
+        // Use adaptive sampling to estimate arc length
+        val samples = 20
+        var length = 0f
+        var prevPoint = p0
+
+        for (i in 1..samples) {
+            val t = i.toFloat() / samples
+            val point = evaluateCubicBezier(p0, p1, p2, p3, t)
+            val dx = point.x - prevPoint.x
+            val dy = point.y - prevPoint.y
+            length += sqrt(dx * dx + dy * dy)
+            prevPoint = point
+        }
+
+        return length
     }
 
     /**
