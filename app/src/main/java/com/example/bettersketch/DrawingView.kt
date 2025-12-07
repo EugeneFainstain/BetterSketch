@@ -1045,6 +1045,7 @@ class DrawingView @JvmOverloads constructor(
                             }
                         }
 
+
                         // Draw red squares for bezier anchor points
                         if (stroke.bezierAnchorIndices.isNotEmpty()) {
                             val bezierAnchorPoints = stroke.getAssociatedBezierAnchorPointsOnSmoothedCurve()
@@ -1064,6 +1065,78 @@ class DrawingView @JvmOverloads constructor(
                                 val right = transformedPoint[0] + size
                                 val bottom = transformedPoint[1] + size
                                 canvas.drawRect(left, top, right, bottom, bezierPaint)
+                            }
+                        }
+
+                        // Draw bezier handles (control points and connecting lines)
+                        if (stroke.bezierAnchorPoints.isNotEmpty() && stroke.bezierControlPoints.isNotEmpty()) {
+                            val numSegments = stroke.bezierAnchorPoints.size - 1
+
+                            // Paint for handle lines
+                            val handleLinePaint = Paint().apply {
+                                style = Paint.Style.STROKE
+                                color = Color.GRAY
+                                strokeWidth = 2f
+                                alpha = 128 // 50% opacity
+                            }
+
+                            // Paint for control point squares
+                            val controlPointPaint = Paint().apply {
+                                style = Paint.Style.FILL
+                                color = Color.GREEN
+                            }
+
+                            val controlSize = haloPaintToUse.strokeWidth / 3f // Smaller than anchors
+
+                            for (segIndex in 0 until numSegments) {
+                                if (segIndex * 2 + 1 >= stroke.bezierControlPoints.size) break
+
+                                val anchor1 = stroke.bezierAnchorPoints[segIndex]
+                                val control1 = stroke.bezierControlPoints[segIndex * 2]
+                                val control2 = stroke.bezierControlPoints[segIndex * 2 + 1]
+                                val anchor2 = stroke.bezierAnchorPoints[segIndex + 1]
+
+                                // Transform points to screen space
+                                val anchor1Screen = floatArrayOf(anchor1.x, anchor1.y)
+                                val control1Screen = floatArrayOf(control1.x, control1.y)
+                                val control2Screen = floatArrayOf(control2.x, control2.y)
+                                val anchor2Screen = floatArrayOf(anchor2.x, anchor2.y)
+
+                                globalTransform.mapPoints(anchor1Screen)
+                                globalTransform.mapPoints(control1Screen)
+                                globalTransform.mapPoints(control2Screen)
+                                globalTransform.mapPoints(anchor2Screen)
+
+                                // Draw handle lines
+                                canvas.drawLine(
+                                    anchor1Screen[0], anchor1Screen[1],
+                                    control1Screen[0], control1Screen[1],
+                                    handleLinePaint
+                                )
+                                canvas.drawLine(
+                                    anchor2Screen[0], anchor2Screen[1],
+                                    control2Screen[0], control2Screen[1],
+                                    handleLinePaint
+                                )
+
+                                // Draw control point squares
+                                // First control point
+                                canvas.drawRect(
+                                    control1Screen[0] - controlSize,
+                                    control1Screen[1] - controlSize,
+                                    control1Screen[0] + controlSize,
+                                    control1Screen[1] + controlSize,
+                                    controlPointPaint
+                                )
+
+                                // Second control point
+                                canvas.drawRect(
+                                    control2Screen[0] - controlSize,
+                                    control2Screen[1] - controlSize,
+                                    control2Screen[0] + controlSize,
+                                    control2Screen[1] + controlSize,
+                                    controlPointPaint
+                                )
                             }
                         }
 
