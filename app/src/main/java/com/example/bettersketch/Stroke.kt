@@ -55,8 +55,27 @@ class Stroke(
         renderAsBezier = !renderAsBezier
         isModified = true
 
+        // If turning OFF bezier mode, restore unsmoothedPoints from originalPoints
+        if (!renderAsBezier) {
+            unsmoothedPoints.clear()
+            unsmoothedPoints.addAll(
+                originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }
+            )
+
+            // Recalculate distances
+            val (recalculatedPoints, newTotalDistance) = calculatePathPointsWithDistances(
+                unsmoothedPoints.map { it.point }
+            )
+            unsmoothedPoints.clear()
+            unsmoothedPoints.addAll(recalculatedPoints)
+            totalDistance = newTotalDistance
+        }
+
         // Regenerate points for drawing based on current mode
-        regenerateBezierPoints()
+        if (renderAsBezier) {
+            regenerateBezierPoints()
+        }
+
         applySmoothing()
     }
 
