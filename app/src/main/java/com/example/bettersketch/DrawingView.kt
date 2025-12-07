@@ -77,10 +77,11 @@ class DrawingView @JvmOverloads constructor(
     val strokes = mutableListOf<Stroke>()
     private var anchorPointsToEdit = mutableListOf<AnchorPointToEdit>()
     private var addAnchorPointHere: AnchorPointLocation? = null  // Combined stroke + index
-    
+
     // Track second finger for bezier control point editing
     private var secondFingerControlEdit: ControlPointToEdit? = null
     private var isSecondFingerEditing = false
+    private var firstFingerDownTime: Long = 0  // Track when first finger landed
 
     private data class AnchorPointToEdit(
         val stroke: Stroke,
@@ -1311,6 +1312,8 @@ class DrawingView @JvmOverloads constructor(
         twoFingerGestureOccured   = false // this is the only place it becomes "false"
         threeFingerGestureOccured = false // this is the only place it becomes "false"
         dragGestureHasEnded       = false // this is the only place it becomes "false"
+        
+        firstFingerDownTime = System.currentTimeMillis()  // Record when first finger landed
 
         if( advancedGestureInProgress )
             return true
@@ -1354,8 +1357,19 @@ class DrawingView @JvmOverloads constructor(
             }
         }
         
-        // Handle second finger for bezier control point editing
-        if (currentState == State.STROKE_EDITING && anchorPointsToEdit.isNotEmpty()) {
+        // Calculate time difference between first and second finger
+        val timeBetweenFingers = System.currentTimeMillis() - firstFingerDownTime
+        val simultaneousThreshold = 150L // milliseconds - tune this value as needed
+        
+        // Determine if this should be a control point edit gesture:
+        // 1. Must be in stroke editing mode
+        // 2. Must have an anchor point being edited
+        // 3. Fingers must NOT land simultaneously (sequential touch)
+        val shouldEditControlPoint = currentState == State.STROKE_EDITING && 
+                                     anchorPointsToEdit.isNotEmpty() &&
+                                     timeBetweenFingers > simultaneousThreshold
+        
+        if (shouldEditControlPoint) {
             val primaryAnchor = anchorPointsToEdit.firstOrNull()
             if (primaryAnchor != null && primaryAnchor.stroke.renderAsBezier && primaryAnchor.weights.isEmpty()) {
                 // We're in bezier mode - find closest control point for second finger
@@ -1363,10 +1377,13 @@ class DrawingView @JvmOverloads constructor(
                     val secondFingerWorldPoint = toWorldCoordinates(event.getX(1), event.getY(1))
                     selectSecondFingerControlPoint(secondFingerWorldPoint, primaryAnchor.stroke, primaryAnchor.pointIndex)
                 }
-                // Don't return here - let the gesture continue normally
+                // Don't set twoFingerGestureOccured - this prevents canvas transformation
+                redrawHistory()
+                return true
             }
         }
         
+        // Otherwise, this is a normal two-finger gesture (canvas transformation)
         redrawHistory()
         twoFingerGestureOccured = true
         return true
@@ -1657,29 +1674,44 @@ class DrawingView @JvmOverloads constructor(
         globalTransform.invert(invertedGlobal)
         val worldDelta = floatArrayOf(dx, dy)
         invertedGlobal.mapVectors(worldDelta)
-
+        
         // Handle second finger for bezier control point editing
-        // Get the second finger's delta separately
+        // If second finger is editing a control point, handle it specially
         if (currentState == State.STROKE_EDITING && isSecondFingerEditing && secondFingerControlEdit != null) {
             if (event.pointerCount >= 2) {
                 // Calculate delta for the second finger (pointer index 1)
                 val prevX = event.getX(1) - dx
                 val prevY = event.getY(1) - dy
-
+                
                 // Transform to world coordinates
                 val prevWorld = toWorldCoordinates(prevX, prevY)
                 val currWorld = toWorldCoordinates(event.getX(1), event.getY(1))
-
+                
                 val secondFingerDx = currWorld.x - prevWorld.x
                 val secondFingerDy = currWorld.y - prevWorld.y
-
+                
                 // Move the second finger's control point
                 moveSecondFingerControlPoint(secondFingerDx, secondFingerDy)
+                
+                // Also move the first finger's anchor point
+                // Calculate delta for the first finger (pointer index 0)
+                val firstPrevX = event.getX(0) - dx
+                val firstPrevY = event.getY(0) - dy
+                
+                val firstPrevWorld = toWorldCoordinates(firstPrevX, firstPrevY)
+                val firstCurrWorld = toWorldCoordinates(event.getX(0), event.getY(0))
+                
+                val firstFingerDx = firstCurrWorld.x - firstPrevWorld.x
+                val firstFingerDy = firstCurrWorld.y - firstPrevWorld.y
+                
+                moveEditingPoint(firstFingerDx, firstFingerDy)
+                
+                redrawHistory()
+                return true  // Early return - don't do canvas transformation
             }
         }
-
-        // Continue with normal two-finger processing
-        // This allows the first finger to continue moving the anchor point
+        
+        // Continue with normal two-finger processing (canvas transformation)
         if( selectionGestureInProgress )
         {
             if (event.pointerCount >= 2) {
