@@ -247,6 +247,13 @@ class Stroke(
     }
 
     fun getAssociatedBezierAnchorPointsOnSmoothedCurve(): List<PointF> {
+        // When in bezier mode, return the actual bezier anchor points directly
+        // (not indices, as they may not correspond after interpolation)
+        if (renderAsBezier && bezierAnchorPoints.isNotEmpty()) {
+            return bezierAnchorPoints.map { PointF(it.x, it.y) }
+        }
+
+        // When NOT in bezier mode, use indices to show where anchors would be
         if (bezierAnchorIndices.isEmpty() || pointsForDrawing.isEmpty()) {
             return emptyList()
         }
