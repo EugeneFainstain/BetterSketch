@@ -85,7 +85,7 @@ class Stroke(
     fun regenerateBezierPoints() {
         if (!hasBezierData() || !renderAsBezier) return
 
-        val pointCount = originalPoints.size
+        val pointCount = originalPoints.size * 4
         if (pointCount < 2) return
 
         // Interpolate points along the bezier curve

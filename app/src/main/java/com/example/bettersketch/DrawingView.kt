@@ -689,54 +689,78 @@ class DrawingView @JvmOverloads constructor(
         // Clear previous editing state
         anchorPointsToEdit.clear()
 
-        // Find the absolute nearest ANCHOR point (not just any point) across all highlighted strokes
+        // Find the absolute nearest ANCHOR point across all highlighted strokes
         val nearestResult = findClosestAnchorPointAcrossAllStrokes(tapPoint) ?: return false
         // Primary stroke is the stroke who's endpoint has been selected for editing
         val (primaryStroke, primaryIndex) = nearestResult
 
+        // Determine if we're in bezier mode or polyline mode
+        val inBezierMode = primaryStroke.renderAsBezier && primaryStroke.bezierAnchorPoints.isNotEmpty()
 
-        // Get the primary point from UNSMOOTHED points (this is an anchor point)
-        val primaryPoint = primaryStroke.unsmoothedPoints[primaryIndex].point
+        if (inBezierMode) {
+            // Bezier mode: primaryIndex is an index into bezierAnchorPoints
+            val primaryAnchor = primaryStroke.bezierAnchorPoints[primaryIndex]
 
-        // Now find all co-located anchor points on other strokes
-        val highlightedStrokes = getHighlightedStrokes
+            // Save snapshot for undo
+            val snapshot = primaryStroke.unsmoothedPoints.map {
+                PathPoint(PointF(it.point.x, it.point.y), it.distance)
+            }.toMutableList()
 
-        highlightedStrokes.forEach { stroke ->
-            stroke.forEachStroke { s ->
-                if (!s.isGroup && s.polylineIndices.isNotEmpty()) {
-                    // Find the closest ANCHOR point on this stroke to the primary point
-                    var closestAnchorIdx = -1
-                    var closestDist = Float.MAX_VALUE
+            // For bezier anchors, we don't use weights - we move the anchor directly
+            // Create a weight list that's all zeros except at the anchor location
+            // (We'll handle bezier anchor movement differently in moveEditingPoint)
+            anchorPointsToEdit.add(
+                AnchorPointToEdit(
+                    stroke = primaryStroke,
+                    pointIndex = primaryIndex,  // This is bezierAnchorPoints index, not unsmoothedPoints index
+                    snapshotUnsmoothedPoints = snapshot,
+                    weights = emptyList()  // Empty weights signals this is a bezier anchor
+                )
+            )
+        } else {
+            // Polyline/normal mode: primaryIndex is an index into unsmoothedPoints
+            val primaryPoint = primaryStroke.unsmoothedPoints[primaryIndex].point
 
-                    s.polylineIndices.forEach { anchorIndex ->
-                        if (anchorIndex >= 0 && anchorIndex < s.unsmoothedPoints.size) {
-                            val anchorPoint = s.unsmoothedPoints[anchorIndex].point
-                            val d = distance(anchorPoint, primaryPoint)
-                            if (d < closestDist) {
-                                closestDist = d
-                                closestAnchorIdx = anchorIndex
+            // Now find all co-located anchor points on other strokes
+            val highlightedStrokes = getHighlightedStrokes
+
+            highlightedStrokes.forEach { stroke ->
+                stroke.forEachStroke { s ->
+                    if (!s.isGroup && s.polylineIndices.isNotEmpty()) {
+                        // Find the closest ANCHOR point on this stroke to the primary point
+                        var closestAnchorIdx = -1
+                        var closestDist = Float.MAX_VALUE
+
+                        s.polylineIndices.forEach { anchorIndex ->
+                            if (anchorIndex >= 0 && anchorIndex < s.unsmoothedPoints.size) {
+                                val anchorPoint = s.unsmoothedPoints[anchorIndex].point
+                                val d = distance(anchorPoint, primaryPoint)
+                                if (d < closestDist) {
+                                    closestDist = d
+                                    closestAnchorIdx = anchorIndex
+                                }
                             }
                         }
-                    }
 
-                    // Check if this anchor point is within the stroke width threshold
-                    if (closestAnchorIdx != -1 && closestDist < s.paint.strokeWidth) {
-                        // Save snapshot of unsmoothed points before editing
-                        val snapshot = s.unsmoothedPoints.map {
-                            PathPoint(PointF(it.point.x, it.point.y), it.distance)
-                        }.toMutableList()
+                        // Check if this anchor point is within the stroke width threshold
+                        if (closestAnchorIdx != -1 && closestDist < s.paint.strokeWidth) {
+                            // Save snapshot of unsmoothed points before editing
+                            val snapshot = s.unsmoothedPoints.map {
+                                PathPoint(PointF(it.point.x, it.point.y), it.distance)
+                            }.toMutableList()
 
-                        // Calculate weights for this anchor point
-                        val weights = calculateWeightsForAnchorPoint(s, closestAnchorIdx)
+                            // Calculate weights for this anchor point
+                            val weights = calculateWeightsForAnchorPoint(s, closestAnchorIdx)
 
-                        anchorPointsToEdit.add(
-                            AnchorPointToEdit(
-                                stroke = s,
-                                pointIndex = closestAnchorIdx,
-                                snapshotUnsmoothedPoints = snapshot,
-                                weights = weights
+                            anchorPointsToEdit.add(
+                                AnchorPointToEdit(
+                                    stroke = s,
+                                    pointIndex = closestAnchorIdx,
+                                    snapshotUnsmoothedPoints = snapshot,
+                                    weights = weights
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -884,28 +908,40 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun moveEditingPoint(dx: Float, dy: Float) {
-        // Move all co-located anchor points
+        // Move all anchor points (either bezier anchors or polyline anchors)
         anchorPointsToEdit.forEach { anchor ->
             anchor.stroke.isModified = true
 
-            // Apply weighted transformation to unsmoothedPoints
-            if (anchor.weights.size == anchor.stroke.unsmoothedPoints.size) {
-                anchor.stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
-                    pathPoint.point.offset(dx * anchor.weights[index], dy * anchor.weights[index])
+            // Check if this is a bezier anchor (empty weights list is the signal)
+            if (anchor.weights.isEmpty() && anchor.stroke.renderAsBezier) {
+                // Bezier mode: move the bezier anchor directly
+                if (anchor.pointIndex >= 0 && anchor.pointIndex < anchor.stroke.bezierAnchorPoints.size) {
+                    anchor.stroke.bezierAnchorPoints[anchor.pointIndex].offset(dx, dy)
+
+                    // Regenerate the curve from the modified bezier data
+                    anchor.stroke.regenerateBezierPoints()
+                    anchor.stroke.applySmoothing()
                 }
+            } else {
+                // Polyline mode: apply weighted transformation to unsmoothedPoints
+                if (anchor.weights.size == anchor.stroke.unsmoothedPoints.size) {
+                    anchor.stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
+                        pathPoint.point.offset(dx * anchor.weights[index], dy * anchor.weights[index])
+                    }
+                }
+
+                // Recalculate distances for unsmoothed points
+                val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
+                    anchor.stroke.unsmoothedPoints.map { it.point }
+                )
+                anchor.stroke.unsmoothedPoints.clear()
+                anchor.stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+                anchor.stroke.totalDistance = newTotalDistance
+
+                // Regenerate interpolated polyline points and apply smoothing
+                anchor.stroke.regenerateInterpolatedPolylinePoints()
+                anchor.stroke.applySmoothing()
             }
-
-            // Recalculate distances for unsmoothed points
-            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
-                anchor.stroke.unsmoothedPoints.map { it.point }
-            )
-            anchor.stroke.unsmoothedPoints.clear()
-            anchor.stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-            anchor.stroke.totalDistance = newTotalDistance
-
-            // Regenerate interpolated polyline points and apply smoothing
-            anchor.stroke.regenerateInterpolatedPolylinePoints()
-            anchor.stroke.applySmoothing()
         }
 
         invalidate()
@@ -1608,8 +1644,9 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun findClosestAnchorPointAcrossAllStrokes(tapPoint: PointF): Pair<Stroke, Int>? {
-        // Returns (stroke, pointIndex) of the closest ANCHOR point across all highlighted strokes
-        // Only searches through polylineIndices, not all unsmoothed points
+        // Returns (stroke, pointIndex/anchorIndex) of the closest ANCHOR point
+        // In bezier mode: searches bezierAnchorPoints (returns anchor index)
+        // In polyline/normal mode: searches polylineIndices (returns pointIndex in unsmoothedPoints)
         var closestStroke: Stroke? = null
         var closestPointIndex = -1
         var closestDist = Float.MAX_VALUE
@@ -1620,16 +1657,29 @@ class DrawingView @JvmOverloads constructor(
 
         highlightedStrokes.forEach { stroke ->
             stroke.forEachStroke { s ->
-                if (!s.isGroup && s.polylineIndices.isNotEmpty()) {
-                    // Only search through anchor points (polylineIndices)
-                    s.polylineIndices.forEach { anchorIndex ->
-                        if (anchorIndex >= 0 && anchorIndex < s.unsmoothedPoints.size) {
-                            val anchorPoint = s.unsmoothedPoints[anchorIndex].point
+                if (!s.isGroup) {
+                    // Check if in bezier mode
+                    if (s.renderAsBezier && s.bezierAnchorPoints.isNotEmpty()) {
+                        // Search through bezier anchor points directly
+                        s.bezierAnchorPoints.forEachIndexed { anchorIndex, anchorPoint ->
                             val d = distance(anchorPoint, tapPoint)
                             if (d < closestDist) {
                                 closestDist = d
-                                closestPointIndex = anchorIndex
+                                closestPointIndex = anchorIndex  // This is the index in bezierAnchorPoints
                                 closestStroke = s
+                            }
+                        }
+                    } else if (s.polylineIndices.isNotEmpty()) {
+                        // Search through polyline anchor points (indices into unsmoothedPoints)
+                        s.polylineIndices.forEach { anchorIndex ->
+                            if (anchorIndex >= 0 && anchorIndex < s.unsmoothedPoints.size) {
+                                val anchorPoint = s.unsmoothedPoints[anchorIndex].point
+                                val d = distance(anchorPoint, tapPoint)
+                                if (d < closestDist) {
+                                    closestDist = d
+                                    closestPointIndex = anchorIndex  // This is an index in unsmoothedPoints
+                                    closestStroke = s
+                                }
                             }
                         }
                     }
