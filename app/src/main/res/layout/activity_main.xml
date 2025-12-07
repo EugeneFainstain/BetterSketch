@@ -63,6 +63,19 @@
             android:visibility="gone"
             tools:visibility="visible" />
 
+        <Button
+            android:id="@+id/btnBezier"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="76dp"
+            android:layout_marginLeft="0dp"
+            android:text="Bezier!"
+            android:textSize="14sp"
+            android:backgroundTint="@android:color/holo_blue_light"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
         <ImageButton
             android:id="@+id/btnDel"
             android:layout_width="64dp"

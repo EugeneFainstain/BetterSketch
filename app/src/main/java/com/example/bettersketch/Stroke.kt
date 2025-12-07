@@ -25,6 +25,13 @@ class Stroke(
     val interpolatedPolylinePoints: MutableList<PathPoint> = mutableListOf() // Interpolated polyline points (same count as originalPoints)
     val polylineIndices: MutableList<Int> = mutableListOf() // Indices of the original points that correspond to the polyline vertices
     val distancesForWeights: MutableList<Float> = mutableListOf() // Distances along path at stroke finalization, used for weight calculation during editing
+
+    // Bezier curve data
+    val bezierAnchorPoints: MutableList<PointF> = mutableListOf()      // Optimal computed anchors
+    val bezierControlPoints: MutableList<PointF> = mutableListOf()     // Control points (2 per cubic segment)
+    val bezierAnchorIndices: MutableList<Int> = mutableListOf()        // Closest unsmoothedPoints indices to anchors
+    var renderAsBezier: Boolean = false                                 // Toggle for bezier rendering
+
     var totalDistance: Float = 0f
     var isModified: Boolean = false
     val childStrokes: MutableList<Stroke> = mutableListOf()
@@ -34,6 +41,96 @@ class Stroke(
     var analyticalShapeType: AnalyticalShapeType = AnalyticalShapeType.NONE // Type of analytical shape
     var renderAsPolyline: Boolean = false // Flag to indicate that the curve has been approximated by a polyline
     var needsToRegenerate: Boolean = false // Flag to regenerate unsmoothedPoints from analytical
+
+    fun hasBezierData(): Boolean {
+        return bezierAnchorPoints.isNotEmpty() && bezierControlPoints.isNotEmpty()
+    }
+
+    fun toggleBezierRepresentation() {
+        if (!hasBezierData()) {
+            // Cannot toggle if there's no bezier data
+            return
+        }
+
+        renderAsBezier = !renderAsBezier
+        isModified = true
+
+        // Regenerate points for drawing based on current mode
+        regenerateBezierPoints()
+        applySmoothing()
+    }
+
+    /**
+     * Regenerate pointsForDrawing from bezier curve data
+     */
+    fun regenerateBezierPoints() {
+        if (!hasBezierData() || !renderAsBezier) return
+
+        val pointCount = originalPoints.size
+        if (pointCount < 2) return
+
+        // Interpolate points along the bezier curve
+        val interpolatedPoints = interpolateAlongBezierCurve(pointCount)
+
+        // Update unsmoothed points with bezier-interpolated points
+        val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
+        unsmoothedPoints.clear()
+        unsmoothedPoints.addAll(pathPoints)
+        totalDistance = newTotalDistance
+    }
+
+    /**
+     * Interpolate points along the bezier curve
+     */
+    private fun interpolateAlongBezierCurve(targetPointCount: Int): List<PointF> {
+        if (bezierAnchorPoints.size < 2) return emptyList()
+
+        val numSegments = bezierAnchorPoints.size - 1
+        if (numSegments < 1 || bezierControlPoints.size < numSegments * 2) {
+            return emptyList()
+        }
+
+        val interpolatedPoints = mutableListOf<PointF>()
+        val pointsPerSegment = targetPointCount / numSegments
+
+        for (segIndex in 0 until numSegments) {
+            val p0 = bezierAnchorPoints[segIndex]
+            val p1 = bezierControlPoints[segIndex * 2]
+            val p2 = bezierControlPoints[segIndex * 2 + 1]
+            val p3 = bezierAnchorPoints[segIndex + 1]
+
+            val numPoints = if (segIndex == numSegments - 1) {
+                // Last segment gets remaining points
+                targetPointCount - interpolatedPoints.size
+            } else {
+                pointsPerSegment
+            }
+
+            for (i in 0 until numPoints) {
+                val t = i.toFloat() / (numPoints - 1).toFloat()
+                val point = evaluateCubicBezier(p0, p1, p2, p3, t)
+                interpolatedPoints.add(point)
+            }
+        }
+
+        return interpolatedPoints
+    }
+
+    /**
+     * Evaluate cubic bezier at parameter t
+     */
+    private fun evaluateCubicBezier(p0: PointF, p1: PointF, p2: PointF, p3: PointF, t: Float): PointF {
+        val t2 = t * t
+        val t3 = t2 * t
+        val mt = 1.0f - t
+        val mt2 = mt * mt
+        val mt3 = mt2 * mt
+
+        return PointF(
+            p0.x * mt3 + 3 * p1.x * mt2 * t + 3 * p2.x * mt * t2 + p3.x * t3,
+            p0.y * mt3 + 3 * p1.y * mt2 * t + 3 * p2.y * mt * t2 + p3.y * t3
+        )
+    }
 
 
     // Secondary constructor for creating a stroke from existing points (like the original constructor)
@@ -86,11 +183,16 @@ class Stroke(
         if (needsToRegenerate)
             regenerateUnsmoothedPointsFromAnalytical()
 
-        // Choose the source points based on whether we're in polyline mode
-        val sourcePoints = if (renderAsPolyline && interpolatedPolylinePoints.isNotEmpty()) {
-            interpolatedPolylinePoints
-        } else {
-            unsmoothedPoints
+        // Check if we need to regenerate from bezier curve
+        if (renderAsBezier && hasBezierData()) {
+            regenerateBezierPoints()
+        }
+
+        // Choose the source points based on mode
+        val sourcePoints = when {
+            renderAsBezier && hasBezierData() -> unsmoothedPoints
+            renderAsPolyline && interpolatedPolylinePoints.isNotEmpty() -> interpolatedPolylinePoints
+            else -> unsmoothedPoints
         }
 
         if (this.smoothness == 0) {
@@ -198,6 +300,7 @@ class Stroke(
         this.smoothness = other.smoothness
         this.analyticalShapeType = other.analyticalShapeType
         this.renderAsPolyline = other.renderAsPolyline
+        this.renderAsBezier = other.renderAsBezier
         this.pointsForDrawing.clear()
         this.pointsForDrawing.addAll(other.pointsForDrawing.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
@@ -215,6 +318,16 @@ class Stroke(
 
         this.distancesForWeights.clear()
         this.distancesForWeights.addAll(other.distancesForWeights)
+
+        // Copy bezier data
+        this.bezierAnchorPoints.clear()
+        this.bezierAnchorPoints.addAll(other.bezierAnchorPoints.map { PointF(it.x, it.y) })
+
+        this.bezierControlPoints.clear()
+        this.bezierControlPoints.addAll(other.bezierControlPoints.map { PointF(it.x, it.y) })
+
+        this.bezierAnchorIndices.clear()
+        this.bezierAnchorIndices.addAll(other.bezierAnchorIndices)
 
         this.totalDistance = other.totalDistance
 

@@ -21,6 +21,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnUnGroupStrokes: Button
     private lateinit var btnShape: Button
     private lateinit var btnPolyline: Button
+    private lateinit var btnBezier: Button
     private lateinit var btnDel: ImageButton
     private lateinit var btnSelection: ImageButton
     private lateinit var btnRemoveAnchorPoint: ImageButton
@@ -66,6 +67,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnUnGroupStrokes = findViewById(R.id.btnUnGroupStrokes)
         btnShape = findViewById(R.id.btnShape)
         btnPolyline = findViewById(R.id.btnPolyline)
+        btnBezier = findViewById(R.id.btnBezier)
         btnDel = findViewById(R.id.btnDel)
         btnSelection = findViewById(R.id.btnSelection)
         btnRemoveAnchorPoint = findViewById(R.id.btnRemoveAnchorPoint)
@@ -107,6 +109,10 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
 
         btnPolyline.setOnClickListener {
             drawingView.toggleCurrentStrokePolyline()
+        }
+
+        btnBezier.setOnClickListener {
+            drawingView.toggleCurrentStrokeBezier()
         }
 
         drawingView.post { updateUi() }
@@ -197,6 +203,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         }
 
         updateShowPolylineButton() // Handle polyline fit button
+        updateShowBezierButton() // Handle bezier fit button
     }
 
     private fun updateShowPolylineButton()  {
@@ -217,6 +224,28 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             btnPolyline.visibility = View.VISIBLE
         } else {
             btnPolyline.visibility = View.GONE
+        }
+    }
+
+    private fun updateShowBezierButton() {
+        val highlightedStrokeCount = drawingView.getHighlightedStrokeCount()
+        val isCurrentStrokeGroup = drawingView.isCurrentStrokeGroup()
+        val strokeHasBezierData = drawingView.currentStrokeHasBezierData()
+
+        if (highlightedStrokeCount <= 1 &&
+            !isCurrentStrokeGroup &&
+            strokeHasBezierData &&
+            drawingView.singleHighlightedStroke != null) {
+
+            val stroke = drawingView.singleHighlightedStroke
+            if (stroke?.renderAsBezier == true) {
+                btnBezier.text = "Restore"
+            } else {
+                btnBezier.text = "Bezier(${stroke?.bezierAnchorPoints?.size})"
+            }
+            btnBezier.visibility = View.VISIBLE
+        } else {
+            btnBezier.visibility = View.GONE
         }
     }
 
@@ -253,6 +282,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
 
         // Show polyline button if exactly 1 non-group stroke is highlighted and it has polyline data
         updateShowPolylineButton()
+        updateShowBezierButton()
 
         if (highlightedStrokeCount != 1) {
             btnShape.visibility = View.GONE

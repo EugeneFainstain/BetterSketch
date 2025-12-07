@@ -153,6 +153,10 @@ class DrawingView @JvmOverloads constructor(
         return highlightedAndModifiedStrokes.isNotEmpty()
     }
 
+    fun currentStrokeHasBezierData(): Boolean {
+        return singleHighlightedStroke?.hasBezierData() ?: false
+    }
+
     fun currentStrokeHasPolylineData(): Boolean {
         return singleHighlightedStroke?.polylineIndices?.isNotEmpty() ?: false
     }
@@ -462,6 +466,19 @@ class DrawingView @JvmOverloads constructor(
             s.interpolatedPolylinePoints.clear()
             s.interpolatedPolylinePoints.addAll(recalculatedInterpolatedPolylinePoints)
 
+            // Transform bezier data
+            s.bezierAnchorPoints.forEach { point ->
+                val p = floatArrayOf(point.x, point.y)
+                matrix.mapPoints(p)
+                point.set(p[0], p[1])
+            }
+
+            s.bezierControlPoints.forEach { point ->
+                val p = floatArrayOf(point.x, point.y)
+                matrix.mapPoints(p)
+                point.set(p[0], p[1])
+            }
+
             s.applySmoothing()
         }
     }
@@ -535,6 +552,22 @@ class DrawingView @JvmOverloads constructor(
 
         val strokeForFitting = stroke.generateUniformSampled(256)
 
+        // Fit bezier curve automatically (always runs)
+        val errorTolerance = stroke.paint.strokeWidth
+        val bezierFitResult = BezierFitter.fit(stroke, errorTolerance)
+
+        if (bezierFitResult != null) {
+            // Store bezier data in the original stroke
+            stroke.bezierAnchorPoints.clear()
+            stroke.bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
+
+            stroke.bezierControlPoints.clear()
+            stroke.bezierControlPoints.addAll(bezierFitResult.controlPoints)
+
+            stroke.bezierAnchorIndices.clear()
+            stroke.bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
+        }
+
         // Only compute polyline fit if the stroke doesn't already have polyline indices
         val polylineFitResult = if (stroke.polylineIndices.isEmpty()) {
             // Get the polyline fit - use the ORIGINAL stroke, not the uniformly sampled one
@@ -574,6 +607,13 @@ class DrawingView @JvmOverloads constructor(
     fun toggleCurrentStrokePolyline() {
         singleHighlightedStroke?.let {
             it.togglePolylineRepresentation()
+            setState(currentState) // Refresh UI and Canvas
+        }
+    }
+
+    fun toggleCurrentStrokeBezier() {
+        singleHighlightedStroke?.let {
+            it.toggleBezierRepresentation()
             setState(currentState) // Refresh UI and Canvas
         }
     }
@@ -749,9 +789,15 @@ class DrawingView @JvmOverloads constructor(
         // Reset analytical shape properties
         stroke.analyticalShapeType = AnalyticalShapeType.NONE
         stroke.renderAsPolyline = false
+        stroke.renderAsBezier = false
         stroke.needsToRegenerate = false
         stroke.polylineIndices.clear()
         stroke.shapeParameterPoints.clear()
+
+        // Clear bezier data
+        stroke.bezierAnchorPoints.clear()
+        stroke.bezierControlPoints.clear()
+        stroke.bezierAnchorIndices.clear()
 
         // Restore from originalPoints
         stroke.unsmoothedPoints.clear()
