@@ -91,9 +91,9 @@ class BezierFitter {
         ): List<BezierSegment> {
             if (points.size < 2) return emptyList()
             if (points.size == 2) {
-                // Single line segment
-                val p0 = points[0]
-                val p3 = points[1]
+                // Single line segment - CREATE COPIES!
+                val p0 = PointF(points[0].x, points[0].y)
+                val p3 = PointF(points[1].x, points[1].y)
                 val dist = distance(p0, p3) / 3.0f
                 val p1 = PointF(p0.x + dist, p0.y)
                 val p2 = PointF(p3.x - dist, p3.y)
@@ -118,10 +118,10 @@ class BezierFitter {
         ): List<BezierSegment> {
             if (points.size < 2) return emptyList()
 
-            // Use heuristic if region only has two points
+            // Use heuristic if region only has two points - CREATE COPIES!
             if (points.size == 2) {
-                val p0 = points[0]
-                val p3 = points[1]
+                val p0 = PointF(points[0].x, points[0].y)
+                val p3 = PointF(points[1].x, points[1].y)
                 val dist = distance(p0, p3) / 3.0f
                 val p1 = PointF(p0.x + tHat1.x * dist, p0.y + tHat1.y * dist)
                 val p2 = PointF(p3.x + tHat2.x * dist, p3.y + tHat2.y * dist)
@@ -176,8 +176,9 @@ class BezierFitter {
             tHat1: PointF,
             tHat2: PointF
         ): BezierSegment {
-            val p0 = points.first()
-            val p3 = points.last()
+            // Create COPIES of the first and last points, not references!
+            val p0 = PointF(points.first().x, points.first().y)
+            val p3 = PointF(points.last().x, points.last().y)
 
             // Compute the A's
             val A = Array(points.size) { i ->
