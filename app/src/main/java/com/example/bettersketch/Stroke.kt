@@ -181,6 +181,16 @@ class Stroke(
         }
     }
 
+    fun getAssociatedBezierAnchorPointsOnSmoothedCurve(): List<PointF> {
+        if (bezierAnchorIndices.isEmpty() || pointsForDrawing.isEmpty()) {
+            return emptyList()
+        }
+
+        return bezierAnchorIndices.mapNotNull { index ->
+            pointsForDrawing.getOrNull(index)?.point
+        }
+    }
+
     fun addPoint(newPoint: PointF) {
         val lastUnsmoothedPoint = unsmoothedPoints.lastOrNull()?.point
         val currentSegmentDistance = if (lastUnsmoothedPoint != null) {

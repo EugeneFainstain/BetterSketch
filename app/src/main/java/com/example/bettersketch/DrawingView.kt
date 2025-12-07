@@ -1045,6 +1045,28 @@ class DrawingView @JvmOverloads constructor(
                             }
                         }
 
+                        // Draw red squares for bezier anchor points
+                        if (stroke.bezierAnchorIndices.isNotEmpty()) {
+                            val bezierAnchorPoints = stroke.getAssociatedBezierAnchorPointsOnSmoothedCurve()
+                            val bezierPaint = Paint().apply {
+                                style = Paint.Style.FILL
+                                color = Color.RED
+                            }
+                            val size = haloPaintToUse.strokeWidth / 2f
+
+                            bezierAnchorPoints.forEach { point ->
+                                val transformedPoint = floatArrayOf(point.x, point.y)
+                                globalTransform.mapPoints(transformedPoint)
+
+                                // Draw a square centered at the anchor point
+                                val left = transformedPoint[0] - size
+                                val top = transformedPoint[1] - size
+                                val right = transformedPoint[0] + size
+                                val bottom = transformedPoint[1] + size
+                                canvas.drawRect(left, top, right, bottom, bezierPaint)
+                            }
+                        }
+
                         // Draw red circle for adding anchor point preview - check if THIS stroke matches
                         addAnchorPointHere?.let { location ->
                             if (addAnchorPointGestureInProgress &&
