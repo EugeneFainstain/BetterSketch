@@ -1665,53 +1665,44 @@ class DrawingView @JvmOverloads constructor(
         return PointF(x, y)
     }
 
-    override fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
+
+    override fun onTwoFingerDrag(event: MotionEvent, dx0: Float, dy0: Float, dx1: Float, dy1: Float, scale: Float, rotate: Float): Boolean {
 
         if( dragGestureHasEnded )
             return true
 
         val invertedGlobal = Matrix()
         globalTransform.invert(invertedGlobal)
-        val worldDelta = floatArrayOf(dx, dy)
-        invertedGlobal.mapVectors(worldDelta)
-        
+
         // Handle second finger for bezier control point editing
         // If second finger is editing a control point, handle it specially
         if (currentState == State.STROKE_EDITING && isSecondFingerEditing && secondFingerControlEdit != null) {
             if (event.pointerCount >= 2) {
-                // Calculate delta for the second finger (pointer index 1)
-                val prevX = event.getX(1) - dx
-                val prevY = event.getY(1) - dy
-                
-                // Transform to world coordinates
-                val prevWorld = toWorldCoordinates(prevX, prevY)
-                val currWorld = toWorldCoordinates(event.getX(1), event.getY(1))
-                
-                val secondFingerDx = currWorld.x - prevWorld.x
-                val secondFingerDy = currWorld.y - prevWorld.y
-                
+                // Transform per-finger deltas to world coordinates
+                val finger0Delta = floatArrayOf(dx0, dy0)
+                val finger1Delta = floatArrayOf(dx1, dy1)
+                invertedGlobal.mapVectors(finger0Delta)
+                invertedGlobal.mapVectors(finger1Delta)
+
+                // Move the first finger's anchor point
+                moveEditingPoint(finger0Delta[0], finger0Delta[1])
+
                 // Move the second finger's control point
-                moveSecondFingerControlPoint(secondFingerDx, secondFingerDy)
-                
-                // Also move the first finger's anchor point
-                // Calculate delta for the first finger (pointer index 0)
-                val firstPrevX = event.getX(0) - dx
-                val firstPrevY = event.getY(0) - dy
-                
-                val firstPrevWorld = toWorldCoordinates(firstPrevX, firstPrevY)
-                val firstCurrWorld = toWorldCoordinates(event.getX(0), event.getY(0))
-                
-                val firstFingerDx = firstCurrWorld.x - firstPrevWorld.x
-                val firstFingerDy = firstCurrWorld.y - firstPrevWorld.y
-                
-                moveEditingPoint(firstFingerDx, firstFingerDy)
-                
+                moveSecondFingerControlPoint(finger1Delta[0], finger1Delta[1])
+
                 redrawHistory()
                 return true  // Early return - don't do canvas transformation
             }
         }
-        
+
+        // Calculate midpoint deltas for normal two-finger gestures
+        val midDx = (dx0 + dx1) / 2f
+        val midDy = (dy0 + dy1) / 2f
+
         // Continue with normal two-finger processing (canvas transformation)
+        val worldDelta = floatArrayOf(midDx, midDy)
+        invertedGlobal.mapVectors(worldDelta)
+
         if( selectionGestureInProgress )
         {
             if (event.pointerCount >= 2) {

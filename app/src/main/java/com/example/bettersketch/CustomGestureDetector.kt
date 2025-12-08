@@ -19,12 +19,13 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
         fun onSomeFingerUp(event: MotionEvent): Boolean
         fun onLastRemainingFingerUp(event: MotionEvent): Boolean
         fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean
-        fun onTwoFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean
+        fun onTwoFingerDrag(event: MotionEvent, dx0: Float, dy0: Float, dx1: Float, dy1: Float, scale: Float, rotate: Float): Boolean
         fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean
     }
 
     var mainGestureHelper: ButtonAugmentedGestureHelper? = null
 
+    private var previousEvent: MotionEvent? = null   // Stores the previous event for delta calculations
     private var lastKnownGestureTag: Any? = null
     private val touchSlop: Int = ViewConfiguration.get(context).scaledTouchSlop
     private val doubleTapTimeout: Int = ViewConfiguration.getDoubleTapTimeout()
@@ -47,10 +48,12 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
     private var lastThreeFingerAvgDist = 0f
     private var lastThreeFingerAngle = 0f
 
-
     fun onTouchEvent(event: MotionEvent): Boolean {
         val pointerCount = event.pointerCount
         val action = event.actionMasked
+
+        if (previousEvent == null) // Needed only for the first event
+            previousEvent = MotionEvent.obtain(event) // create a copy
 
         val currentGestureTag = mainGestureHelper?.activeGestureTag
         val gestureTagChanged = currentGestureTag != lastKnownGestureTag
@@ -128,10 +131,14 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
 
                     val scale = if (lastMultiTouchDistance > 0) newDist / lastMultiTouchDistance else 1f
                     val rotate = newAngle - lastMultiTouchAngle
-                    val midDx = currentMidpoint.x - lastMultiTouchMidpoint.x
-                    val midDy = currentMidpoint.y - lastMultiTouchMidpoint.y
 
-                    listener.onTwoFingerDrag(event, midDx, midDy, scale, rotate)
+                    // Calculate per-finger deltas using stored event
+                    val dx0 = event.getX(0) - previousEvent!!.getX(0)
+                    val dy0 = event.getY(0) - previousEvent!!.getY(0)
+                    val dx1 = event.getX(1) - previousEvent!!.getX(1)
+                    val dy1 = event.getY(1) - previousEvent!!.getY(1)
+
+                    listener.onTwoFingerDrag(event, dx0, dy0, dx1, dy1, scale, rotate)
 
                     lastMultiTouchDistance = newDist
                     lastMultiTouchAngle = newAngle
@@ -210,6 +217,11 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 listener.onLastRemainingFingerUp(event)
             }
         }
+
+       // Update stored event
+        previousEvent?.recycle()
+        previousEvent = MotionEvent.obtain(event)
+
         return true
     }
 
