@@ -563,20 +563,22 @@ class DrawingView @JvmOverloads constructor(
 
         val strokeForFitting = stroke.generateUniformSampled(256)
 
-        // Fit bezier curve automatically (always runs)
-        val errorTolerance = stroke.paint.strokeWidth
-        val bezierFitResult = BezierFitter.fit(stroke, errorTolerance)
+        // Only fit bezier curve if the stroke doesn't already have bezier data
+        if (!stroke.hasBezierData()) {
+            val errorTolerance = stroke.paint.strokeWidth
+            val bezierFitResult = BezierFitter.fit(stroke, errorTolerance)
 
-        if (bezierFitResult != null) {
-            // Store bezier data in the original stroke
-            stroke.bezierAnchorPoints.clear()
-            stroke.bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
+            if (bezierFitResult != null) {
+                // Store bezier data in the original stroke
+                stroke.bezierAnchorPoints.clear()
+                stroke.bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
 
-            stroke.bezierControlPoints.clear()
-            stroke.bezierControlPoints.addAll(bezierFitResult.controlPoints)
+                stroke.bezierControlPoints.clear()
+                stroke.bezierControlPoints.addAll(bezierFitResult.controlPoints)
 
-            stroke.bezierAnchorIndices.clear()
-            stroke.bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
+                stroke.bezierAnchorIndices.clear()
+                stroke.bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
+            }
         }
 
         // Only compute polyline fit if the stroke doesn't already have polyline indices
