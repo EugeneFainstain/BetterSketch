@@ -918,7 +918,7 @@ class DrawingView @JvmOverloads constructor(
         return singleHighlightedStroke?.isGroup ?: false
     }
 
-    private fun moveEditingPoint(dx: Float, dy: Float, moveControlPoints: Boolean = true) {
+    private fun moveEditingPoint(dx: Float, dy: Float) {
         // Move all anchor points (either bezier anchors or polyline anchors)
         anchorPointsToEdit.forEach { anchor ->
             anchor.stroke.isModified = true
@@ -930,32 +930,29 @@ class DrawingView @JvmOverloads constructor(
                     // Move the anchor point itself
                     anchor.stroke.bezierAnchorPoints[anchor.pointIndex].offset(dx, dy)
 
-                    // Only move control points if moveControlPoints is true (single-finger mode)
-                    if (moveControlPoints) {
-                        // Move the control points associated with this anchor
-                        val numSegments = anchor.stroke.bezierAnchorPoints.size - 1
+                    // Move the control points associated with this anchor
+                    val numSegments = anchor.stroke.bezierAnchorPoints.size - 1
 
-                        // Each segment has 2 control points: control[segIndex * 2] and control[segIndex * 2 + 1]
-                        // Anchor[i] is the END of segment[i-1] and the START of segment[i]
+                    // Each segment has 2 control points: control[segIndex * 2] and control[segIndex * 2 + 1]
+                    // Anchor[i] is the END of segment[i-1] and the START of segment[i]
 
-                        // If this is NOT the first anchor, move the "incoming" control point
-                        // (the second control point of the previous segment)
-                        if (anchor.pointIndex > 0) {
-                            val prevSegmentIndex = anchor.pointIndex - 1
-                            val incomingControlIndex = prevSegmentIndex * 2 + 1
-                            if (incomingControlIndex >= 0 && incomingControlIndex < anchor.stroke.bezierControlPoints.size) {
-                                anchor.stroke.bezierControlPoints[incomingControlIndex].offset(dx, dy)
-                            }
+                    // If this is NOT the first anchor, move the "incoming" control point
+                    // (the second control point of the previous segment)
+                    if (anchor.pointIndex > 0) {
+                        val prevSegmentIndex = anchor.pointIndex - 1
+                        val incomingControlIndex = prevSegmentIndex * 2 + 1
+                        if (incomingControlIndex >= 0 && incomingControlIndex < anchor.stroke.bezierControlPoints.size) {
+                            anchor.stroke.bezierControlPoints[incomingControlIndex].offset(dx, dy)
                         }
+                    }
 
-                        // If this is NOT the last anchor, move the "outgoing" control point
-                        // (the first control point of the current segment)
-                        if (anchor.pointIndex < numSegments) {
-                            val currentSegmentIndex = anchor.pointIndex
-                            val outgoingControlIndex = currentSegmentIndex * 2
-                            if (outgoingControlIndex >= 0 && outgoingControlIndex < anchor.stroke.bezierControlPoints.size) {
-                                anchor.stroke.bezierControlPoints[outgoingControlIndex].offset(dx, dy)
-                            }
+                    // If this is NOT the last anchor, move the "outgoing" control point
+                    // (the first control point of the current segment)
+                    if (anchor.pointIndex < numSegments) {
+                        val currentSegmentIndex = anchor.pointIndex
+                        val outgoingControlIndex = currentSegmentIndex * 2
+                        if (outgoingControlIndex >= 0 && outgoingControlIndex < anchor.stroke.bezierControlPoints.size) {
+                            anchor.stroke.bezierControlPoints[outgoingControlIndex].offset(dx, dy)
                         }
                     }
 
@@ -1644,14 +1641,78 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun moveSecondFingerControlPoint(dx: Float, dy: Float) {
+
+    private fun moveBezierAnchorAndControlPoints(anchorDx: Float, anchorDy: Float, controlDx: Float, controlDy: Float) {
         val controlEdit = secondFingerControlEdit ?: return
+        val primaryAnchor = anchorPointsToEdit.firstOrNull() ?: return
 
         controlEdit.stroke.isModified = true
 
-        // Move only the selected control point
         if (controlEdit.controlIndex >= 0 && controlEdit.controlIndex < controlEdit.stroke.bezierControlPoints.size) {
-            controlEdit.stroke.bezierControlPoints[controlEdit.controlIndex].offset(dx, dy)
+            val numSegments = controlEdit.stroke.bezierAnchorPoints.size - 1
+            val editingAnchorIndex = primaryAnchor.pointIndex
+            val anchorPoint = controlEdit.stroke.bezierAnchorPoints[editingAnchorIndex]
+
+            // Determine which control point is the opposite one
+            var oppositeControlIndex = -1
+
+            // Check if the edited control is incoming (second control of previous segment)
+            if (editingAnchorIndex > 0) {
+                val incomingControlIndex = (editingAnchorIndex - 1) * 2 + 1
+                if (controlEdit.controlIndex == incomingControlIndex && editingAnchorIndex < numSegments) {
+                    // Editing incoming control, so opposite is outgoing
+                    oppositeControlIndex = editingAnchorIndex * 2
+                }
+            }
+
+            // Check if the edited control is outgoing (first control of current segment)
+            if (editingAnchorIndex < numSegments) {
+                val outgoingControlIndex = editingAnchorIndex * 2
+                if (controlEdit.controlIndex == outgoingControlIndex && editingAnchorIndex > 0) {
+                    // Editing outgoing control, so opposite is incoming
+                    oppositeControlIndex = (editingAnchorIndex - 1) * 2 + 1
+                }
+            }
+
+            // Get references to the control points
+            val primaryControl = controlEdit.stroke.bezierControlPoints[controlEdit.controlIndex]
+            val oppositeControl = if (oppositeControlIndex >= 0 && oppositeControlIndex < controlEdit.stroke.bezierControlPoints.size) {
+                controlEdit.stroke.bezierControlPoints[oppositeControlIndex]
+            } else null
+
+            // Store original distances from anchor before any movement
+            val originalPrimaryDistance = distance(anchorPoint, primaryControl)
+            val originalOppositeDistance = oppositeControl?.let { distance(anchorPoint, it) } ?: 0f
+
+            // Move the anchor point
+            anchorPoint.offset(anchorDx, anchorDy)
+
+            // Move the primary control point (the one being dragged)
+            primaryControl.offset(controlDx, controlDy)
+
+            // Calculate the new distance and direction from anchor to primary control
+            val newPrimaryDistance = distance(anchorPoint, primaryControl)
+            val primaryDirX = primaryControl.x - anchorPoint.x
+            val primaryDirY = primaryControl.y - anchorPoint.y
+
+            // Update the opposite control point to maintain collinearity
+            // The opposite control moves relative to the anchor, in opposite direction
+            if (oppositeControl != null && newPrimaryDistance > 0f) {
+                // Calculate how much the primary lever length changed
+                val leverLengthChange = newPrimaryDistance - originalPrimaryDistance
+
+                // The opposite lever should change by the same amount
+                val newOppositeDistance = originalOppositeDistance + leverLengthChange
+
+                if (newOppositeDistance > 0f) {
+                    // Normalize the primary direction and scale by new opposite distance
+                    val oppositeDirX = -(primaryDirX / newPrimaryDistance) * newOppositeDistance
+                    val oppositeDirY = -(primaryDirY / newPrimaryDistance) * newOppositeDistance
+
+                    // Set the opposite control point position relative to the (now moved) anchor
+                    oppositeControl.set(anchorPoint.x + oppositeDirX, anchorPoint.y + oppositeDirY)
+                }
+            }
 
             // Regenerate the curve from the modified bezier data
             controlEdit.stroke.regenerateBezierPoints()
@@ -1687,11 +1748,9 @@ class DrawingView @JvmOverloads constructor(
                 invertedGlobal.mapVectors(finger0Delta)
                 invertedGlobal.mapVectors(finger1Delta)
 
-                // Move the first finger's anchor point
-                moveEditingPoint(finger0Delta[0], finger0Delta[1], moveControlPoints = false)
-
-                // Move the second finger's control point
-                moveSecondFingerControlPoint(finger1Delta[0], finger1Delta[1])
+                // Move anchor (finger 0) and control point (finger 1) together
+                // This also handles the opposite control point automatically
+                moveBezierAnchorAndControlPoints(finger0Delta[0],finger0Delta[1],finger1Delta[0],finger1Delta[1])
 
                 redrawHistory()
                 return true  // Early return - don't do canvas transformation
