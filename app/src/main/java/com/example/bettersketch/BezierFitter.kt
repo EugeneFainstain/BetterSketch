@@ -383,20 +383,15 @@ class BezierFitter {
             }
         }
 
+        private fun distance(p1: PointF, p2: PointF): Float = GeometryUtils.distance(p1, p2)
+            
+        private fun distanceSquared(p1: PointF, p2: PointF): Float = GeometryUtils.distanceSquared(p1, p2)
+
         /**
          * Evaluate Bezier curve at parameter t
          */
         private fun evaluateBezier(bezier: BezierSegment, t: Float): PointF {
-            val t2 = t * t
-            val t3 = t2 * t
-            val mt = 1.0f - t
-            val mt2 = mt * mt
-            val mt3 = mt2 * mt
-
-            return PointF(
-                bezier.p0.x * mt3 + 3 * bezier.p1.x * mt2 * t + 3 * bezier.p2.x * mt * t2 + bezier.p3.x * t3,
-                bezier.p0.y * mt3 + 3 * bezier.p1.y * mt2 * t + 3 * bezier.p2.y * mt * t2 + bezier.p3.y * t3
-            )
+            return GeometryUtils.evaluateCubicBezier(bezier.p0, bezier.p1, bezier.p2, bezier.p3, t)
         }
 
         /**
@@ -483,18 +478,6 @@ class BezierFitter {
         }
 
         // Vector math utilities
-        private fun distance(p1: PointF, p2: PointF): Float {
-            val dx = p2.x - p1.x
-            val dy = p2.y - p1.y
-            return sqrt(dx * dx + dy * dy)
-        }
-
-        private fun distanceSquared(p1: PointF, p2: PointF): Float {
-            val dx = p2.x - p1.x
-            val dy = p2.y - p1.y
-            return dx * dx + dy * dy
-        }
-
         private fun add(p1: PointF, p2: PointF) = PointF(p1.x + p2.x, p1.y + p2.y)
 
         private fun subtract(p1: PointF, p2: PointF) = PointF(p1.x - p2.x, p1.y - p2.y)

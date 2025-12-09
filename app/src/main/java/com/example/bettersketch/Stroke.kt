@@ -206,18 +206,8 @@ class Stroke(
      * Evaluate cubic bezier at parameter t
      */
     private fun evaluateCubicBezier(p0: PointF, p1: PointF, p2: PointF, p3: PointF, t: Float): PointF {
-        val t2 = t * t
-        val t3 = t2 * t
-        val mt = 1.0f - t
-        val mt2 = mt * mt
-        val mt3 = mt2 * mt
-
-        return PointF(
-            p0.x * mt3 + 3 * p1.x * mt2 * t + 3 * p2.x * mt * t2 + p3.x * t3,
-            p0.y * mt3 + 3 * p1.y * mt2 * t + 3 * p2.y * mt * t2 + p3.y * t3
-        )
+        return GeometryUtils.evaluateCubicBezier(p0, p1, p2, p3, t)
     }
-
 
     // Secondary constructor for creating a stroke from existing points (like the original constructor)
     constructor(incomingPoints: List<PathPoint>, paint: Paint, totalDistance: Float, smoothness: Int) : this(paint, smoothness) {

@@ -61,4 +61,32 @@ object GeometryUtils {
         val dy = p2.y - p1.y
         return dx * dx + dy * dy
     }
+
+    /**
+     * Calculate the dot product of two 2D vectors (represented as PointF)
+     */
+    fun dot(p1: PointF, p2: PointF): Float = p1.x * p2.x + p1.y * p2.y
+
+    /**
+     * Add two points (vector addition)
+     */
+    fun add(p1: PointF, p2: PointF): PointF = PointF(p1.x + p2.x, p1.y + p2.y)
+
+    /**
+     * Subtract two points (vector subtraction)
+     */
+    fun subtract(p1: PointF, p2: PointF): PointF = PointF(p1.x - p2.x, p1.y - p2.y)
+
+    /**
+     * Scale a point by a scalar value
+     */
+    fun scale(p: PointF, s: Float): PointF = PointF(p.x * s, p.y * s)
+
+    /**
+     * Normalize a vector to unit length
+     */
+    fun normalize(p: PointF): PointF {
+        val len = sqrt(p.x * p.x + p.y * p.y)
+        return if (len > 1e-6f) PointF(p.x / len, p.y / len) else PointF(0f, 0f)
+    }
 }

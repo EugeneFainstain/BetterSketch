@@ -225,11 +225,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
         return true
     }
 
-    private fun distance(p1: PointF, p2: PointF): Float {
-        val dx = p1.x - p2.x
-        val dy = p1.y - p2.y
-        return sqrt(dx * dx + dy * dy)
-    }
+    private fun distance(p1: PointF, p2: PointF): Float = GeometryUtils.distance(p1, p2)
 
     private fun distance(event: MotionEvent): Float {
         val dx = event.getX(0) - event.getX(1)

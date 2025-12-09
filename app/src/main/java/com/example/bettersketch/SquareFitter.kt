@@ -366,9 +366,5 @@ object SquareFitter {
         return stroke
     }
 
-    private fun distance(p1: PointF, p2: PointF): Float {
-        val dx = p1.x - p2.x
-        val dy = p1.y - p2.y
-        return sqrt(dx * dx + dy * dy)
-    }
+    private fun distance(p1: PointF, p2: PointF): Float = GeometryUtils.distance(p1, p2)
 }
