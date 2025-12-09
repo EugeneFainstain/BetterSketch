@@ -93,9 +93,7 @@ class DrawingView @JvmOverloads constructor(
     data class ControlPointToEdit(
         val stroke: Stroke,
         val controlIndex: Int,      // Index into bezierAnchorPoints (and for both control arrays)
-        val isOutgoing: Boolean,     // true for controlPoints1 (outgoing), false for controlPoints2 (incoming)
-        val snapshotControlPoints1: MutableList<PointF>,
-        val snapshotControlPoints2: MutableList<PointF>
+        val arrayIdx: Int           // 1 for controlPoints1, 2 for controlPoints2
     )
 
     private data class AnchorPointLocation(
@@ -1597,7 +1595,7 @@ class DrawingView @JvmOverloads constructor(
         // Find the closest control point to the tap point
         var closestDist = Float.MAX_VALUE
         var closestIndex = -1
-        var closestIsOutgoing = true
+        var closestArrayIdx = 1
 
         // Check outgoing control point (controlPoints1)
         if (editingAnchorIndex < primaryStroke.bezierControlPoints1.size) {
@@ -1606,7 +1604,7 @@ class DrawingView @JvmOverloads constructor(
             if (d < closestDist) {
                 closestDist = d
                 closestIndex = editingAnchorIndex
-                closestIsOutgoing = true
+                closestArrayIdx = 1
             }
         }
 
@@ -1617,21 +1615,15 @@ class DrawingView @JvmOverloads constructor(
             if (d < closestDist) {
                 closestDist = d
                 closestIndex = editingAnchorIndex
-                closestIsOutgoing = false
+                closestArrayIdx = 2
             }
         }
 
         if (closestIndex != -1) {
-            // Save snapshot for undo
-            val snapshot1 = primaryStroke.bezierControlPoints1.map { PointF(it.x, it.y) }.toMutableList()
-            val snapshot2 = primaryStroke.bezierControlPoints2.map { PointF(it.x, it.y) }.toMutableList()
-
             secondFingerControlEdit = ControlPointToEdit(
                 stroke = primaryStroke,
                 controlIndex = closestIndex,
-                isOutgoing = closestIsOutgoing,
-                snapshotControlPoints1 = snapshot1,
-                snapshotControlPoints2 = snapshot2
+                arrayIdx = closestArrayIdx
             )
             isSecondFingerEditing = true
             invalidate()
@@ -1647,14 +1639,14 @@ class DrawingView @JvmOverloads constructor(
         val editingAnchorIndex = primaryAnchor.pointIndex
         val anchorPoint = controlEdit.stroke.bezierAnchorPoints[editingAnchorIndex]
 
-        // Get references to the control points
-        val primaryControl = if (controlEdit.isOutgoing) {
+        // Get references to the control points based on arrayIdx
+        val primaryControl = if (controlEdit.arrayIdx == 1) {
             controlEdit.stroke.bezierControlPoints1[controlEdit.controlIndex]
         } else {
             controlEdit.stroke.bezierControlPoints2[controlEdit.controlIndex]
         }
 
-        val oppositeControl = if (controlEdit.isOutgoing) {
+        val oppositeControl = if (controlEdit.arrayIdx == 1) {
             controlEdit.stroke.bezierControlPoints2.getOrNull(controlEdit.controlIndex)
         } else {
             controlEdit.stroke.bezierControlPoints1.getOrNull(controlEdit.controlIndex)
@@ -1676,7 +1668,6 @@ class DrawingView @JvmOverloads constructor(
         val primaryDirY = primaryControl.y - anchorPoint.y
 
         // Update the opposite control point to maintain collinearity
-        // The opposite control moves relative to the anchor, in opposite direction
         if (oppositeControl != null && newPrimaryDistance > 0f) {
             // Calculate how much the primary lever length changed
             val leverLengthChange = newPrimaryDistance - originalPrimaryDistance
