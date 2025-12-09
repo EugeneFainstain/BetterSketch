@@ -223,6 +223,153 @@ class DrawingView @JvmOverloads constructor(
         if (stroke.isGroup) return
         if (index == -1) return
 
+        // Check if we're in bezier mode
+        if (stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()) {
+            // Bezier mode: add a new bezier anchor
+            addBezierAnchorPoint(stroke, index)
+        } else {
+            // Polyline mode: add a polyline anchor
+            addPolylineAnchorPoint(stroke, index)
+        }
+    }
+
+    private fun addBezierAnchorPoint(stroke: Stroke, pointIndex: Int) {
+        // pointIndex is an index into pointsForDrawing (the smoothed/regenerated curve)
+        // We need to find which bezier segment this point falls on
+
+        if (stroke.bezierAnchorPoints.size < 2 || pointIndex >= stroke.pointsForDrawing.size) return
+
+        // Calculate the distance along the curve at pointIndex
+        val targetDistance = stroke.pointsForDrawing[pointIndex].distance
+        val totalDistance = stroke.totalDistance
+
+        if (totalDistance <= 0f) return
+
+        // Find which segment this distance falls into
+        val numSegments = stroke.bezierAnchorPoints.size - 1
+        val segmentLengths = mutableListOf<Float>()
+        var totalSegmentLength = 0f
+
+        // Estimate arc length for each segment
+        for (i in 0 until numSegments) {
+            val p0 = stroke.bezierAnchorPoints[i]
+            val p1 = stroke.bezierControlPoints1[i]
+            val p2 = stroke.bezierControlPoints2[i + 1]
+            val p3 = stroke.bezierAnchorPoints[i + 1]
+
+            // Estimate arc length by sampling
+            val samples = 20
+            var length = 0f
+            var prevPoint = p0
+
+            for (j in 1..samples) {
+                val t = j.toFloat() / samples
+                val point = evaluateCubicBezier(p0, p1, p2, p3, t)
+                val dx = point.x - prevPoint.x
+                val dy = point.y - prevPoint.y
+                length += sqrt(dx * dx + dy * dy)
+                prevPoint = point
+            }
+
+            segmentLengths.add(length)
+            totalSegmentLength += length
+        }
+
+        if (totalSegmentLength <= 0f) return
+
+        // Find which segment contains the target distance
+        val targetRatio = targetDistance / totalDistance
+        var accumulatedLength = 0f
+        var segmentIndex = -1
+        var segmentStartRatio = 0f
+
+        for (i in segmentLengths.indices) {
+            val segmentRatio = segmentLengths[i] / totalSegmentLength
+            val segmentEndRatio = accumulatedLength / totalSegmentLength + segmentRatio
+
+            if (targetRatio >= accumulatedLength / totalSegmentLength && targetRatio <= segmentEndRatio) {
+                segmentIndex = i
+                segmentStartRatio = accumulatedLength / totalSegmentLength
+                break
+            }
+            accumulatedLength += segmentLengths[i]
+        }
+
+        // If we couldn't find a segment, use the closest one
+        if (segmentIndex == -1) {
+            segmentIndex = ((targetRatio * numSegments).toInt()).coerceIn(0, numSegments - 1)
+            segmentStartRatio = segmentLengths.take(segmentIndex).sum() / totalSegmentLength
+        }
+
+        // Get the bezier segment to split
+        val p0 = stroke.bezierAnchorPoints[segmentIndex]
+        val p1 = stroke.bezierControlPoints1[segmentIndex]
+        val p2 = stroke.bezierControlPoints2[segmentIndex + 1]
+        val p3 = stroke.bezierAnchorPoints[segmentIndex + 1]
+
+        // Calculate t parameter within the segment
+        val segmentRatio = segmentLengths[segmentIndex] / totalSegmentLength
+        val t = if (segmentRatio > 0f) {
+            ((targetRatio - segmentStartRatio) / segmentRatio).coerceIn(0f, 1f)
+        } else {
+            0.5f
+        }
+
+        // Split the bezier curve at parameter t using De Casteljau's algorithm
+        val p01 = lerp(p0, p1, t)
+        val p12 = lerp(p1, p2, t)
+        val p23 = lerp(p2, p3, t)
+
+        val p012 = lerp(p01, p12, t)
+        val p123 = lerp(p12, p23, t)
+
+        val newAnchor = lerp(p012, p123, t)
+
+        // Insert the new anchor at segmentIndex + 1
+        stroke.bezierAnchorPoints.add(segmentIndex + 1, PointF(newAnchor.x, newAnchor.y))
+
+        // For bezierAnchorIndices, estimate where this would be in the original points
+        val newIndex = (pointIndex * stroke.originalPoints.size / stroke.pointsForDrawing.size.toFloat()).toInt()
+        stroke.bezierAnchorIndices.add(segmentIndex + 1, newIndex)
+
+        // Update control points - add the new ones
+        stroke.bezierControlPoints1.add(segmentIndex + 1, PointF(p123.x, p123.y))
+        stroke.bezierControlPoints2.add(segmentIndex + 1, PointF(p012.x, p012.y))
+
+        // Update the control points of the adjacent segments
+        stroke.bezierControlPoints1[segmentIndex] = PointF(p01.x, p01.y)
+        stroke.bezierControlPoints2[segmentIndex + 2] = PointF(p23.x, p23.y)
+
+        stroke.isModified = true
+
+        // Regenerate the curve from the modified bezier data
+        stroke.regenerateBezierCurve()
+        stroke.applySmoothing()
+    }
+
+    // Helper function to evaluate cubic bezier
+    private fun evaluateCubicBezier(p0: PointF, p1: PointF, p2: PointF, p3: PointF, t: Float): PointF {
+        val t2 = t * t
+        val t3 = t2 * t
+        val mt = 1.0f - t
+        val mt2 = mt * mt
+        val mt3 = mt2 * mt
+
+        return PointF(
+            p0.x * mt3 + 3 * p1.x * mt2 * t + 3 * p2.x * mt * t2 + p3.x * t3,
+            p0.y * mt3 + 3 * p1.y * mt2 * t + 3 * p2.y * mt * t2 + p3.y * t3
+        )
+    }
+
+    // Helper function for linear interpolation
+    private fun lerp(p1: PointF, p2: PointF, t: Float): PointF {
+        return PointF(
+            p1.x + (p2.x - p1.x) * t,
+            p1.y + (p2.y - p1.y) * t
+        )
+    }
+
+    private fun addPolylineAnchorPoint(stroke: Stroke, index: Int) {
         // Initialize polylineIndices if empty (first anchor being added)
         if (stroke.polylineIndices.isEmpty()) {
             // Add first and last points as anchors
@@ -1388,7 +1535,7 @@ class DrawingView @JvmOverloads constructor(
         
         // Calculate time difference between first and second finger
         val timeBetweenFingers = System.currentTimeMillis() - firstFingerDownTime
-        val simultaneousThreshold = 150L // milliseconds - tune this value as needed
+        val simultaneousThreshold = 100L // milliseconds - tune this value as needed
         
         // Determine if this should be a control point edit gesture:
         // 1. Must be in stroke editing mode
