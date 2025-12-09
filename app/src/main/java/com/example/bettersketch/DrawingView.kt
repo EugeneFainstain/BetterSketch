@@ -7,6 +7,7 @@ import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.graphics.createBitmap
+import com.example.bettersketch.GeometryUtils.distance
 import kotlin.math.*
 
 interface DrawingViewListener {
@@ -265,9 +266,7 @@ class DrawingView @JvmOverloads constructor(
             for (j in 1..samples) {
                 val t = j.toFloat() / samples
                 val point = GeometryUtils.evaluateCubicBezier(p0, p1, p2, p3, t)
-                val dx = point.x - prevPoint.x
-                val dy = point.y - prevPoint.y
-                length += sqrt(dx * dx + dy * dy)
+                length += distance(point, prevPoint)
                 prevPoint = point
             }
 
@@ -391,20 +390,9 @@ class DrawingView @JvmOverloads constructor(
                 // Don't allow removing if it would leave fewer than 2 anchors
                 if (stroke.bezierAnchorPoints.size <= 2) return@forEach
 
-                // Remove the anchor and its associated control points
+                // Remove the anchor and refit the adjacent control points
                 if (anchorIndex >= 0 && anchorIndex < stroke.bezierAnchorPoints.size) {
-                    stroke.bezierAnchorPoints.removeAt(anchorIndex)
-
-                    if (anchorIndex < stroke.bezierControlPoints1.size) {
-                        stroke.bezierControlPoints1.removeAt(anchorIndex)
-                    }
-                    if (anchorIndex < stroke.bezierControlPoints2.size) {
-                        stroke.bezierControlPoints2.removeAt(anchorIndex)
-                    }
-                    if (anchorIndex < stroke.bezierAnchorIndices.size) {
-                        stroke.bezierAnchorIndices.removeAt(anchorIndex)
-                    }
-
+                    removeBezierAnchorWithRefit(stroke, anchorIndex)
                     stroke.isModified = true
 
                     // Regenerate the curve from the modified bezier data
@@ -454,9 +442,76 @@ class DrawingView @JvmOverloads constructor(
         setState(currentState) // Refresh UI and Canvas
     }
 
-    fun exitEditingMode() {
-        deselectAndDeHighlight()
-        setState(State.NORMAL_DRAWING)
+    /**
+     * Remove a Bezier anchor and refit the adjacent control points.
+     * For anchors that were added via De Casteljau splitting, this will give perfect reconstruction.
+     * For arbitrary anchors, it uses a simple averaging heuristic.
+     */
+    private fun removeBezierAnchorWithRefit(stroke: Stroke, anchorIndex: Int) {
+        // Edge cases: can't remove first or last anchor point
+        if (anchorIndex == 0 || anchorIndex >= stroke.bezierAnchorPoints.size - 1) {
+            // Just remove the data structures without refitting
+            stroke.bezierAnchorPoints.removeAt(anchorIndex)
+            if (anchorIndex < stroke.bezierControlPoints1.size) {
+                stroke.bezierControlPoints1.removeAt(anchorIndex)
+            }
+            if (anchorIndex < stroke.bezierControlPoints2.size) {
+                stroke.bezierControlPoints2.removeAt(anchorIndex)
+            }
+            if (anchorIndex < stroke.bezierAnchorIndices.size) {
+                stroke.bezierAnchorIndices.removeAt(anchorIndex)
+            }
+            return
+        }
+
+        // Get the two segments we're merging
+        val p0 = stroke.bezierAnchorPoints[anchorIndex - 1]
+        val c1_left = stroke.bezierControlPoints1[anchorIndex - 1]
+        val c2_mid = stroke.bezierControlPoints2[anchorIndex]
+        val p_mid = stroke.bezierAnchorPoints[anchorIndex]
+        val c1_mid = stroke.bezierControlPoints1[anchorIndex]
+        val c2_right = stroke.bezierControlPoints2[anchorIndex + 1]
+        val p3 = stroke.bezierAnchorPoints[anchorIndex + 1]
+
+        // Try to estimate the parameter 't' at which this point was split
+        // Use the ratio of distances as an approximation
+        val dist_left = GeometryUtils.distance(p0, p_mid)
+        val dist_right = GeometryUtils.distance(p_mid, p3)
+        val total_dist = dist_left + dist_right
+        val t_estimate = if (total_dist > 0f) dist_left / total_dist else 0.5f
+
+        val t = t_estimate.coerceIn(0.1f, 0.9f) // Avoid division by zero at extremes
+        val mt = 1.0f - t
+
+        // Reverse the De Casteljau split operation
+        val p1_recovered = if (t > 0.01f) {
+            PointF(
+                (c1_left.x - mt * p0.x) / t,
+                (c1_left.y - mt * p0.y) / t
+            )
+        } else {
+            PointF(c1_left.x, c1_left.y)
+        }
+
+        val p2_recovered = if (mt > 0.01f) {
+            PointF(
+                (c2_right.x - t * p3.x) / mt,
+                (c2_right.y - t * p3.y) / mt
+            )
+        } else {
+            PointF(c2_right.x, c2_right.y)
+        }
+
+        // IMPORTANT: Update control points BEFORE removing anything
+        // After removal, indices will shift!
+        stroke.bezierControlPoints1[anchorIndex - 1] = p1_recovered
+        stroke.bezierControlPoints2[anchorIndex + 1] = p2_recovered
+
+        // NOW remove the anchor and its associated control points
+        stroke.bezierAnchorPoints.removeAt(anchorIndex)
+        stroke.bezierAnchorIndices.removeAt(anchorIndex)
+        stroke.bezierControlPoints1.removeAt(anchorIndex)
+        stroke.bezierControlPoints2.removeAt(anchorIndex)
     }
 
     fun undoModificationsForHighlightedStrokes() {
@@ -796,8 +851,6 @@ class DrawingView @JvmOverloads constructor(
             setState(currentState) // Refresh UI and Canvas
         }
     }
-
-    private fun distance(p1: PointF, p2: PointF): Float = GeometryUtils.distance(p1, p2)
 
     private fun setStrokeHighlighted(stroke: Stroke?) {
         stroke?.setHighlightedRecursively(true)

@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.PointF
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import com.example.bettersketch.GeometryUtils.distance
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.sqrt
@@ -169,10 +170,10 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                         val idx0 = remainingIndices[0]
                         val idx1 = remainingIndices[1]
 
-                        val dx = event.getX(idx0) - event.getX(idx1)
-                        val dy = event.getY(idx0) - event.getY(idx1)
-                        lastMultiTouchDistance = sqrt(dx * dx + dy * dy)
-                        lastMultiTouchAngle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble()).toDouble()).toFloat()
+                        val p0 = PointF(event.getX(idx0), event.getY(idx0))
+                        val p1 = PointF(event.getX(idx1), event.getY(idx1))
+                        lastMultiTouchDistance = distance(p0, p1)
+                        lastMultiTouchAngle = Math.toDegrees(atan2((p0.y - p1.y).toDouble(), (p0.x - p1.x).toDouble()).toDouble()).toFloat()
                         lastMultiTouchMidpoint.x = (event.getX(idx0) + event.getX(idx1)) / 2f
                         lastMultiTouchMidpoint.y = (event.getY(idx0) + event.getY(idx1)) / 2f
                     }
@@ -225,12 +226,11 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
         return true
     }
 
-    private fun distance(p1: PointF, p2: PointF): Float = GeometryUtils.distance(p1, p2)
-
     private fun distance(event: MotionEvent): Float {
-        val dx = event.getX(0) - event.getX(1)
-        val dy = event.getY(0) - event.getY(1)
-        return sqrt(dx * dx + dy * dy)
+        if (event.pointerCount < 2) return 0f
+        val p0 = PointF(event.getX(0), event.getY(0))
+        val p1 = PointF(event.getX(1), event.getY(1))
+        return distance(p0, p1)
     }
 
     private fun angle(event: MotionEvent): Float {

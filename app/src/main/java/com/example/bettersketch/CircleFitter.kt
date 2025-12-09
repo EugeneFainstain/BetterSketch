@@ -2,6 +2,7 @@ package com.example.bettersketch
 
 import android.graphics.Paint
 import android.graphics.PointF
+import com.example.bettersketch.GeometryUtils.distance
 import kotlin.math.*
 
 object CircleFitter {
@@ -38,12 +39,11 @@ object CircleFitter {
 
         val centerX = (minX + maxX) / 2f
         val centerY = (minY + maxY) / 2f
+        val center = PointF(centerX, centerY)
 
         var sumDistance = 0f
         for (point in points) {
-            val dx = point.x - centerX
-            val dy = point.y - centerY
-            sumDistance += sqrt(dx * dx + dy * dy)
+            sumDistance += distance(point, center)
         }
         val radius = sumDistance / points.size
 
@@ -55,9 +55,7 @@ object CircleFitter {
 
         var maxDeviation = 0f
         for (point in points) {
-            val dx = point.x - centerX
-            val dy = point.y - centerY
-            val distanceFromCenter = sqrt(dx * dx + dy * dy)
+            val distanceFromCenter = distance(point, center)
             val deviation = abs(distanceFromCenter - radius)
             maxDeviation = max(maxDeviation, deviation)
         }

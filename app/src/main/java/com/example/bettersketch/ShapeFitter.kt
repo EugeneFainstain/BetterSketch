@@ -1,6 +1,7 @@
 package com.example.bettersketch
 
 import android.graphics.PointF
+import com.example.bettersketch.GeometryUtils.distance
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -62,7 +63,7 @@ class ShapeFitter {
             // Otherwise, compute the best shape fit (Square, Circle, or Polynomial ONLY)
             val startPoint = strokeForFitting.pointsForDrawing.first().point
             val endPoint = strokeForFitting.pointsForDrawing.last().point
-            val distance = sqrt((startPoint.x - endPoint.x).pow(2) + (startPoint.y - endPoint.y).pow(2))
+            val dist = distance(startPoint, endPoint)
 
             val bounds = strokeForFitting.getBounds()
             val maxDimension = max(bounds.width(), bounds.height())
@@ -72,7 +73,7 @@ class ShapeFitter {
             // Optimization: if the stroke is not a closed loop, don't try to fit a closed-loop shape.
             // We determine this by checking if the distance between the start and end points
             // is greater than 20% of the largest dimension of the stroke's bounding box.
-            if (distance > maxDimension * 0.2f) {
+            if (dist > maxDimension * 0.2f) {
                 // Open stroke: Try polynomial fits only
                 var bestPolyFit: ShapeFitResult.Polynomial? = null
                 var minError = Float.MAX_VALUE
