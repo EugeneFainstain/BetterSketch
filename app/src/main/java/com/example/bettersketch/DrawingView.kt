@@ -89,11 +89,13 @@ class DrawingView @JvmOverloads constructor(
         val snapshotUnsmoothedPoints: MutableList<PathPoint>,
         val weights: List<Float>
     )
-    
+
     data class ControlPointToEdit(
         val stroke: Stroke,
-        val controlIndex: Int,  // Index into bezierControlPoints
-        val snapshotControlPoints: MutableList<PointF>
+        val controlIndex: Int,      // Index into bezierAnchorPoints (and for both control arrays)
+        val isOutgoing: Boolean,     // true for controlPoints1 (outgoing), false for controlPoints2 (incoming)
+        val snapshotControlPoints1: MutableList<PointF>,
+        val snapshotControlPoints2: MutableList<PointF>
     )
 
     private data class AnchorPointLocation(
@@ -484,7 +486,13 @@ class DrawingView @JvmOverloads constructor(
                 point.set(p[0], p[1])
             }
 
-            s.bezierControlPoints.forEach { point ->
+            s.bezierControlPoints1.forEach { point ->
+                val p = floatArrayOf(point.x, point.y)
+                matrix.mapPoints(p)
+                point.set(p[0], p[1])
+            }
+
+            s.bezierControlPoints2.forEach { point ->
                 val p = floatArrayOf(point.x, point.y)
                 matrix.mapPoints(p)
                 point.set(p[0], p[1])
@@ -573,8 +581,11 @@ class DrawingView @JvmOverloads constructor(
                 stroke.bezierAnchorPoints.clear()
                 stroke.bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
 
-                stroke.bezierControlPoints.clear()
-                stroke.bezierControlPoints.addAll(bezierFitResult.controlPoints)
+                stroke.bezierControlPoints1.clear()
+                stroke.bezierControlPoints1.addAll(bezierFitResult.controlPoints1)
+
+                stroke.bezierControlPoints2.clear()
+                stroke.bezierControlPoints2.addAll(bezierFitResult.controlPoints2)
 
                 stroke.bezierAnchorIndices.clear()
                 stroke.bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
@@ -833,7 +844,8 @@ class DrawingView @JvmOverloads constructor(
 
         // Clear bezier data
         stroke.bezierAnchorPoints.clear()
-        stroke.bezierControlPoints.clear()
+        stroke.bezierControlPoints1.clear()
+        stroke.bezierControlPoints2.clear()
         stroke.bezierAnchorIndices.clear()
 
         // Restore from originalPoints
@@ -932,30 +944,12 @@ class DrawingView @JvmOverloads constructor(
                     // Move the anchor point itself
                     anchor.stroke.bezierAnchorPoints[anchor.pointIndex].offset(dx, dy)
 
-                    // Move the control points associated with this anchor
-                    val numSegments = anchor.stroke.bezierAnchorPoints.size - 1
-
-                    // Each segment has 2 control points: control[segIndex * 2] and control[segIndex * 2 + 1]
-                    // Anchor[i] is the END of segment[i-1] and the START of segment[i]
-
-                    // If this is NOT the first anchor, move the "incoming" control point
-                    // (the second control point of the previous segment)
-                    if (anchor.pointIndex > 0) {
-                        val prevSegmentIndex = anchor.pointIndex - 1
-                        val incomingControlIndex = prevSegmentIndex * 2 + 1
-                        if (incomingControlIndex >= 0 && incomingControlIndex < anchor.stroke.bezierControlPoints.size) {
-                            anchor.stroke.bezierControlPoints[incomingControlIndex].offset(dx, dy)
-                        }
+                    // Move both control points associated with this anchor
+                    if (anchor.pointIndex < anchor.stroke.bezierControlPoints1.size) {
+                        anchor.stroke.bezierControlPoints1[anchor.pointIndex].offset(dx, dy)
                     }
-
-                    // If this is NOT the last anchor, move the "outgoing" control point
-                    // (the first control point of the current segment)
-                    if (anchor.pointIndex < numSegments) {
-                        val currentSegmentIndex = anchor.pointIndex
-                        val outgoingControlIndex = currentSegmentIndex * 2
-                        if (outgoingControlIndex >= 0 && outgoingControlIndex < anchor.stroke.bezierControlPoints.size) {
-                            anchor.stroke.bezierControlPoints[outgoingControlIndex].offset(dx, dy)
-                        }
+                    if (anchor.pointIndex < anchor.stroke.bezierControlPoints2.size) {
+                        anchor.stroke.bezierControlPoints2[anchor.pointIndex].offset(dx, dy)
                     }
 
                     // Regenerate the curve from the modified bezier data
@@ -1122,7 +1116,6 @@ class DrawingView @JvmOverloads constructor(
                             }
                         }
 
-
                         // Draw red squares for bezier anchor points
                         if (stroke.bezierAnchorIndices.isNotEmpty()) {
                             val bezierAnchorPoints = stroke.getAssociatedBezierAnchorPointsOnSmoothedCurve()
@@ -1146,8 +1139,9 @@ class DrawingView @JvmOverloads constructor(
                         }
 
                         // Draw bezier handles (control points and connecting lines)
-                        if (stroke.bezierAnchorPoints.isNotEmpty() && stroke.bezierControlPoints.isNotEmpty()) {
-                            val numSegments = stroke.bezierAnchorPoints.size - 1
+                        if (stroke.bezierAnchorPoints.isNotEmpty() &&
+                            stroke.bezierControlPoints1.isNotEmpty() &&
+                            stroke.bezierControlPoints2.isNotEmpty()) {
 
                             // Paint for handle lines
                             val handleLinePaint = Paint().apply {
@@ -1165,55 +1159,58 @@ class DrawingView @JvmOverloads constructor(
 
                             val controlSize = haloPaintToUse.strokeWidth / 3f // Smaller than anchors
 
-                            for (segIndex in 0 until numSegments) {
-                                if (segIndex * 2 + 1 >= stroke.bezierControlPoints.size) break
+                            for (anchorIndex in 0 until stroke.bezierAnchorPoints.size) {
+                                val anchor = stroke.bezierAnchorPoints[anchorIndex]
 
-                                val anchor1 = stroke.bezierAnchorPoints[segIndex]
-                                val control1 = stroke.bezierControlPoints[segIndex * 2]
-                                val control2 = stroke.bezierControlPoints[segIndex * 2 + 1]
-                                val anchor2 = stroke.bezierAnchorPoints[segIndex + 1]
+                                // Transform anchor to screen space
+                                val anchorScreen = floatArrayOf(anchor.x, anchor.y)
+                                globalTransform.mapPoints(anchorScreen)
 
-                                // Transform points to screen space
-                                val anchor1Screen = floatArrayOf(anchor1.x, anchor1.y)
-                                val control1Screen = floatArrayOf(control1.x, control1.y)
-                                val control2Screen = floatArrayOf(control2.x, control2.y)
-                                val anchor2Screen = floatArrayOf(anchor2.x, anchor2.y)
+                                // Draw outgoing control point (controlPoints1)
+                                if (anchorIndex < stroke.bezierControlPoints1.size) {
+                                    val control1 = stroke.bezierControlPoints1[anchorIndex]
+                                    val control1Screen = floatArrayOf(control1.x, control1.y)
+                                    globalTransform.mapPoints(control1Screen)
 
-                                globalTransform.mapPoints(anchor1Screen)
-                                globalTransform.mapPoints(control1Screen)
-                                globalTransform.mapPoints(control2Screen)
-                                globalTransform.mapPoints(anchor2Screen)
+                                    // Draw handle line
+                                    canvas.drawLine(
+                                        anchorScreen[0], anchorScreen[1],
+                                        control1Screen[0], control1Screen[1],
+                                        handleLinePaint
+                                    )
 
-                                // Draw handle lines
-                                canvas.drawLine(
-                                    anchor1Screen[0], anchor1Screen[1],
-                                    control1Screen[0], control1Screen[1],
-                                    handleLinePaint
-                                )
-                                canvas.drawLine(
-                                    anchor2Screen[0], anchor2Screen[1],
-                                    control2Screen[0], control2Screen[1],
-                                    handleLinePaint
-                                )
+                                    // Draw control point square
+                                    canvas.drawRect(
+                                        control1Screen[0] - controlSize,
+                                        control1Screen[1] - controlSize,
+                                        control1Screen[0] + controlSize,
+                                        control1Screen[1] + controlSize,
+                                        controlPointPaint
+                                    )
+                                }
 
-                                // Draw control point squares
-                                // First control point
-                                canvas.drawRect(
-                                    control1Screen[0] - controlSize,
-                                    control1Screen[1] - controlSize,
-                                    control1Screen[0] + controlSize,
-                                    control1Screen[1] + controlSize,
-                                    controlPointPaint
-                                )
+                                // Draw incoming control point (controlPoints2)
+                                if (anchorIndex < stroke.bezierControlPoints2.size) {
+                                    val control2 = stroke.bezierControlPoints2[anchorIndex]
+                                    val control2Screen = floatArrayOf(control2.x, control2.y)
+                                    globalTransform.mapPoints(control2Screen)
 
-                                // Second control point
-                                canvas.drawRect(
-                                    control2Screen[0] - controlSize,
-                                    control2Screen[1] - controlSize,
-                                    control2Screen[0] + controlSize,
-                                    control2Screen[1] + controlSize,
-                                    controlPointPaint
-                                )
+                                    // Draw handle line
+                                    canvas.drawLine(
+                                        anchorScreen[0], anchorScreen[1],
+                                        control2Screen[0], control2Screen[1],
+                                        handleLinePaint
+                                    )
+
+                                    // Draw control point square
+                                    canvas.drawRect(
+                                        control2Screen[0] - controlSize,
+                                        control2Screen[1] - controlSize,
+                                        control2Screen[0] + controlSize,
+                                        control2Screen[1] + controlSize,
+                                        controlPointPaint
+                                    )
+                                }
                             }
                         }
 
@@ -1593,56 +1590,53 @@ class DrawingView @JvmOverloads constructor(
     }
 
     private fun selectSecondFingerControlPoint(tapPoint: PointF, primaryStroke: Stroke, editingAnchorIndex: Int) {
-        if (!primaryStroke.renderAsBezier || primaryStroke.bezierControlPoints.isEmpty()) return
+        if (!primaryStroke.renderAsBezier ||
+            primaryStroke.bezierControlPoints1.isEmpty() ||
+            primaryStroke.bezierControlPoints2.isEmpty()) return
 
         // Find the closest control point to the tap point
         var closestDist = Float.MAX_VALUE
         var closestIndex = -1
+        var closestIsOutgoing = true
 
-        // Get control points associated with the anchor being edited
-        val numSegments = primaryStroke.bezierAnchorPoints.size - 1
-        val relevantControlIndices = mutableListOf<Int>()
-
-        // If editing anchor is not first, add incoming control point
-        if (editingAnchorIndex > 0) {
-            val incomingControlIndex = (editingAnchorIndex - 1) * 2 + 1
-            if (incomingControlIndex < primaryStroke.bezierControlPoints.size) {
-                relevantControlIndices.add(incomingControlIndex)
-            }
-        }
-
-        // If editing anchor is not last, add outgoing control point
-        if (editingAnchorIndex < numSegments) {
-            val outgoingControlIndex = editingAnchorIndex * 2
-            if (outgoingControlIndex < primaryStroke.bezierControlPoints.size) {
-                relevantControlIndices.add(outgoingControlIndex)
-            }
-        }
-
-        // Find closest control point among relevant ones
-        relevantControlIndices.forEach { controlIndex ->
-            val controlPoint = primaryStroke.bezierControlPoints[controlIndex]
-            val d = distance(controlPoint, tapPoint)
+        // Check outgoing control point (controlPoints1)
+        if (editingAnchorIndex < primaryStroke.bezierControlPoints1.size) {
+            val control1 = primaryStroke.bezierControlPoints1[editingAnchorIndex]
+            val d = distance(control1, tapPoint)
             if (d < closestDist) {
                 closestDist = d
-                closestIndex = controlIndex
+                closestIndex = editingAnchorIndex
+                closestIsOutgoing = true
+            }
+        }
+
+        // Check incoming control point (controlPoints2)
+        if (editingAnchorIndex < primaryStroke.bezierControlPoints2.size) {
+            val control2 = primaryStroke.bezierControlPoints2[editingAnchorIndex]
+            val d = distance(control2, tapPoint)
+            if (d < closestDist) {
+                closestDist = d
+                closestIndex = editingAnchorIndex
+                closestIsOutgoing = false
             }
         }
 
         if (closestIndex != -1) {
             // Save snapshot for undo
-            val snapshot = primaryStroke.bezierControlPoints.map { PointF(it.x, it.y) }.toMutableList()
+            val snapshot1 = primaryStroke.bezierControlPoints1.map { PointF(it.x, it.y) }.toMutableList()
+            val snapshot2 = primaryStroke.bezierControlPoints2.map { PointF(it.x, it.y) }.toMutableList()
 
             secondFingerControlEdit = ControlPointToEdit(
                 stroke = primaryStroke,
                 controlIndex = closestIndex,
-                snapshotControlPoints = snapshot
+                isOutgoing = closestIsOutgoing,
+                snapshotControlPoints1 = snapshot1,
+                snapshotControlPoints2 = snapshot2
             )
             isSecondFingerEditing = true
             invalidate()
         }
     }
-
 
     private fun moveBezierAnchorAndControlPoints(anchorDx: Float, anchorDy: Float, controlDx: Float, controlDy: Float) {
         val controlEdit = secondFingerControlEdit ?: return
@@ -1650,76 +1644,59 @@ class DrawingView @JvmOverloads constructor(
 
         controlEdit.stroke.isModified = true
 
-        if (controlEdit.controlIndex >= 0 && controlEdit.controlIndex < controlEdit.stroke.bezierControlPoints.size) {
-            val numSegments = controlEdit.stroke.bezierAnchorPoints.size - 1
-            val editingAnchorIndex = primaryAnchor.pointIndex
-            val anchorPoint = controlEdit.stroke.bezierAnchorPoints[editingAnchorIndex]
+        val editingAnchorIndex = primaryAnchor.pointIndex
+        val anchorPoint = controlEdit.stroke.bezierAnchorPoints[editingAnchorIndex]
 
-            // Determine which control point is the opposite one
-            var oppositeControlIndex = -1
-
-            // Check if the edited control is incoming (second control of previous segment)
-            if (editingAnchorIndex > 0) {
-                val incomingControlIndex = (editingAnchorIndex - 1) * 2 + 1
-                if (controlEdit.controlIndex == incomingControlIndex && editingAnchorIndex < numSegments) {
-                    // Editing incoming control, so opposite is outgoing
-                    oppositeControlIndex = editingAnchorIndex * 2
-                }
-            }
-
-            // Check if the edited control is outgoing (first control of current segment)
-            if (editingAnchorIndex < numSegments) {
-                val outgoingControlIndex = editingAnchorIndex * 2
-                if (controlEdit.controlIndex == outgoingControlIndex && editingAnchorIndex > 0) {
-                    // Editing outgoing control, so opposite is incoming
-                    oppositeControlIndex = (editingAnchorIndex - 1) * 2 + 1
-                }
-            }
-
-            // Get references to the control points
-            val primaryControl = controlEdit.stroke.bezierControlPoints[controlEdit.controlIndex]
-            val oppositeControl = if (oppositeControlIndex >= 0 && oppositeControlIndex < controlEdit.stroke.bezierControlPoints.size) {
-                controlEdit.stroke.bezierControlPoints[oppositeControlIndex]
-            } else null
-
-            // Store original distances from anchor before any movement
-            val originalPrimaryDistance = distance(anchorPoint, primaryControl)
-            val originalOppositeDistance = oppositeControl?.let { distance(anchorPoint, it) } ?: 0f
-
-            // Move the anchor point
-            anchorPoint.offset(anchorDx, anchorDy)
-
-            // Move the primary control point (the one being dragged)
-            primaryControl.offset(controlDx, controlDy)
-
-            // Calculate the new distance and direction from anchor to primary control
-            val newPrimaryDistance = distance(anchorPoint, primaryControl)
-            val primaryDirX = primaryControl.x - anchorPoint.x
-            val primaryDirY = primaryControl.y - anchorPoint.y
-
-            // Update the opposite control point to maintain collinearity
-            // The opposite control moves relative to the anchor, in opposite direction
-            if (oppositeControl != null && newPrimaryDistance > 0f) {
-                // Calculate how much the primary lever length changed
-                val leverLengthChange = newPrimaryDistance - originalPrimaryDistance
-
-                // The opposite lever should change by the same amount
-                val newOppositeDistance = originalOppositeDistance + leverLengthChange
-
-                if (newOppositeDistance > 0f) {
-                    // Normalize the primary direction and scale by new opposite distance
-                    val oppositeDirX = -(primaryDirX / newPrimaryDistance) * newOppositeDistance
-                    val oppositeDirY = -(primaryDirY / newPrimaryDistance) * newOppositeDistance
-
-                    // Set the opposite control point position relative to the (now moved) anchor
-                    oppositeControl.set(anchorPoint.x + oppositeDirX, anchorPoint.y + oppositeDirY)
-                }
-            }
-
-            // Regenerate the curve from the modified bezier data
-            controlEdit.stroke.regenerateBezierCurve()
-            controlEdit.stroke.applySmoothing()
+        // Get references to the control points
+        val primaryControl = if (controlEdit.isOutgoing) {
+            controlEdit.stroke.bezierControlPoints1[controlEdit.controlIndex]
+        } else {
+            controlEdit.stroke.bezierControlPoints2[controlEdit.controlIndex]
         }
+
+        val oppositeControl = if (controlEdit.isOutgoing) {
+            controlEdit.stroke.bezierControlPoints2.getOrNull(controlEdit.controlIndex)
+        } else {
+            controlEdit.stroke.bezierControlPoints1.getOrNull(controlEdit.controlIndex)
+        }
+
+        // Store original distances from anchor before any movement
+        val originalPrimaryDistance = distance(anchorPoint, primaryControl)
+        val originalOppositeDistance = oppositeControl?.let { distance(anchorPoint, it) } ?: 0f
+
+        // Move the anchor point
+        anchorPoint.offset(anchorDx, anchorDy)
+
+        // Move the primary control point (the one being dragged)
+        primaryControl.offset(controlDx, controlDy)
+
+        // Calculate the new distance and direction from anchor to primary control
+        val newPrimaryDistance = distance(anchorPoint, primaryControl)
+        val primaryDirX = primaryControl.x - anchorPoint.x
+        val primaryDirY = primaryControl.y - anchorPoint.y
+
+        // Update the opposite control point to maintain collinearity
+        // The opposite control moves relative to the anchor, in opposite direction
+        if (oppositeControl != null && newPrimaryDistance > 0f) {
+            // Calculate how much the primary lever length changed
+            val leverLengthChange = newPrimaryDistance - originalPrimaryDistance
+
+            // The opposite lever should change by the same amount
+            val newOppositeDistance = originalOppositeDistance + leverLengthChange
+
+            if (newOppositeDistance > 0f) {
+                // Normalize the primary direction and scale by new opposite distance
+                val oppositeDirX = -(primaryDirX / newPrimaryDistance) * newOppositeDistance
+                val oppositeDirY = -(primaryDirY / newPrimaryDistance) * newOppositeDistance
+
+                // Set the opposite control point position relative to the (now moved) anchor
+                oppositeControl.set(anchorPoint.x + oppositeDirX, anchorPoint.y + oppositeDirY)
+            }
+        }
+
+        // Regenerate the curve from the modified bezier data
+        controlEdit.stroke.regenerateBezierCurve()
+        controlEdit.stroke.applySmoothing()
 
         invalidate()
     }

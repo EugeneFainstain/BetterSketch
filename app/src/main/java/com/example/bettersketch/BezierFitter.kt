@@ -11,7 +11,8 @@ class BezierFitter {
 
     data class FitResult(
         val anchorPoints: List<PointF>,           // Bezier anchor points (on-curve)
-        val controlPoints: List<PointF>,          // Control points (2 per segment)
+        val controlPoints1: List<PointF>,         // "Before/Outgoing" control points (one per anchor)
+        val controlPoints2: List<PointF>,         // "After/Incoming" control points (one per anchor)
         val anchorIndices: List<Int>,             // Closest original point indices to anchors
         val error: Float,                         // Average fitting error
         val normalizedError: Float                // Error normalized by stroke scale
@@ -43,15 +44,32 @@ class BezierFitter {
 
             // Extract anchors and control points
             val anchors = mutableListOf<PointF>()
-            val controls = mutableListOf<PointF>()
+            val controlPoints1 = mutableListOf<PointF>()  // Outgoing controls
+            val controlPoints2 = mutableListOf<PointF>()  // Incoming controls
 
-            bezierSegments.forEachIndexed { index, segment ->
-                if (index == 0) {
+            // Process segments to extract anchors and controls
+            // For N anchors, we have N-1 segments
+            // Each anchor gets two control points: one outgoing (controlPoints1) and one incoming (controlPoints2)
+
+            bezierSegments.forEachIndexed { segIndex, segment ->
+                if (segIndex == 0) {
+                    // First segment: add first anchor
                     anchors.add(segment.p0)
+                    controlPoints1.add(segment.p1)  // Outgoing from first anchor
+                    controlPoints2.add(segment.p0)  // Dummy incoming (same as anchor)
                 }
-                controls.add(segment.p1)
-                controls.add(segment.p2)
+
+                // Add the end anchor of this segment
                 anchors.add(segment.p3)
+                controlPoints2.add(segment.p2)  // Incoming to this anchor
+
+                // Add outgoing control for this anchor (if not the last segment)
+                if (segIndex < bezierSegments.size - 1) {
+                    controlPoints1.add(bezierSegments[segIndex + 1].p1)
+                } else {
+                    // Last anchor: add dummy outgoing control (same as anchor)
+                    controlPoints1.add(segment.p3)
+                }
             }
 
             // Find closest original point indices for each anchor
@@ -65,7 +83,8 @@ class BezierFitter {
 
             return FitResult(
                 anchorPoints = anchors,
-                controlPoints = controls,
+                controlPoints1 = controlPoints1,
+                controlPoints2 = controlPoints2,
                 anchorIndices = anchorIndices,
                 error = totalError,
                 normalizedError = normalizedError

@@ -28,7 +28,8 @@ class Stroke(
 
     // Bezier curve data
     val bezierAnchorPoints: MutableList<PointF> = mutableListOf()      // Optimal computed anchors
-    val bezierControlPoints: MutableList<PointF> = mutableListOf()     // Control points (2 per cubic segment)
+    val bezierControlPoints1: MutableList<PointF> = mutableListOf()    // "Before" control points (one per anchor, outgoing from anchor)
+    val bezierControlPoints2: MutableList<PointF> = mutableListOf()    // "After" control points (one per anchor, incoming to anchor)
     val bezierAnchorIndices: MutableList<Int> = mutableListOf()        // Closest unsmoothedPoints indices to anchors
     var renderAsBezier: Boolean = false                                 // Toggle for bezier rendering
 
@@ -43,7 +44,9 @@ class Stroke(
     var needsToRegenerate: Boolean = false // Flag to regenerate unsmoothedPoints from analytical
 
     fun hasBezierData(): Boolean {
-        return bezierAnchorPoints.isNotEmpty() && bezierControlPoints.isNotEmpty()
+        return bezierAnchorPoints.isNotEmpty() &&
+                bezierControlPoints1.isNotEmpty() &&
+                bezierControlPoints2.isNotEmpty()
     }
 
     fun toggleBezierRepresentation() {
@@ -102,14 +105,13 @@ class Stroke(
      * Interpolate points along the bezier curve
      */
 
-    /**
-     * Interpolate points along the bezier curve
-     */
     private fun interpolateAlongBezierCurve(targetPointCount: Int): List<PointF> {
         if (bezierAnchorPoints.size < 2) return emptyList()
 
         val numSegments = bezierAnchorPoints.size - 1
-        if (numSegments < 1 || bezierControlPoints.size < numSegments * 2) {
+        if (numSegments < 1 ||
+            bezierControlPoints1.size != bezierAnchorPoints.size ||
+            bezierControlPoints2.size != bezierAnchorPoints.size) {
             return emptyList()
         }
 
@@ -118,10 +120,10 @@ class Stroke(
         var totalLength = 0f
 
         for (segIndex in 0 until numSegments) {
-            val p0 = bezierAnchorPoints[segIndex]
-            val p1 = bezierControlPoints[segIndex * 2]
-            val p2 = bezierControlPoints[segIndex * 2 + 1]
-            val p3 = bezierAnchorPoints[segIndex + 1]
+            val p0 = bezierAnchorPoints[segIndex]          // Start anchor
+            val p1 = bezierControlPoints1[segIndex]        // Outgoing control from start anchor
+            val p2 = bezierControlPoints2[segIndex + 1]    // Incoming control to end anchor
+            val p3 = bezierAnchorPoints[segIndex + 1]      // End anchor
 
             // Estimate arc length by sampling the curve
             val length = estimateBezierArcLength(p0, p1, p2, p3)
@@ -163,8 +165,8 @@ class Stroke(
             }
 
             val p0 = bezierAnchorPoints[segIndex]
-            val p1 = bezierControlPoints[segIndex * 2]
-            val p2 = bezierControlPoints[segIndex * 2 + 1]
+            val p1 = bezierControlPoints1[segIndex]
+            val p2 = bezierControlPoints2[segIndex + 1]
             val p3 = bezierAnchorPoints[segIndex + 1]
 
             val point = evaluateCubicBezier(p0, p1, p2, p3, t)
@@ -424,8 +426,11 @@ class Stroke(
         this.bezierAnchorPoints.clear()
         this.bezierAnchorPoints.addAll(other.bezierAnchorPoints.map { PointF(it.x, it.y) })
 
-        this.bezierControlPoints.clear()
-        this.bezierControlPoints.addAll(other.bezierControlPoints.map { PointF(it.x, it.y) })
+        this.bezierControlPoints1.clear()
+        this.bezierControlPoints1.addAll(other.bezierControlPoints1.map { PointF(it.x, it.y) })
+
+        this.bezierControlPoints2.clear()
+        this.bezierControlPoints2.addAll(other.bezierControlPoints2.map { PointF(it.x, it.y) })
 
         this.bezierAnchorIndices.clear()
         this.bezierAnchorIndices.addAll(other.bezierAnchorIndices)
