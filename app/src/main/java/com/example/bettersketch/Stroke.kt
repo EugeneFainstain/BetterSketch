@@ -73,7 +73,7 @@ class Stroke(
 
         // Regenerate points for drawing based on current mode
         if (renderAsBezier) {
-            regenerateBezierPoints()
+            regenerateBezierCurve()
         }
 
         applySmoothing()
@@ -82,7 +82,7 @@ class Stroke(
     /**
      * Regenerate pointsForDrawing from bezier curve data
      */
-    fun regenerateBezierPoints() {
+    fun regenerateBezierCurve() {
         if (!hasBezierData() || !renderAsBezier) return
 
         val pointCount = originalPoints.size * 4
@@ -286,7 +286,7 @@ class Stroke(
 
         // Check if we need to regenerate from bezier curve
         if (renderAsBezier && hasBezierData()) {
-            regenerateBezierPoints()
+            regenerateBezierCurve()
         }
 
         // Choose the source points based on mode

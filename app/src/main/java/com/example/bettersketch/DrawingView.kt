@@ -959,7 +959,7 @@ class DrawingView @JvmOverloads constructor(
                     }
 
                     // Regenerate the curve from the modified bezier data
-                    anchor.stroke.regenerateBezierPoints()
+                    anchor.stroke.regenerateBezierCurve()
                     anchor.stroke.applySmoothing()
                 }
             } else {
@@ -1717,7 +1717,7 @@ class DrawingView @JvmOverloads constructor(
             }
 
             // Regenerate the curve from the modified bezier data
-            controlEdit.stroke.regenerateBezierPoints()
+            controlEdit.stroke.regenerateBezierCurve()
             controlEdit.stroke.applySmoothing()
         }
 
