@@ -56,7 +56,7 @@ class BezierFitter {
                     // First segment: add first anchor
                     anchors.add(segment.p0)
                     controlPoints1.add(segment.p1)  // Outgoing from first anchor
-                    controlPoints2.add(segment.p0)  // Dummy incoming (same as anchor)
+                    controlPoints2.add(PointF(segment.p0.x, segment.p0.y))  // Dummy incoming (COPY, not reference)
                 }
 
                 // Add the end anchor of this segment
@@ -68,7 +68,7 @@ class BezierFitter {
                     controlPoints1.add(bezierSegments[segIndex + 1].p1)
                 } else {
                     // Last anchor: add dummy outgoing control (same as anchor)
-                    controlPoints1.add(segment.p3)
+                    controlPoints1.add(PointF(segment.p3.x, segment.p3.y))  // Dummy outgoing (COPY, not reference)
                 }
             }
 
