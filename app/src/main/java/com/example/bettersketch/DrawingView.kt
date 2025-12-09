@@ -444,13 +444,11 @@ class DrawingView @JvmOverloads constructor(
 
     /**
      * Remove a Bezier anchor and refit the adjacent control points.
-     * For anchors that were added via De Casteljau splitting, this will give perfect reconstruction.
-     * For arbitrary anchors, it uses a simple averaging heuristic.
+     * Optimizes only the control point lengths while keeping directions fixed.
      */
     private fun removeBezierAnchorWithRefit(stroke: Stroke, anchorIndex: Int) {
         // Edge cases: can't remove first or last anchor point
         if (anchorIndex == 0 || anchorIndex >= stroke.bezierAnchorPoints.size - 1) {
-            // Just remove the data structures without refitting
             stroke.bezierAnchorPoints.removeAt(anchorIndex)
             if (anchorIndex < stroke.bezierControlPoints1.size) {
                 stroke.bezierControlPoints1.removeAt(anchorIndex)
@@ -473,45 +471,121 @@ class DrawingView @JvmOverloads constructor(
         val c2_right = stroke.bezierControlPoints2[anchorIndex + 1]
         val p3 = stroke.bezierAnchorPoints[anchorIndex + 1]
 
-        // Try to estimate the parameter 't' at which this point was split
-        // Use the ratio of distances as an approximation
-        val dist_left = GeometryUtils.distance(p0, p_mid)
-        val dist_right = GeometryUtils.distance(p_mid, p3)
-        val total_dist = dist_left + dist_right
-        val t_estimate = if (total_dist > 0f) dist_left / total_dist else 0.5f
+        // The tangent directions are FIXED - they come from the existing control points
+        val tHat1 = normalize(PointF(c1_left.x - p0.x, c1_left.y - p0.y))
+        val tHat2 = normalize(PointF(c2_right.x - p3.x, c2_right.y - p3.y))
 
-        val t = t_estimate.coerceIn(0.1f, 0.9f) // Avoid division by zero at extremes
-        val mt = 1.0f - t
+        // Sample both curves to get target points
+        val samples = 20
+        val samplePoints = mutableListOf<PointF>()
 
-        // Reverse the De Casteljau split operation
-        val p1_recovered = if (t > 0.01f) {
-            PointF(
-                (c1_left.x - mt * p0.x) / t,
-                (c1_left.y - mt * p0.y) / t
-            )
-        } else {
-            PointF(c1_left.x, c1_left.y)
+        // Sample left segment
+        for (i in 0..samples) {
+            val t = i.toFloat() / samples
+            samplePoints.add(GeometryUtils.evaluateCubicBezier(p0, c1_left, c2_mid, p_mid, t))
         }
 
-        val p2_recovered = if (mt > 0.01f) {
-            PointF(
-                (c2_right.x - t * p3.x) / mt,
-                (c2_right.y - t * p3.y) / mt
-            )
-        } else {
-            PointF(c2_right.x, c2_right.y)
+        // Sample right segment (skip first to avoid duplication)
+        for (i in 1..samples) {
+            val t = i.toFloat() / samples
+            samplePoints.add(GeometryUtils.evaluateCubicBezier(p_mid, c1_mid, c2_right, p3, t))
         }
 
-        // IMPORTANT: Update control points BEFORE removing anything
-        // After removal, indices will shift!
-        stroke.bezierControlPoints1[anchorIndex - 1] = p1_recovered
-        stroke.bezierControlPoints2[anchorIndex + 1] = p2_recovered
+        // Chord-length parameterization
+        val u = mutableListOf(0f)
+        for (i in 1 until samplePoints.size) {
+            u.add(u.last() + GeometryUtils.distance(samplePoints[i], samplePoints[i - 1]))
+        }
+        val total = u.last()
+        if (total > 0f) {
+            for (i in 1 until u.size) {
+                u[i] /= total
+            }
+        }
+
+        // Optimize ONLY the alphas (control point lengths) - same as BezierFitter.generateBezier
+        val (alphaL, alphaR) = optimizeControlPointLengths(p0, p3, samplePoints, u, tHat1, tHat2)
+
+        // Compute new control points with optimized lengths but FIXED directions
+        val p1_new = PointF(p0.x + tHat1.x * alphaL, p0.y + tHat1.y * alphaL)
+        val p2_new = PointF(p3.x + tHat2.x * alphaR, p3.y + tHat2.y * alphaR)
+
+        // Update control points BEFORE removing
+        stroke.bezierControlPoints1[anchorIndex - 1] = p1_new
+        stroke.bezierControlPoints2[anchorIndex + 1] = p2_new
 
         // NOW remove the anchor and its associated control points
         stroke.bezierAnchorPoints.removeAt(anchorIndex)
         stroke.bezierAnchorIndices.removeAt(anchorIndex)
         stroke.bezierControlPoints1.removeAt(anchorIndex)
         stroke.bezierControlPoints2.removeAt(anchorIndex)
+    }
+
+    /**
+     * Optimize control point lengths (alphas) with fixed tangent directions.
+     * This is the core of BezierFitter.generateBezier.
+     */
+    private fun optimizeControlPointLengths(
+        p0: PointF, p3: PointF,
+        points: List<PointF>, u: List<Float>,
+        tHat1: PointF, tHat2: PointF
+    ): Pair<Float, Float> {
+        val EPSILON = 1.0e-6f
+
+        // Build C and X matrices (same as BezierFitter)
+        var C00 = 0.0f
+        var C01 = 0.0f
+        var C11 = 0.0f
+        var X0 = 0.0f
+        var X1 = 0.0f
+
+        for (i in points.indices) {
+            val ui = u[i]
+
+            // Bernstein basis functions
+            val b0 = (1f - ui) * (1f - ui) * (1f - ui)
+            val b1 = 3f * (1f - ui) * (1f - ui) * ui
+            val b2 = 3f * (1f - ui) * ui * ui
+            val b3 = ui * ui * ui
+
+            // A vectors: direction × basis
+            val a0 = PointF(tHat1.x * b1, tHat1.y * b1)
+            val a1 = PointF(tHat2.x * b2, tHat2.y * b2)
+
+            // Build C matrix
+            C00 += a0.x * a0.x + a0.y * a0.y
+            C01 += a0.x * a1.x + a0.y * a1.y
+            C11 += a1.x * a1.x + a1.y * a1.y
+
+            // Build X vector (residual after fixed endpoints)
+            val tmpX = points[i].x - b0 * p0.x - b3 * p3.x
+            val tmpY = points[i].y - b0 * p0.y - b3 * p3.y
+
+            X0 += a0.x * tmpX + a0.y * tmpY
+            X1 += a1.x * tmpX + a1.y * tmpY
+        }
+
+        // Solve 2×2 system for alphas
+        val det_C0_C1 = C00 * C11 - C01 * C01
+        val det_C0_X = C00 * X1 - C01 * X0
+        val det_X_C1 = X0 * C11 - X1 * C01
+
+        var alphaL = if (abs(det_C0_C1) > EPSILON) det_X_C1 / det_C0_C1 else 0f
+        var alphaR = if (abs(det_C0_C1) > EPSILON) det_C0_X / det_C0_C1 else 0f
+
+        // Wu/Barsky heuristic for degenerate cases
+        val segLength = GeometryUtils.distance(p0, p3)
+        val epsilon = EPSILON * segLength
+
+        if (alphaL < epsilon) alphaL = segLength / 3f
+        if (alphaR < epsilon) alphaR = segLength / 3f
+
+        return Pair(alphaL, alphaR)
+    }
+
+    private fun normalize(p: PointF): PointF {
+        val len = sqrt(p.x * p.x + p.y * p.y)
+        return if (len > 1e-6f) PointF(p.x / len, p.y / len) else PointF(1f, 0f)
     }
 
     fun undoModificationsForHighlightedStrokes() {
