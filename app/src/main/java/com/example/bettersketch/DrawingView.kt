@@ -264,7 +264,7 @@ class DrawingView @JvmOverloads constructor(
 
             for (j in 1..samples) {
                 val t = j.toFloat() / samples
-                val point = evaluateCubicBezier(p0, p1, p2, p3, t)
+                val point = GeometryUtils.evaluateCubicBezier(p0, p1, p2, p3, t)
                 val dx = point.x - prevPoint.x
                 val dy = point.y - prevPoint.y
                 length += sqrt(dx * dx + dy * dy)
@@ -316,14 +316,14 @@ class DrawingView @JvmOverloads constructor(
         }
 
         // Split the bezier curve at parameter t using De Casteljau's algorithm
-        val p01 = lerp(p0, p1, t)
-        val p12 = lerp(p1, p2, t)
-        val p23 = lerp(p2, p3, t)
+        val p01 = GeometryUtils.lerp(p0, p1, t)
+        val p12 = GeometryUtils.lerp(p1, p2, t)
+        val p23 = GeometryUtils.lerp(p2, p3, t)
 
-        val p012 = lerp(p01, p12, t)
-        val p123 = lerp(p12, p23, t)
+        val p012 = GeometryUtils.lerp(p01, p12, t)
+        val p123 = GeometryUtils.lerp(p12, p23, t)
 
-        val newAnchor = lerp(p012, p123, t)
+        val newAnchor = GeometryUtils.lerp(p012, p123, t)
 
         // Insert the new anchor at segmentIndex + 1
         stroke.bezierAnchorPoints.add(segmentIndex + 1, PointF(newAnchor.x, newAnchor.y))
@@ -345,28 +345,6 @@ class DrawingView @JvmOverloads constructor(
         // Regenerate the curve from the modified bezier data
         stroke.regenerateBezierCurve()
         stroke.applySmoothing()
-    }
-
-    // Helper function to evaluate cubic bezier
-    private fun evaluateCubicBezier(p0: PointF, p1: PointF, p2: PointF, p3: PointF, t: Float): PointF {
-        val t2 = t * t
-        val t3 = t2 * t
-        val mt = 1.0f - t
-        val mt2 = mt * mt
-        val mt3 = mt2 * mt
-
-        return PointF(
-            p0.x * mt3 + 3 * p1.x * mt2 * t + 3 * p2.x * mt * t2 + p3.x * t3,
-            p0.y * mt3 + 3 * p1.y * mt2 * t + 3 * p2.y * mt * t2 + p3.y * t3
-        )
-    }
-
-    // Helper function for linear interpolation
-    private fun lerp(p1: PointF, p2: PointF, t: Float): PointF {
-        return PointF(
-            p1.x + (p2.x - p1.x) * t,
-            p1.y + (p2.y - p1.y) * t
-        )
     }
 
     private fun addPolylineAnchorPoint(stroke: Stroke, index: Int) {
