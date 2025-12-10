@@ -77,136 +77,10 @@ class Stroke(
 
         // Regenerate points for drawing based on current mode
         if (renderAsBezier) {
-            regenerateBezierCurve()
+            BezierUtils.regenerateBezierCurve(this)
         }
 
         applySmoothing()
-    }
-
-    /**
-     * Regenerate pointsForDrawing from bezier curve data
-     */
-    fun regenerateBezierCurve() {
-        if (!hasBezierData() || !renderAsBezier) return
-
-        val pointCount = originalPoints.size * 4
-        if (pointCount < 2) return
-
-        // Interpolate points along the bezier curve
-        val interpolatedPoints = interpolateAlongBezierCurve(pointCount)
-
-        // Update unsmoothed points with bezier-interpolated points
-        val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
-        unsmoothedPoints.clear()
-        unsmoothedPoints.addAll(pathPoints)
-        totalDistance = newTotalDistance
-    }
-
-    /**
-     * Interpolate points along the bezier curve, with anchors pinned at specific indices
-     */
-    private fun interpolateAlongBezierCurve(targetPointCount: Int): List<PointF> {
-        if (bezierAnchorPoints.size < 2) return emptyList()
-
-        val numSegments = bezierAnchorPoints.size - 1
-        if (numSegments < 1 ||
-            bezierControlPoints1.size != bezierAnchorPoints.size ||
-            bezierControlPoints2.size != bezierAnchorPoints.size) {
-            return emptyList()
-        }
-
-        // First, estimate the arc length of each segment
-        val segmentLengths = mutableListOf<Float>()
-        var totalLength = 0f
-
-        for (segIndex in 0 until numSegments) {
-            val p0 = bezierAnchorPoints[segIndex]
-            val p1 = bezierControlPoints1[segIndex]
-            val p2 = bezierControlPoints2[segIndex + 1]
-            val p3 = bezierAnchorPoints[segIndex + 1]
-
-            val length = estimateBezierArcLength(p0, p1, p2, p3)
-            segmentLengths.add(length)
-            totalLength += length
-        }
-
-        if (totalLength <= 0f) return listOf(bezierAnchorPoints.first())
-
-        // Allocate points to each segment proportionally to its arc length
-        val pointsPerSegment = IntArray(numSegments)
-
-        for (segIndex in 0 until numSegments) {
-            val ratio = segmentLengths[segIndex] / totalLength
-            val idealPointCount = (targetPointCount - 1) * ratio
-            pointsPerSegment[segIndex] = idealPointCount.toInt().coerceAtLeast(1)
-        }
-
-        // Update bezierAnchorPointsForDrawingIndices - track where each anchor appears in pointsForDrawing
-        bezierAnchorPointsForDrawingIndices.clear()
-        var cumulativePoints = 0
-        for (i in bezierAnchorPoints.indices) {
-            bezierAnchorPointsForDrawingIndices.add(cumulativePoints)
-            if (i < numSegments) {
-                cumulativePoints += pointsPerSegment[i]
-            }
-        }
-
-        // Update bezierAnchorIndices to reflect where anchors map to in the interpolated points
-        // Note - this is a bug because it doesn't account for quadrupling of Bezier points
-        bezierAnchorIndices.clear()
-        bezierAnchorIndices.addAll(bezierAnchorPointsForDrawingIndices)
-
-        // Generate points with anchors pinned
-        val interpolatedPoints = mutableListOf<PointF>()
-
-        for (segIndex in 0 until numSegments) {
-            val p0 = bezierAnchorPoints[segIndex]
-            val p1 = bezierControlPoints1[segIndex]
-            val p2 = bezierControlPoints2[segIndex + 1]
-            val p3 = bezierAnchorPoints[segIndex + 1]
-
-            val numPointsInSegment = pointsPerSegment[segIndex]
-
-            // Add points for this segment (excluding the end anchor)
-            for (i in 0 until numPointsInSegment) {
-                val t = i.toFloat() / numPointsInSegment
-                val point = evaluateCubicBezier(p0, p1, p2, p3, t)
-                interpolatedPoints.add(point)
-            }
-        }
-
-        // Always add the last anchor explicitly to ensure it's pinned
-        interpolatedPoints.add(PointF(bezierAnchorPoints.last().x, bezierAnchorPoints.last().y))
-
-        return interpolatedPoints
-    }
-    
-    /**
-     * Estimate the arc length of a cubic Bezier curve
-     */
-    public fun estimateBezierArcLength(p0: PointF, p1: PointF, p2: PointF, p3: PointF): Float {
-        // Use adaptive sampling to estimate arc length
-        val samples = 20
-        var length = 0f
-        var prevPoint = p0
-
-        for (i in 1..samples) {
-            val t = i.toFloat() / samples
-            val point = evaluateCubicBezier(p0, p1, p2, p3, t)
-            val dx = point.x - prevPoint.x
-            val dy = point.y - prevPoint.y
-            length += sqrt(dx * dx + dy * dy)
-            prevPoint = point
-        }
-
-        return length
-    }
-
-    /**
-     * Evaluate cubic bezier at parameter t
-     */
-    private fun evaluateCubicBezier(p0: PointF, p1: PointF, p2: PointF, p3: PointF, t: Float): PointF {
-        return GeometryUtils.evaluateCubicBezier(p0, p1, p2, p3, t)
     }
 
     // Secondary constructor for creating a stroke from existing points (like the original constructor)
@@ -215,10 +89,10 @@ class Stroke(
         this.originalPoints.addAll(incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
         this.unsmoothedPoints.addAll(incomingPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
         this.totalDistance = totalDistance // This totalDistance is based on incomingPoints
-        
+
         // Capture distances for weight calculations
         this.distancesForWeights.addAll(incomingPoints.map { it.distance })
-        
+
         applySmoothing() // Apply smoothing to generate 'points' from 'unsmoothedPoints'
     }
 
@@ -278,7 +152,7 @@ class Stroke(
 
         // Check if we need to regenerate from bezier curve
         if (renderAsBezier && hasBezierData()) {
-            regenerateBezierCurve()
+            BezierUtils.regenerateBezierCurve(this)
         }
 
         // Choose the source points based on mode

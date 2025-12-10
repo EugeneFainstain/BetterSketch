@@ -5,6 +5,131 @@ import com.example.bettersketch.GeometryUtils.distance
 
 object BezierUtils {
     /**
+     * Regenerate pointsForDrawing from bezier curve data
+     */
+    fun regenerateBezierCurve(stroke: Stroke) {
+        if (!stroke.hasBezierData() || !stroke.renderAsBezier) return
+
+        val pointCount = stroke.originalPoints.size * 4
+        if (pointCount < 2) return
+
+        // Interpolate points along the bezier curve
+        val interpolatedPoints = interpolateAlongBezierCurve(stroke, pointCount)
+
+        // Update unsmoothed points with bezier-interpolated points
+        val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(interpolatedPoints)
+        stroke.unsmoothedPoints.clear()
+        stroke.unsmoothedPoints.addAll(pathPoints)
+        stroke.totalDistance = newTotalDistance
+    }
+
+    /**
+     * Interpolate points along the bezier curve, with anchors pinned at specific indices
+     */
+    private fun interpolateAlongBezierCurve(stroke: Stroke, targetPointCount: Int): List<PointF> {
+        if (stroke.bezierAnchorPoints.size < 2) return emptyList()
+
+        val numSegments = stroke.bezierAnchorPoints.size - 1
+        if (numSegments < 1 ||
+            stroke.bezierControlPoints1.size != stroke.bezierAnchorPoints.size ||
+            stroke.bezierControlPoints2.size != stroke.bezierAnchorPoints.size) {
+            return emptyList()
+        }
+
+        // First, estimate the arc length of each segment
+        val segmentLengths = mutableListOf<Float>()
+        var totalLength = 0f
+
+        for (segIndex in 0 until numSegments) {
+            val p0 = stroke.bezierAnchorPoints[segIndex]
+            val p1 = stroke.bezierControlPoints1[segIndex]
+            val p2 = stroke.bezierControlPoints2[segIndex + 1]
+            val p3 = stroke.bezierAnchorPoints[segIndex + 1]
+
+            val length = estimateBezierArcLength(p0, p1, p2, p3)
+            segmentLengths.add(length)
+            totalLength += length
+        }
+
+        if (totalLength <= 0f) return listOf(stroke.bezierAnchorPoints.first())
+
+        // Allocate points to each segment proportionally to its arc length
+        val pointsPerSegment = IntArray(numSegments)
+
+        for (segIndex in 0 until numSegments) {
+            val ratio = segmentLengths[segIndex] / totalLength
+            val idealPointCount = (targetPointCount - 1) * ratio
+            pointsPerSegment[segIndex] = idealPointCount.toInt().coerceAtLeast(1)
+        }
+
+        // Update bezierAnchorPointsForDrawingIndices - track where each anchor appears in pointsForDrawing
+        stroke.bezierAnchorPointsForDrawingIndices.clear()
+        var cumulativePoints = 0
+        for (i in stroke.bezierAnchorPoints.indices) {
+            stroke.bezierAnchorPointsForDrawingIndices.add(cumulativePoints)
+            if (i < numSegments) {
+                cumulativePoints += pointsPerSegment[i]
+            }
+        }
+
+        // Update bezierAnchorIndices to reflect where anchors map to in the interpolated points
+        stroke.bezierAnchorIndices.clear()
+        stroke.bezierAnchorIndices.addAll(stroke.bezierAnchorPointsForDrawingIndices)
+
+        // Generate points with anchors pinned
+        val interpolatedPoints = mutableListOf<PointF>()
+
+        for (segIndex in 0 until numSegments) {
+            val p0 = stroke.bezierAnchorPoints[segIndex]
+            val p1 = stroke.bezierControlPoints1[segIndex]
+            val p2 = stroke.bezierControlPoints2[segIndex + 1]
+            val p3 = stroke.bezierAnchorPoints[segIndex + 1]
+
+            val numPointsInSegment = pointsPerSegment[segIndex]
+
+            // Add points for this segment (excluding the end anchor)
+            for (i in 0 until numPointsInSegment) {
+                val t = i.toFloat() / numPointsInSegment
+                val point = evaluateCubicBezier(p0, p1, p2, p3, t)
+                interpolatedPoints.add(point)
+            }
+        }
+
+        // Always add the last anchor explicitly to ensure it's pinned
+        interpolatedPoints.add(PointF(stroke.bezierAnchorPoints.last().x, stroke.bezierAnchorPoints.last().y))
+
+        return interpolatedPoints
+    }
+
+    /**
+     * Estimate the arc length of a cubic Bezier curve
+     */
+    fun estimateBezierArcLength(p0: PointF, p1: PointF, p2: PointF, p3: PointF): Float {
+        // Use adaptive sampling to estimate arc length
+        val samples = 20
+        var length = 0f
+        var prevPoint = p0
+
+        for (i in 1..samples) {
+            val t = i.toFloat() / samples
+            val point = evaluateCubicBezier(p0, p1, p2, p3, t)
+            val dx = point.x - prevPoint.x
+            val dy = point.y - prevPoint.y
+            length += kotlin.math.sqrt(dx * dx + dy * dy)
+            prevPoint = point
+        }
+
+        return length
+    }
+
+    /**
+     * Evaluate cubic bezier at parameter t
+     */
+    private fun evaluateCubicBezier(p0: PointF, p1: PointF, p2: PointF, p3: PointF, t: Float): PointF {
+        return GeometryUtils.evaluateCubicBezier(p0, p1, p2, p3, t)
+    }
+
+    /**
      * Remove a Bezier anchor point at the specified index.
      *
      * @param stroke The stroke to modify
@@ -21,7 +146,7 @@ object BezierUtils {
             stroke.isModified = true
 
             // Regenerate the curve from the modified bezier data
-            stroke.regenerateBezierCurve()
+            BezierUtils.regenerateBezierCurve(stroke)
             stroke.applySmoothing()
             return true
         }
@@ -104,7 +229,7 @@ object BezierUtils {
 
         // Regenerate the curve from the modified bezier data
         // This will update bezierAnchorPointsForDrawingIndices with correct values
-        stroke.regenerateBezierCurve()
+        BezierUtils.regenerateBezierCurve(stroke)
         stroke.applySmoothing()
     }
 
@@ -201,7 +326,7 @@ object BezierUtils {
 
             stroke.isModified = true
             // Regenerate the curve from the modified bezier data
-            stroke.regenerateBezierCurve()
+            BezierUtils.regenerateBezierCurve(stroke)
             stroke.applySmoothing()
         }
     }
@@ -279,7 +404,7 @@ object BezierUtils {
 
         stroke.isModified = true
         // Regenerate the curve from the modified bezier data
-        stroke.regenerateBezierCurve()
+        BezierUtils.regenerateBezierCurve(stroke)
         stroke.applySmoothing()
     }
 
