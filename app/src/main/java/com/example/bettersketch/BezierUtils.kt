@@ -315,4 +315,55 @@ object BezierUtils {
         stroke.regenerateBezierCurve()
         stroke.applySmoothing()
     }
+
+    /**
+     * Find the closest control point (for the given anchor) to a tap point.
+     * Returns a ControlPointToEdit describing which control point was selected, or null if none found.
+     *
+     * @param primaryStroke The stroke being edited
+     * @param editingAnchorIndex Index of the anchor being edited
+     * @param tapPoint The point to search from
+     * @return ControlPointToEdit with stroke, control index, and array index (1 or 2), or null if not found
+     */
+    fun findClosestControlPoint(
+        primaryStroke: Stroke,
+        editingAnchorIndex: Int,
+        tapPoint: PointF
+    ): DrawingView.ControlPointToEdit? {
+        if (!primaryStroke.renderAsBezier || primaryStroke.bezierControlPoints1.isEmpty() || primaryStroke.bezierControlPoints2.isEmpty())
+            return null
+
+        // Find the closest control point to the tap point
+        var closestDist = Float.MAX_VALUE
+        var closestIndex = -1
+        var closestArrayIdx = 1
+
+        // Check outgoing control point (controlPoints1)
+        if (editingAnchorIndex < primaryStroke.bezierControlPoints1.size) {
+            val control1 = primaryStroke.bezierControlPoints1[editingAnchorIndex]
+            val d = distance(control1, tapPoint)
+            if (d < closestDist) {
+                closestDist = d
+                closestIndex = editingAnchorIndex
+                closestArrayIdx = 1
+            }
+        }
+
+        // Check incoming control point (controlPoints2)
+        if (editingAnchorIndex < primaryStroke.bezierControlPoints2.size) {
+            val control2 = primaryStroke.bezierControlPoints2[editingAnchorIndex]
+            val d = distance(control2, tapPoint)
+            if (d < closestDist) {
+                closestDist = d
+                closestIndex = editingAnchorIndex
+                closestArrayIdx = 2
+            }
+        }
+
+        return if (closestIndex != -1) {
+            DrawingView.ControlPointToEdit(primaryStroke, closestIndex, closestArrayIdx)
+        } else {
+            null
+        }
+    }
 }

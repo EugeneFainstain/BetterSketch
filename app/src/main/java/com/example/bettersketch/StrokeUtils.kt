@@ -295,4 +295,58 @@ object StrokeUtils {
             Pair(closestStroke!!, closestPointIndex)
         } else null
     }
+
+    /**
+     * Select a stroke at the given tap point.
+     * Returns the index of the selected stroke, or -1 if none found.
+     *
+     * @param tapPointScreen Tap point in screen coordinates
+     * @param tapPointWorld Tap point in world coordinates
+     * @param strokes List of all strokes
+     * @param screenLongDimension The longer dimension of the screen (width or height)
+     * @param toScreenCoordinates Function to convert world coordinates to screen coordinates
+     * @return Index of the selected stroke, or -1 if none found
+     */
+    fun selectStrokeAt(
+        tapPointScreen: PointF,
+        tapPointWorld: PointF,
+        strokes: List<Stroke>,
+        screenLongDimension: Int,
+        toScreenCoordinates: (Float, Float) -> PointF
+    ): Int {
+        var minDistance = Float.MAX_VALUE
+        var closestStrokeIndex = -1
+        var closestPointWorld: PointF? = null
+
+        strokes.forEachIndexed { index, stroke ->
+            // Ensure stroke is up-to-date before accessing its points
+            if (stroke.needsToRegenerate) {
+                stroke.regenerateUnsmoothedPointsFromAnalytical()
+                stroke.needsToRegenerate = false
+            }
+
+            stroke.forEachStroke { s ->
+                for (pathPoint in s.pointsForDrawing) {
+                    val d = distance(pathPoint.point, tapPointWorld)
+                    if (d < minDistance) {
+                        minDistance = d
+                        closestStrokeIndex = index
+                        closestPointWorld = pathPoint.point
+                    }
+                }
+            }
+        }
+
+        if (closestStrokeIndex != -1 && closestPointWorld != null) {
+            val closestPointScreen = toScreenCoordinates(closestPointWorld!!.x, closestPointWorld!!.y)
+            val screenDistance = distance(closestPointScreen, tapPointScreen)
+
+            if (screenDistance > screenLongDimension / 16f) {
+                return -1
+            }
+
+            return closestStrokeIndex
+        }
+        return -1
+    }
 }

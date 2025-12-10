@@ -5,6 +5,7 @@ package com.example.bettersketch
     - If there are function calls with multiple parameters - prefer to put these parameters in the same line of code.
     - On function declarations - prefer to use less lines for declaring parameters
     - When specifying function parameters - specify just the parameter, don't do things like myFunction(s = s, b = b)
+    - When moving a function to a specialized class - try not to create passthrough wrappers for it here - call it directly, like GeometryUtils.evaluateCubicBezier() etc.
  */
 
 import android.content.Context
@@ -514,42 +515,14 @@ class DrawingView @JvmOverloads constructor(
 
     private fun selectStrokeAt(tapPointScreen: PointF): Boolean {
         val tapPointWorld = toWorldCoordinates(tapPointScreen.x, tapPointScreen.y)
-        var minDistance = Float.MAX_VALUE
-        var closestStrokeIndex = -1
-        var closestPointWorld: PointF? = null
 
         deselectAndDeHighlight() // do this first thing
 
-        strokes.forEachIndexed { index, stroke ->
-            // Ensure stroke is up-to-date before accessing its points
-            if (stroke.needsToRegenerate) {
-                stroke.regenerateUnsmoothedPointsFromAnalytical()
-                stroke.needsToRegenerate = false
-            }
+        val screenLongDimension = max(width, height)
+        val selectedIndex = StrokeUtils.selectStrokeAt(tapPointScreen, tapPointWorld, strokes, screenLongDimension, ::toScreenCoordinates)
 
-            stroke.forEachStroke { s ->
-                for (pathPoint in s.pointsForDrawing) {
-                    val d = distance(pathPoint.point, tapPointWorld)
-                    if (d < minDistance) {
-                        minDistance = d
-                        closestStrokeIndex = index
-                        closestPointWorld = pathPoint.point
-                    }
-                }
-            }
-        }
-
-        if (closestStrokeIndex != -1 && closestPointWorld != null) {
-            val closestPointScreen =
-                toScreenCoordinates(closestPointWorld!!.x, closestPointWorld!!.y)
-            val screenDistance = distance(closestPointScreen, tapPointScreen)
-            val screenLongDimension = max(width, height)
-
-            if (screenDistance > screenLongDimension / 16f) {
-                return false
-            }
-
-            val selected = strokes.getOrNull(closestStrokeIndex)
+        if (selectedIndex != -1) {
+            val selected = strokes.getOrNull(selectedIndex)
             if (selected != null) {
                 setStrokeHighlighted(selected)
                 currentPaint = Paint(selected.paint)
@@ -1136,7 +1109,10 @@ class DrawingView @JvmOverloads constructor(
                 // We're in bezier mode - find closest control point for second finger
                 if (event.pointerCount >= 2) {
                     val secondFingerWorldPoint = toWorldCoordinates(event.getX(1), event.getY(1))
-                    selectSecondFingerControlPoint(secondFingerWorldPoint, primaryAnchor.stroke, primaryAnchor.pointIndex)
+                    secondFingerControlEdit = BezierUtils.findClosestControlPoint(primaryAnchor.stroke, primaryAnchor.pointIndex, secondFingerWorldPoint)
+                    if (secondFingerControlEdit != null) {
+                        isSecondFingerEditing = true
+                    }
                 }
                 // Don't set twoFingerGestureOccured - this prevents canvas transformation
                 redrawHistory()
@@ -1359,44 +1335,6 @@ class DrawingView @JvmOverloads constructor(
         }
         redrawHistory()
         return true
-    }
-
-    private fun selectSecondFingerControlPoint(tapPoint: PointF, primaryStroke: Stroke, editingAnchorIndex: Int) {
-        if (!primaryStroke.renderAsBezier || primaryStroke.bezierControlPoints1.isEmpty() || primaryStroke.bezierControlPoints2.isEmpty())
-            return
-
-        // Find the closest control point to the tap point
-        var closestDist = Float.MAX_VALUE
-        var closestIndex = -1
-        var closestArrayIdx = 1
-
-        // Check outgoing control point (controlPoints1)
-        if (editingAnchorIndex < primaryStroke.bezierControlPoints1.size) {
-            val control1 = primaryStroke.bezierControlPoints1[editingAnchorIndex]
-            val d = distance(control1, tapPoint)
-            if (d < closestDist) {
-                closestDist = d
-                closestIndex = editingAnchorIndex
-                closestArrayIdx = 1
-            }
-        }
-
-        // Check incoming control point (controlPoints2)
-        if (editingAnchorIndex < primaryStroke.bezierControlPoints2.size) {
-            val control2 = primaryStroke.bezierControlPoints2[editingAnchorIndex]
-            val d = distance(control2, tapPoint)
-            if (d < closestDist) {
-                closestDist = d
-                closestIndex = editingAnchorIndex
-                closestArrayIdx = 2
-            }
-        }
-
-        if (closestIndex != -1) {
-            secondFingerControlEdit = ControlPointToEdit(primaryStroke, closestIndex, closestArrayIdx)
-            isSecondFingerEditing = true
-            invalidate()
-        }
     }
 
     private fun moveBezierAnchorAndControlPoints(anchorDx: Float, anchorDy: Float, controlDx: Float, controlDy: Float) {
