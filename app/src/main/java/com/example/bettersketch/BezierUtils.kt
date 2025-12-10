@@ -31,68 +31,28 @@ object BezierUtils {
 
     fun addBezierAnchorPoint(stroke: Stroke, pointIndex: Int) {
         // pointIndex is an index into pointsForDrawing (the smoothed/regenerated curve)
-        // We need to find which bezier segment this point falls on
 
         if (stroke.bezierAnchorPoints.size < 2 || pointIndex >= stroke.pointsForDrawing.size) return
+        if (stroke.bezierAnchorPointsForDrawingIndices.size != stroke.bezierAnchorPoints.size) return
 
-        // Calculate the distance along the curve at pointIndex
-        val targetDistance = stroke.pointsForDrawing[pointIndex].distance
-        val totalDistance = stroke.totalDistance
+        // Get the EXACT point where we want to add the anchor
+        val targetPoint = stroke.pointsForDrawing[pointIndex].point
 
-        if (totalDistance <= 0f) return
-
-        // Find which segment this distance falls into
-        val numSegments = stroke.bezierAnchorPoints.size - 1
-        val segmentLengths = mutableListOf<Float>()
-        var totalSegmentLength = 0f
-
-        // Estimate arc length for each segment
-        for (i in 0 until numSegments) {
-            val p0 = stroke.bezierAnchorPoints[i]
-            val p1 = stroke.bezierControlPoints1[i]
-            val p2 = stroke.bezierControlPoints2[i + 1]
-            val p3 = stroke.bezierAnchorPoints[i + 1]
-
-            // Estimate arc length by sampling
-            val samples = 20
-            var length = 0f
-            var prevPoint = p0
-
-            for (j in 1..samples) {
-                val t = j.toFloat() / samples
-                val point = GeometryUtils.evaluateCubicBezier(p0, p1, p2, p3, t)
-                length += distance(point, prevPoint)
-                prevPoint = point
-            }
-
-            segmentLengths.add(length)
-            totalSegmentLength += length
-        }
-
-        if (totalSegmentLength <= 0f) return
-
-        // Find which segment contains the target distance
-        val targetRatio = targetDistance / totalDistance
-        var accumulatedLength = 0f
+        // Find which bezier segment this point belongs to
         var segmentIndex = -1
-        var segmentStartRatio = 0f
+        for (i in 0 until stroke.bezierAnchorPointsForDrawingIndices.size - 1) {
+            val startIdx = stroke.bezierAnchorPointsForDrawingIndices[i]
+            val endIdx = stroke.bezierAnchorPointsForDrawingIndices[i + 1]
 
-        for (i in segmentLengths.indices) {
-            val segmentRatio = segmentLengths[i] / totalSegmentLength
-            val segmentEndRatio = accumulatedLength / totalSegmentLength + segmentRatio
-
-            if (targetRatio >= accumulatedLength / totalSegmentLength && targetRatio <= segmentEndRatio) {
+            if (pointIndex >= startIdx && pointIndex <= endIdx) {
                 segmentIndex = i
-                segmentStartRatio = accumulatedLength / totalSegmentLength
                 break
             }
-            accumulatedLength += segmentLengths[i]
         }
 
-        // If we couldn't find a segment, use the closest one
+        // If not found (shouldn't happen), default to middle segment
         if (segmentIndex == -1) {
-            segmentIndex = ((targetRatio * numSegments).toInt()).coerceIn(0, numSegments - 1)
-            segmentStartRatio = segmentLengths.take(segmentIndex).sum() / totalSegmentLength
+            segmentIndex = stroke.bezierAnchorPoints.size / 2
         }
 
         // Get the bezier segment to split
@@ -101,10 +61,12 @@ object BezierUtils {
         val p2 = stroke.bezierControlPoints2[segmentIndex + 1]
         val p3 = stroke.bezierAnchorPoints[segmentIndex + 1]
 
-        // Calculate t parameter within the segment
-        val segmentRatio = segmentLengths[segmentIndex] / totalSegmentLength
-        val t = if (segmentRatio > 0f) {
-            ((targetRatio - segmentStartRatio) / segmentRatio).coerceIn(0f, 1f)
+        // Calculate t parameter within the segment based on position
+        val startIdx = stroke.bezierAnchorPointsForDrawingIndices[segmentIndex]
+        val endIdx = stroke.bezierAnchorPointsForDrawingIndices[segmentIndex + 1]
+        val segmentLength = endIdx - startIdx
+        val t = if (segmentLength > 0) {
+            ((pointIndex - startIdx).toFloat() / segmentLength).coerceIn(0f, 1f)
         } else {
             0.5f
         }
@@ -117,16 +79,20 @@ object BezierUtils {
         val p012 = GeometryUtils.lerp(p01, p12, t)
         val p123 = GeometryUtils.lerp(p12, p23, t)
 
-        val newAnchor = GeometryUtils.lerp(p012, p123, t)
+        // Use the exact target point instead of the calculated split point
+        // This ensures the anchor appears exactly where the user placed it
+        val newAnchor = PointF(targetPoint.x, targetPoint.y)
 
         // Insert the new anchor at segmentIndex + 1
-        stroke.bezierAnchorPoints.add(segmentIndex + 1, PointF(newAnchor.x, newAnchor.y))
+        stroke.bezierAnchorPoints.add(segmentIndex + 1, newAnchor)
 
-        // For bezierAnchorIndices, estimate where this would be in the original points
-        val newIndex = (pointIndex * stroke.originalPoints.size / stroke.pointsForDrawing.size.toFloat()).toInt()
-        stroke.bezierAnchorIndices.add(segmentIndex + 1, newIndex)
+        // Insert the pointsForDrawing index (will be updated on next regeneration)
+        stroke.bezierAnchorPointsForDrawingIndices.add(segmentIndex + 1, pointIndex)
 
-        // Update control points - add the new ones
+        // Update legacy bezierAnchorIndices for compatibility
+        stroke.bezierAnchorIndices.add(segmentIndex + 1, pointIndex)
+
+        // Update control points - add the new ones from De Casteljau split
         stroke.bezierControlPoints1.add(segmentIndex + 1, PointF(p123.x, p123.y))
         stroke.bezierControlPoints2.add(segmentIndex + 1, PointF(p012.x, p012.y))
 
@@ -137,6 +103,7 @@ object BezierUtils {
         stroke.isModified = true
 
         // Regenerate the curve from the modified bezier data
+        // This will update bezierAnchorPointsForDrawingIndices with correct values
         stroke.regenerateBezierCurve()
         stroke.applySmoothing()
     }

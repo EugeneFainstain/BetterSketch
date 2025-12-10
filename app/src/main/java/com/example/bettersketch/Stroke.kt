@@ -31,6 +31,7 @@ class Stroke(
     val bezierControlPoints1: MutableList<PointF> = mutableListOf()    // "Before" control points (one per anchor, outgoing from anchor)
     val bezierControlPoints2: MutableList<PointF> = mutableListOf()    // "After" control points (one per anchor, incoming to anchor)
     val bezierAnchorIndices: MutableList<Int> = mutableListOf()        // Closest unsmoothedPoints indices to anchors
+    val bezierAnchorPointsForDrawingIndices: MutableList<Int> = mutableListOf()  // Index of each anchor in pointsForDrawing
     var renderAsBezier: Boolean = false                                 // Toggle for bezier rendering
 
     var totalDistance: Float = 0f
@@ -140,15 +141,20 @@ class Stroke(
             pointsPerSegment[segIndex] = idealPointCount.toInt().coerceAtLeast(1)
         }
 
-        // Update bezierAnchorIndices to reflect where anchors map to in the interpolated points
-        bezierAnchorIndices.clear()
+        // Update bezierAnchorPointsForDrawingIndices - track where each anchor appears in pointsForDrawing
+        bezierAnchorPointsForDrawingIndices.clear()
         var cumulativePoints = 0
         for (i in bezierAnchorPoints.indices) {
-            bezierAnchorIndices.add(cumulativePoints)
+            bezierAnchorPointsForDrawingIndices.add(cumulativePoints)
             if (i < numSegments) {
                 cumulativePoints += pointsPerSegment[i]
             }
         }
+
+        // Update bezierAnchorIndices to reflect where anchors map to in the interpolated points
+        // Note - this is a bug because it doesn't account for quadrupling of Bezier points
+        bezierAnchorIndices.clear()
+        bezierAnchorIndices.addAll(bezierAnchorPointsForDrawingIndices)
 
         // Generate points with anchors pinned
         val interpolatedPoints = mutableListOf<PointF>()
@@ -406,7 +412,7 @@ class Stroke(
         this.distancesForWeights.clear()
         this.distancesForWeights.addAll(other.distancesForWeights)
 
-        // Copy bezier data
+// Copy bezier data
         this.bezierAnchorPoints.clear()
         this.bezierAnchorPoints.addAll(other.bezierAnchorPoints.map { PointF(it.x, it.y) })
 
@@ -418,6 +424,9 @@ class Stroke(
 
         this.bezierAnchorIndices.clear()
         this.bezierAnchorIndices.addAll(other.bezierAnchorIndices)
+
+        this.bezierAnchorPointsForDrawingIndices.clear()
+        this.bezierAnchorPointsForDrawingIndices.addAll(other.bezierAnchorPointsForDrawingIndices)
 
         this.totalDistance = other.totalDistance
 
