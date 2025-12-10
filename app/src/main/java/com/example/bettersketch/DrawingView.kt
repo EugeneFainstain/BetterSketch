@@ -1,5 +1,12 @@
 package com.example.bettersketch
 
+/*
+   STYLE NOTES FOR LLMs - PAY ATTENTION!
+    - If there are function calls with multiple parameters - prefer to put these parameters in the same line of code.
+    - On function declarations - prefer to use less lines for declaring parameters
+    - When specifying function parameters - specify just the parameter, don't do things like myFunction(s = s, b = b)
+ */
+
 import android.content.Context
 import android.graphics.*
 import android.util.AttributeSet
@@ -211,15 +218,9 @@ class DrawingView @JvmOverloads constructor(
             val stroke = anchor.stroke
 
             // Check if this is a bezier anchor (empty weights list is the signal)
-            val isBezierAnchor =
-                anchor.weights.isEmpty() && stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()
+            val isBezierAnchor = anchor.weights.isEmpty() && stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()
 
-            StrokeUtils.removeAnchorPointAtIndex(
-                stroke = stroke,
-                pointIndex = anchor.pointIndex,
-                snapshotUnsmoothedPoints = anchor.snapshotUnsmoothedPoints,
-                isBezierAnchor = isBezierAnchor
-            )
+            StrokeUtils.removeAnchorPointAtIndex(stroke, anchor.pointIndex, anchor.snapshotUnsmoothedPoints, isBezierAnchor)
         }
 
         // Clear editing state
@@ -413,12 +414,7 @@ class DrawingView @JvmOverloads constructor(
                 Stroke.preprocessStroke(currentStrokeInProgress.unsmoothedPoints)
             val (finalUnsmoothedPoints, totalDistanceForNewStroke) = Stroke.calculatePathPointsWithDistances(
                 preprocessedUnsmoothedPoints.map { it.point })
-            val newStroke = Stroke(
-                finalUnsmoothedPoints,
-                Paint(currentStrokeInProgress.paint),
-                totalDistanceForNewStroke,
-                currentStrokeInProgress.smoothness
-            )
+            val newStroke = Stroke(finalUnsmoothedPoints, Paint(currentStrokeInProgress.paint), totalDistanceForNewStroke, currentStrokeInProgress.smoothness)
             strokes.add(newStroke)
             strokeInProgress = null
             setState(State.NORMAL_DRAWING)
@@ -595,14 +591,7 @@ class DrawingView @JvmOverloads constructor(
             // For bezier anchors, we don't use weights - we move the anchor directly
             // Create a weight list that's all zeros except at the anchor location
             // (We'll handle bezier anchor movement differently in moveEditingPoint)
-            anchorPointsToEdit.add(
-                AnchorPointToEdit(
-                    stroke = primaryStroke,
-                    pointIndex = primaryIndex,  // This is bezierAnchorPoints index, not unsmoothedPoints index
-                    snapshotUnsmoothedPoints = snapshot,
-                    weights = emptyList()  // Empty weights signals this is a bezier anchor
-                )
-            )
+            anchorPointsToEdit.add(AnchorPointToEdit(primaryStroke, primaryIndex, snapshot, emptyList()))
         } else {
             // Polyline/normal mode: primaryIndex is an index into unsmoothedPoints
             val primaryPoint = primaryStroke.unsmoothedPoints[primaryIndex].point
@@ -636,17 +625,9 @@ class DrawingView @JvmOverloads constructor(
                             }.toMutableList()
 
                             // Calculate weights for this anchor point
-                            val weights =
-                                PolylineUtils.calculateWeightsForAnchorPoint(s, closestAnchorIdx)
+                            val weights = PolylineUtils.calculateWeightsForAnchorPoint(s, closestAnchorIdx)
 
-                            anchorPointsToEdit.add(
-                                AnchorPointToEdit(
-                                    s,
-                                    closestAnchorIdx,
-                                    snapshot,
-                                    weights
-                                )
-                            )
+                            anchorPointsToEdit.add(AnchorPointToEdit(s, closestAnchorIdx, snapshot, weights))
                         }
                     }
                 }
@@ -899,12 +880,7 @@ class DrawingView @JvmOverloads constructor(
                                 associatedPoints.forEach { point ->
                                     val transformedPoint = floatArrayOf(point.x, point.y)
                                     globalTransform.mapPoints(transformedPoint)
-                                    canvas.drawCircle(
-                                        transformedPoint[0],
-                                        transformedPoint[1],
-                                        radius,
-                                        vertexPaint
-                                    )
+                                    canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, vertexPaint)
                                 }
                             }
 
@@ -968,20 +944,10 @@ class DrawingView @JvmOverloads constructor(
                                     globalTransform.mapPoints(control1Screen)
 
                                     // Draw handle line
-                                    canvas.drawLine(
-                                        anchorScreen[0], anchorScreen[1],
-                                        control1Screen[0], control1Screen[1],
-                                        handleLinePaint
-                                    )
+                                    canvas.drawLine(anchorScreen[0], anchorScreen[1], control1Screen[0], control1Screen[1], handleLinePaint)
 
                                     // Draw control point square
-                                    canvas.drawRect(
-                                        control1Screen[0] - controlSize,
-                                        control1Screen[1] - controlSize,
-                                        control1Screen[0] + controlSize,
-                                        control1Screen[1] + controlSize,
-                                        controlPointPaint
-                                    )
+                                    canvas.drawRect(control1Screen[0] - controlSize, control1Screen[1] - controlSize, control1Screen[0] + controlSize, control1Screen[1] + controlSize, controlPointPaint)
                                 }
 
                                 // Draw incoming control point (controlPoints2)
@@ -991,20 +957,10 @@ class DrawingView @JvmOverloads constructor(
                                     globalTransform.mapPoints(control2Screen)
 
                                     // Draw handle line
-                                    canvas.drawLine(
-                                        anchorScreen[0], anchorScreen[1],
-                                        control2Screen[0], control2Screen[1],
-                                        handleLinePaint
-                                    )
+                                    canvas.drawLine(anchorScreen[0], anchorScreen[1], control2Screen[0], control2Screen[1], handleLinePaint)
 
                                     // Draw control point square
-                                    canvas.drawRect(
-                                        control2Screen[0] - controlSize,
-                                        control2Screen[1] - controlSize,
-                                        control2Screen[0] + controlSize,
-                                        control2Screen[1] + controlSize,
-                                        controlPointPaint
-                                    )
+                                    canvas.drawRect(control2Screen[0] - controlSize, control2Screen[1] - controlSize, control2Screen[0] + controlSize, control2Screen[1] + controlSize, controlPointPaint)
                                 }
                             }
                         }
@@ -1026,12 +982,7 @@ class DrawingView @JvmOverloads constructor(
                                     color = Color.RED
                                 }
                                 val radius = haloPaintToUse.strokeWidth / 1.5f
-                                canvas.drawCircle(
-                                    transformedPoint[0],
-                                    transformedPoint[1],
-                                    radius,
-                                    previewPaint
-                                )
+                                canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, previewPaint)
                             }
                         }
                     }
@@ -1185,11 +1136,7 @@ class DrawingView @JvmOverloads constructor(
                 // We're in bezier mode - find closest control point for second finger
                 if (event.pointerCount >= 2) {
                     val secondFingerWorldPoint = toWorldCoordinates(event.getX(1), event.getY(1))
-                    selectSecondFingerControlPoint(
-                        secondFingerWorldPoint,
-                        primaryAnchor.stroke,
-                        primaryAnchor.pointIndex
-                    )
+                    selectSecondFingerControlPoint(secondFingerWorldPoint, primaryAnchor.stroke, primaryAnchor.pointIndex)
                 }
                 // Don't set twoFingerGestureOccured - this prevents canvas transformation
                 redrawHistory()
@@ -1392,25 +1339,14 @@ class DrawingView @JvmOverloads constructor(
                             if (initialHeight != 0f) {
                                 val newHeight = initialHeight - totalDy
                                 val scaleY = newHeight / initialHeight
-                                screenspaceTransform.preScale(
-                                    1.0f,
-                                    scaleY,
-                                    centerScreen.x,
-                                    centerScreen.y
-                                )
+                                screenspaceTransform.preScale(1.0f, scaleY, centerScreen.x, centerScreen.y)
                             }
 
                             // Calculate the world-space transform matrix to be applied to stroke points
                             val worldspaceTransform = Matrix()
                             worldspaceTransform.set(globalTransform)                                // 1. First thing, transform everything to screen-space
-                            postTransform(
-                                worldspaceTransform,
-                                screenspaceTransform
-                            )  // 2. Next, apply our transformation, in screen-space
-                            postTransform(
-                                worldspaceTransform,
-                                inverseGlobalTransform
-                            )// 3. Finally, transform back to world-space
+                            postTransform(worldspaceTransform, screenspaceTransform)  // 2. Next, apply our transformation, in screen-space
+                            postTransform(worldspaceTransform, inverseGlobalTransform)// 3. Finally, transform back to world-space
 
                             // Applying the transformations, in world-space
                             StrokeUtils.transformStroke(current, worldspaceTransform)
@@ -1425,15 +1361,9 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    private fun selectSecondFingerControlPoint(
-        tapPoint: PointF,
-        primaryStroke: Stroke,
-        editingAnchorIndex: Int
-    ) {
-        if (!primaryStroke.renderAsBezier ||
-            primaryStroke.bezierControlPoints1.isEmpty() ||
-            primaryStroke.bezierControlPoints2.isEmpty()
-        ) return
+    private fun selectSecondFingerControlPoint(tapPoint: PointF, primaryStroke: Stroke, editingAnchorIndex: Int) {
+        if (!primaryStroke.renderAsBezier || primaryStroke.bezierControlPoints1.isEmpty() || primaryStroke.bezierControlPoints2.isEmpty())
+            return
 
         // Find the closest control point to the tap point
         var closestDist = Float.MAX_VALUE
@@ -1463,35 +1393,17 @@ class DrawingView @JvmOverloads constructor(
         }
 
         if (closestIndex != -1) {
-            secondFingerControlEdit = ControlPointToEdit(
-                stroke = primaryStroke,
-                controlIndex = closestIndex,
-                arrayIdx = closestArrayIdx
-            )
+            secondFingerControlEdit = ControlPointToEdit(primaryStroke, closestIndex, closestArrayIdx)
             isSecondFingerEditing = true
             invalidate()
         }
     }
 
-    private fun moveBezierAnchorAndControlPoints(
-        anchorDx: Float,
-        anchorDy: Float,
-        controlDx: Float,
-        controlDy: Float
-    ) {
+    private fun moveBezierAnchorAndControlPoints(anchorDx: Float, anchorDy: Float, controlDx: Float, controlDy: Float) {
         val controlEdit = secondFingerControlEdit ?: return
         val primaryAnchor = anchorPointsToEdit.firstOrNull() ?: return
 
-        BezierUtils.moveBezierAnchorAndControlPoint(
-            controlEdit.stroke,
-            primaryAnchor.pointIndex,
-            controlEdit.controlIndex,
-            (controlEdit.arrayIdx == 1),
-            anchorDx,
-            anchorDy,
-            controlDx,
-            controlDy
-        )
+        BezierUtils.moveBezierAnchorAndControlPoint(controlEdit.stroke, primaryAnchor.pointIndex, controlEdit.controlIndex, (controlEdit.arrayIdx == 1), anchorDx, anchorDy, controlDx, controlDy)
 
         invalidate()
     }
@@ -1532,12 +1444,7 @@ class DrawingView @JvmOverloads constructor(
 
                 // Move anchor (finger 0) and control point (finger 1) together
                 // This also handles the opposite control point automatically
-                moveBezierAnchorAndControlPoints(
-                    finger0Delta[0],
-                    finger0Delta[1],
-                    finger1Delta[0],
-                    finger1Delta[1]
-                )
+                moveBezierAnchorAndControlPoints(finger0Delta[0], finger0Delta[1], finger1Delta[0], finger1Delta[1])
 
                 redrawHistory()
                 return true  // Early return - don't do canvas transformation
