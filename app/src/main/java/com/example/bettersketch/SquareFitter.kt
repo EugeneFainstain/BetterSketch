@@ -51,9 +51,9 @@ object SquareFitter {
         var bestCost = Float.MAX_VALUE
 
         for (startAngle in candidateAngles) {
-            val (optimizedAngle, cost) = optimizeAngle(
-                centerX, centerY, sideLength, startAngle.toFloat(), points
-            )
+            val optimizedAngle = GeometryUtils.goldenSectionSearch(startAngle.toFloat(), PI.toFloat() / 4f, 0.001f)
+                { angle -> evaluateSquareFit(centerX, centerY, sideLength, angle, points) }
+            val cost = evaluateSquareFit(centerX, centerY, sideLength, optimizedAngle, points)
             if (cost < bestCost) {
                 bestCost = cost
                 bestAngle = optimizedAngle
@@ -62,10 +62,14 @@ object SquareFitter {
 
         // Step 4: Cyclic coordinate descent
         repeat(10) {
-            centerX = optimizeCenterX(centerX, centerY, sideLength, bestAngle, points)
-            centerY = optimizeCenterY(centerX, centerY, sideLength, bestAngle, points)
-            sideLength = optimizeSideLength(centerX, centerY, sideLength, bestAngle, points)
-            bestAngle = optimizeAngle(centerX, centerY, sideLength, bestAngle, points).first
+            centerX = GeometryUtils.goldenSectionSearch(centerX, sideLength * 0.5f, 0.1f)
+                { cx -> evaluateSquareFit(cx, centerY, sideLength, bestAngle, points) }
+            centerY = GeometryUtils.goldenSectionSearch(centerY, sideLength * 0.5f, 0.1f)
+                { cy -> evaluateSquareFit(centerX, cy, sideLength, bestAngle, points) }
+            sideLength = GeometryUtils.goldenSectionSearch(sideLength, sideLength * 0.5f, 0.1f, lowerBound = 1f)
+                { sl -> evaluateSquareFit(centerX, centerY, sl, bestAngle, points)  }
+            bestAngle = GeometryUtils.goldenSectionSearch(bestAngle, PI.toFloat() / 4f, 0.001f)
+                { angle -> evaluateSquareFit(centerX, centerY, sideLength, angle, points) }.let { optimizedAngle -> optimizedAngle }
         }
 
         val params = SquareParams(
@@ -82,161 +86,7 @@ object SquareFitter {
         return FitResult(params, normalizedError, fittedStroke)
     }
 
-    private fun optimizeCenterX(
-        initialCenterX: Float,
-        centerY: Float,
-        sideLength: Float,
-        angle: Float,
-        points: List<PointF>
-    ): Float {
-        val goldenRatio = 0.618033988749895f
-        val tolerance = 0.1f
-        val searchRange = sideLength * 0.5f
-
-        var a = initialCenterX - searchRange
-        var b = initialCenterX + searchRange
-        var c = b - (b - a) * goldenRatio
-        var d = a + (b - a) * goldenRatio
-
-        var fc = evaluateFit(c, centerY, sideLength, angle, points)
-        var fd = evaluateFit(d, centerY, sideLength, angle, points)
-
-        while (abs(b - a) > tolerance) {
-            if (fc < fd) {
-                b = d
-                d = c
-                fd = fc
-                c = b - (b - a) * goldenRatio
-                fc = evaluateFit(c, centerY, sideLength, angle, points)
-            } else {
-                a = c
-                c = d
-                fc = fd
-                d = a + (b - a) * goldenRatio
-                fd = evaluateFit(d, centerY, sideLength, angle, points)
-            }
-        }
-
-        return (a + b) / 2f
-    }
-
-    private fun optimizeCenterY(
-        centerX: Float,
-        initialCenterY: Float,
-        sideLength: Float,
-        angle: Float,
-        points: List<PointF>
-    ): Float {
-        val goldenRatio = 0.618033988749895f
-        val tolerance = 0.1f
-        val searchRange = sideLength * 0.5f
-
-        var a = initialCenterY - searchRange
-        var b = initialCenterY + searchRange
-        var c = b - (b - a) * goldenRatio
-        var d = a + (b - a) * goldenRatio
-
-        var fc = evaluateFit(centerX, c, sideLength, angle, points)
-        var fd = evaluateFit(centerX, d, sideLength, angle, points)
-
-        while (abs(b - a) > tolerance) {
-            if (fc < fd) {
-                b = d
-                d = c
-                fd = fc
-                c = b - (b - a) * goldenRatio
-                fc = evaluateFit(centerX, c, sideLength, angle, points)
-            } else {
-                a = c
-                c = d
-                fc = fd
-                d = a + (b - a) * goldenRatio
-                fd = evaluateFit(centerX, d, sideLength, angle, points)
-            }
-        }
-
-        return (a + b) / 2f
-    }
-
-    private fun optimizeSideLength(
-        centerX: Float,
-        centerY: Float,
-        initialSideLength: Float,
-        angle: Float,
-        points: List<PointF>
-    ): Float {
-        val goldenRatio = 0.618033988749895f
-        val tolerance = 0.1f
-        val searchRange = initialSideLength * 0.5f
-
-        var a = max(1f, initialSideLength - searchRange)
-        var b = initialSideLength + searchRange
-        var c = b - (b - a) * goldenRatio
-        var d = a + (b - a) * goldenRatio
-
-        var fc = evaluateFit(centerX, centerY, c, angle, points)
-        var fd = evaluateFit(centerX, centerY, d, angle, points)
-
-        while (abs(b - a) > tolerance) {
-            if (fc < fd) {
-                b = d
-                d = c
-                fd = fc
-                c = b - (b - a) * goldenRatio
-                fc = evaluateFit(centerX, centerY, c, angle, points)
-            } else {
-                a = c
-                c = d
-                fc = fd
-                d = a + (b - a) * goldenRatio
-                fd = evaluateFit(centerX, centerY, d, angle, points)
-            }
-        }
-
-        return (a + b) / 2f
-    }
-
-    private fun optimizeAngle(
-        centerX: Float,
-        centerY: Float,
-        sideLength: Float,
-        startAngle: Float,
-        points: List<PointF>
-    ): Pair<Float, Float> {
-        val goldenRatio = 0.618033988749895f
-        val tolerance = 0.001f
-        val searchRange = PI.toFloat() / 4f
-
-        var a = startAngle - searchRange
-        var b = startAngle + searchRange
-        var c = b - (b - a) * goldenRatio
-        var d = a + (b - a) * goldenRatio
-
-        var fc = evaluateFit(centerX, centerY, sideLength, c, points)
-        var fd = evaluateFit(centerX, centerY, sideLength, d, points)
-
-        while (abs(b - a) > tolerance) {
-            if (fc < fd) {
-                b = d
-                d = c
-                fd = fc
-                c = b - (b - a) * goldenRatio
-                fc = evaluateFit(centerX, centerY, sideLength, c, points)
-            } else {
-                a = c
-                c = d
-                fc = fd
-                d = a + (b - a) * goldenRatio
-                fd = evaluateFit(centerX, centerY, sideLength, d, points)
-            }
-        }
-
-        val bestAngle = (a + b) / 2f
-        val bestCost = evaluateFit(centerX, centerY, sideLength, bestAngle, points)
-        return Pair(bestAngle, bestCost)
-    }
-
-    private fun evaluateFit(
+    private fun evaluateSquareFit(
         centerX: Float,
         centerY: Float,
         sideLength: Float,

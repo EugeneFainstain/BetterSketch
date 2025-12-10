@@ -1,6 +1,8 @@
 package com.example.bettersketch
 
 import android.graphics.PointF
+import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.sqrt
 import android.graphics.Matrix
 
@@ -83,5 +85,56 @@ object GeometryUtils {
         val scaleX = values[Matrix.MSCALE_X]
         val skewY = values[Matrix.MSKEW_Y]
         return sqrt(scaleX * scaleX + skewY * skewY)
+    }
+
+
+    /**
+     * Generic golden section search optimization for a single parameter.
+     * Uses the golden ratio method to find the minimum of a univariate function.
+     *
+     * @param initialValue The starting value for the parameter to optimize
+     * @param searchRange The range to search around the initial value (initial ± searchRange)
+     * @param tolerance The convergence tolerance for the search
+     * @param lowerBound Optional lower bound for the search (null if no bound)
+     * @param evaluateFunction Function that takes a parameter value and returns the cost/error
+     * @return The optimized parameter value
+     */
+    fun goldenSectionSearch(
+        initialValue: Float,
+        searchRange: Float,
+        tolerance: Float,
+        lowerBound: Float? = null,
+        evaluateFunction: (Float) -> Float
+    ): Float {
+        val goldenRatio = 0.618033988749895f
+
+        var a = initialValue - searchRange
+        if (lowerBound != null) {
+            a = max(lowerBound, a)
+        }
+        var b = initialValue + searchRange
+        var c = b - (b - a) * goldenRatio
+        var d = a + (b - a) * goldenRatio
+
+        var fc = evaluateFunction(c)
+        var fd = evaluateFunction(d)
+
+        while (abs(b - a) > tolerance) {
+            if (fc < fd) {
+                b = d
+                d = c
+                fd = fc
+                c = b - (b - a) * goldenRatio
+                fc = evaluateFunction(c)
+            } else {
+                a = c
+                c = d
+                fc = fd
+                d = a + (b - a) * goldenRatio
+                fd = evaluateFunction(d)
+            }
+        }
+
+        return (a + b) / 2f
     }
 }
