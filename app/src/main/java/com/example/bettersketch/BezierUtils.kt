@@ -347,7 +347,6 @@ object BezierUtils {
         }
     }
 
-
     /**
      * Move a bezier anchor and one control point while maintaining collinearity with the opposite control.
      * Used for two-finger bezier control point editing.
@@ -413,16 +412,11 @@ object BezierUtils {
 
         // Update the opposite control point to maintain collinearity
         if (oppositeControl != null && newPrimaryDistance > 0f) {
-            // Calculate how much the primary lever length changed
-            val leverLengthChange = newPrimaryDistance - originalPrimaryDistance
 
-            // The opposite lever should change by the same amount
-            val newOppositeDistance = originalOppositeDistance + leverLengthChange
-
-            if (newOppositeDistance > 0f) {
-                // Normalize the primary direction and scale by new opposite distance
-                val oppositeDirX = -(primaryDirX / newPrimaryDistance) * newOppositeDistance
-                val oppositeDirY = -(primaryDirY / newPrimaryDistance) * newOppositeDistance
+            if (originalPrimaryDistance > 0.001f) {
+                // The opposite lever should change proportionally to the primary lever
+                val oppositeDirX = -primaryDirX * originalOppositeDistance / originalPrimaryDistance
+                val oppositeDirY = -primaryDirY * originalOppositeDistance / originalPrimaryDistance
 
                 // Set the opposite control point position relative to the (now moved) anchor
                 oppositeControl.set(anchorPoint.x + oppositeDirX, anchorPoint.y + oppositeDirY)

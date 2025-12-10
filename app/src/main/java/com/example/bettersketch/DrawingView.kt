@@ -1075,7 +1075,7 @@ class DrawingView @JvmOverloads constructor(
 
         // Calculate time difference between first and second finger
         val timeBetweenFingers = System.currentTimeMillis() - firstFingerDownTime
-        val simultaneousThreshold = 100L // milliseconds - tune this value as needed
+        val simultaneousThreshold = 40L // milliseconds - tune this value as needed
 
         // Determine if this should be a control point edit gesture:
         // 1. Must be in stroke editing mode
