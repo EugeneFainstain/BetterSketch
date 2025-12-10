@@ -96,7 +96,8 @@ class DrawingView @JvmOverloads constructor(
         val stroke: Stroke,
         val pointIndex: Int,
         val snapshotUnsmoothedPoints: MutableList<PathPoint>,
-        val weights: List<Float>
+        val weightsForPolylineEditing: List<Float>,
+        val isBezierAnchor: Boolean
     )
 
     data class ControlPointToEdit(
@@ -209,25 +210,6 @@ class DrawingView @JvmOverloads constructor(
             // Polyline mode: add a polyline anchor
             PolylineUtils.addPolylineAnchorPoint(stroke, index)
         }
-    }
-
-    fun removeAnchorPointAtEditingIndex() {
-        if (anchorPointsToEdit.isEmpty()) return
-
-        // Remove anchor points from all affected strokes
-        anchorPointsToEdit.forEach { anchor ->
-            val stroke = anchor.stroke
-
-            // Check if this is a bezier anchor (empty weights list is the signal)
-            val isBezierAnchor = anchor.weights.isEmpty() && stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()
-
-            StrokeUtils.removeAnchorPointAtIndex(stroke, anchor.pointIndex, anchor.snapshotUnsmoothedPoints, isBezierAnchor)
-        }
-
-        // Clear editing state
-        anchorPointsToEdit.clear()
-
-        setState(currentState) // Refresh UI and Canvas
     }
 
     fun undoModificationsForHighlightedStrokes() {
@@ -561,10 +543,10 @@ class DrawingView @JvmOverloads constructor(
                 PathPoint(PointF(it.point.x, it.point.y), it.distance)
             }.toMutableList()
 
-            // For bezier anchors, we don't use weights - we move the anchor directly
+            // For bezier anchors, we don't use weightsForPolylineEditing - we move the anchor directly
             // Create a weight list that's all zeros except at the anchor location
             // (We'll handle bezier anchor movement differently in moveEditingPoint)
-            anchorPointsToEdit.add(AnchorPointToEdit(primaryStroke, primaryIndex, snapshot, emptyList()))
+            anchorPointsToEdit.add(AnchorPointToEdit(primaryStroke, primaryIndex, snapshot, emptyList(), true))
         } else {
             // Polyline/normal mode: primaryIndex is an index into unsmoothedPoints
             val primaryPoint = primaryStroke.unsmoothedPoints[primaryIndex].point
@@ -597,10 +579,10 @@ class DrawingView @JvmOverloads constructor(
                                 PathPoint(PointF(it.point.x, it.point.y), it.distance)
                             }.toMutableList()
 
-                            // Calculate weights for this anchor point
-                            val weights = PolylineUtils.calculateWeightsForAnchorPoint(s, closestAnchorIdx)
+                            // Calculate weightsForPolylineEditing for this anchor point
+                            val weightsForPolylineEditing = PolylineUtils.calculateWeightsForAnchorPoint(s, closestAnchorIdx)
 
-                            anchorPointsToEdit.add(AnchorPointToEdit(s, closestAnchorIdx, snapshot, weights))
+                            anchorPointsToEdit.add(AnchorPointToEdit(s, closestAnchorIdx, snapshot, weightsForPolylineEditing, false))
                         }
                     }
                 }
@@ -700,13 +682,13 @@ class DrawingView @JvmOverloads constructor(
     private fun moveEditingPoint(dx: Float, dy: Float) {
         // Move all anchor points (either bezier anchors or polyline anchors)
         anchorPointsToEdit.forEach { anchor ->
-            // Check if this is a bezier anchor (empty weights list is the signal)
-            if (anchor.weights.isEmpty() && anchor.stroke.renderAsBezier) {
+            // Check if this is a bezier anchor (explicit flag)
+            if (anchor.isBezierAnchor) {
                 // Bezier mode: move the bezier anchor AND its associated control points
                 BezierUtils.moveBezierAnchor(anchor.stroke, anchor.pointIndex, dx, dy)
             } else {
                 // Polyline mode: apply weighted transformation to unsmoothedPoints
-                PolylineUtils.movePolylineAnchorWithWeights(anchor.stroke, anchor.weights, dx, dy)
+                PolylineUtils.movePolylineAnchorWithWeights(anchor.stroke, anchor.weightsForPolylineEditing, dx, dy)
             }
         }
 
@@ -1105,7 +1087,7 @@ class DrawingView @JvmOverloads constructor(
 
         if (shouldEditControlPoint) {
             val primaryAnchor = anchorPointsToEdit.firstOrNull()
-            if (primaryAnchor != null && primaryAnchor.stroke.renderAsBezier && primaryAnchor.weights.isEmpty()) {
+            if (primaryAnchor != null && primaryAnchor.isBezierAnchor) {
                 // We're in bezier mode - find closest control point for second finger
                 if (event.pointerCount >= 2) {
                     val secondFingerWorldPoint = toWorldCoordinates(event.getX(1), event.getY(1))
@@ -1119,7 +1101,7 @@ class DrawingView @JvmOverloads constructor(
                 return true
             }
         }
-
+        
         // Otherwise, this is a normal two-finger gesture (canvas transformation)
         redrawHistory()
         twoFingerGestureOccured = true
@@ -1154,7 +1136,16 @@ class DrawingView @JvmOverloads constructor(
 
             // Check if finger was released over the remove anchor point button while editing
             if (currentState == State.STROKE_EDITING && isFingerOverRemoveButton) {
-                removeAnchorPointAtEditingIndex()
+                // Remove anchor points from all affected strokes
+                if (anchorPointsToEdit.isNotEmpty()) {
+                    anchorPointsToEdit.forEach { anchor ->
+                        StrokeUtils.removeAnchorPointAtIndex(anchor.stroke, anchor.pointIndex, anchor.snapshotUnsmoothedPoints, anchor.isBezierAnchor)
+                    }
+
+                    // Clear editing state
+                    anchorPointsToEdit.clear()
+                }
+
                 setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 isFingerOverRemoveButton = false
                 return@run
