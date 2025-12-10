@@ -103,7 +103,8 @@ class DrawingView @JvmOverloads constructor(
     )
 
     // Transformation state
-    private val globalTransform = Matrix() // Matrix for transforming from WORLD-SPACE to SCREEN-SPACE (a.k.a the VIEW MATRIX)
+    private val globalTransform =
+        Matrix() // Matrix for transforming from WORLD-SPACE to SCREEN-SPACE (a.k.a the VIEW MATRIX)
     private var dragGestureHasEnded = false
     private var twoFingerGestureOccured = false
     private var threeFingerGestureOccured = false
@@ -123,7 +124,11 @@ class DrawingView @JvmOverloads constructor(
 
 
     init {
-        haloOffset = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 16f, context.resources.displayMetrics)
+        haloOffset = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            16f,
+            context.resources.displayMetrics
+        )
         haloPaint = Paint().apply {
             isAntiAlias = true
             isDither = true
@@ -143,14 +148,15 @@ class DrawingView @JvmOverloads constructor(
 
     // Public properties
     public val getHighlightedStrokes: List<Stroke> get() = strokes.filter { it.isHighlighted }
-    public val singleHighlightedStroke: Stroke? get() {
-        // Return the single highlighted stroke if exactly one is highlighted
-        val highlighted = getHighlightedStrokes
-        return when (highlighted.size) {
-            1 -> highlighted.first()
-            else -> null
+    public val singleHighlightedStroke: Stroke?
+        get() {
+            // Return the single highlighted stroke if exactly one is highlighted
+            val highlighted = getHighlightedStrokes
+            return when (highlighted.size) {
+                1 -> highlighted.first()
+                else -> null
+            }
         }
-    }
 
     fun isEditing(): Boolean {
         return currentState == State.CHOSEN_STROKE_IN_NORMAL_MODE || currentState == State.STROKE_EDITING
@@ -174,7 +180,11 @@ class DrawingView @JvmOverloads constructor(
     }
 
     // Data class to hold the result of finding closest point across multiple strokes
-    private data class ClosestPointResult(val stroke: Stroke, val pointIndex: Int, val distance: Float)
+    private data class ClosestPointResult(
+        val stroke: Stroke,
+        val pointIndex: Int,
+        val distance: Float
+    )
 
     fun addAnchorPointAtIndex(index: Int) {
         // Use the stored location from the preview
@@ -201,7 +211,8 @@ class DrawingView @JvmOverloads constructor(
             val stroke = anchor.stroke
 
             // Check if this is a bezier anchor (empty weights list is the signal)
-            val isBezierAnchor = anchor.weights.isEmpty() && stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()
+            val isBezierAnchor =
+                anchor.weights.isEmpty() && stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()
 
             StrokeUtils.removeAnchorPointAtIndex(
                 stroke = stroke,
@@ -294,14 +305,15 @@ class DrawingView @JvmOverloads constructor(
         // Check if this gesture started from a button
         val gestureTag = mainGestureHelper?.activeGestureTag
 
-        selectionGestureInProgress      = (gestureTag == MainActivity.tagSelectionGesture)
+        selectionGestureInProgress = (gestureTag == MainActivity.tagSelectionGesture)
         addAnchorPointGestureInProgress = (gestureTag == MainActivity.tagAddAnchorPointGesture)
 
         advancedGestureInProgress = selectionGestureInProgress || addAnchorPointGestureInProgress
 
         // Check if finger is over the remove anchor point button (when in editing mode and dragging an anchor)
         if (currentState == State.STROKE_EDITING && anchorPointsToEdit.isNotEmpty()) {
-            isFingerOverRemoveButton = isEventOverRemoveAnchorButton(event) && !addAnchorPointGestureInProgress
+            isFingerOverRemoveButton =
+                isEventOverRemoveAnchorButton(event) && !addAnchorPointGestureInProgress
         } else {
             isFingerOverRemoveButton = false
         }
@@ -386,7 +398,7 @@ class DrawingView @JvmOverloads constructor(
 
     private fun touchUp() {
         strokeInProgress?.let {
-            if( it.totalDistance > 20f )
+            if (it.totalDistance > 20f)
                 commitStrokeInProgress()
             else {
                 strokeInProgress = null
@@ -397,9 +409,16 @@ class DrawingView @JvmOverloads constructor(
 
     private fun commitStrokeInProgress() {
         strokeInProgress?.let { currentStrokeInProgress ->
-            val preprocessedUnsmoothedPoints = Stroke.preprocessStroke(currentStrokeInProgress.unsmoothedPoints)
-            val (finalUnsmoothedPoints, totalDistanceForNewStroke) = Stroke.calculatePathPointsWithDistances(preprocessedUnsmoothedPoints.map { it.point })
-            val newStroke = Stroke(finalUnsmoothedPoints, Paint(currentStrokeInProgress.paint), totalDistanceForNewStroke, currentStrokeInProgress.smoothness)
+            val preprocessedUnsmoothedPoints =
+                Stroke.preprocessStroke(currentStrokeInProgress.unsmoothedPoints)
+            val (finalUnsmoothedPoints, totalDistanceForNewStroke) = Stroke.calculatePathPointsWithDistances(
+                preprocessedUnsmoothedPoints.map { it.point })
+            val newStroke = Stroke(
+                finalUnsmoothedPoints,
+                Paint(currentStrokeInProgress.paint),
+                totalDistanceForNewStroke,
+                currentStrokeInProgress.smoothness
+            )
             strokes.add(newStroke)
             strokeInProgress = null
             setState(State.NORMAL_DRAWING)
@@ -525,7 +544,8 @@ class DrawingView @JvmOverloads constructor(
         }
 
         if (closestStrokeIndex != -1 && closestPointWorld != null) {
-            val closestPointScreen = toScreenCoordinates(closestPointWorld!!.x, closestPointWorld!!.y)
+            val closestPointScreen =
+                toScreenCoordinates(closestPointWorld!!.x, closestPointWorld!!.y)
             val screenDistance = distance(closestPointScreen, tapPointScreen)
             val screenLongDimension = max(width, height)
 
@@ -553,12 +573,15 @@ class DrawingView @JvmOverloads constructor(
         anchorPointsToEdit.clear()
 
         // Find the absolute nearest ANCHOR point across all highlighted strokes
-        val nearestResult = StrokeUtils.findClosestAnchorPointAcrossAllStrokes(tapPoint, getHighlightedStrokes) ?: return false
+        val nearestResult =
+            StrokeUtils.findClosestAnchorPointAcrossAllStrokes(tapPoint, getHighlightedStrokes)
+                ?: return false
         // Primary stroke is the stroke who's endpoint has been selected for editing
         val (primaryStroke, primaryIndex) = nearestResult
 
         // Determine if we're in bezier mode or polyline mode
-        val inBezierMode = primaryStroke.renderAsBezier && primaryStroke.bezierAnchorPoints.isNotEmpty()
+        val inBezierMode =
+            primaryStroke.renderAsBezier && primaryStroke.bezierAnchorPoints.isNotEmpty()
 
         if (inBezierMode) {
             // Bezier mode: primaryIndex is an index into bezierAnchorPoints
@@ -613,14 +636,15 @@ class DrawingView @JvmOverloads constructor(
                             }.toMutableList()
 
                             // Calculate weights for this anchor point
-                            val weights = calculateWeightsForAnchorPoint(s, closestAnchorIdx)
+                            val weights =
+                                PolylineUtils.calculateWeightsForAnchorPoint(s, closestAnchorIdx)
 
                             anchorPointsToEdit.add(
                                 AnchorPointToEdit(
-                                    stroke = s,
-                                    pointIndex = closestAnchorIdx,
-                                    snapshotUnsmoothedPoints = snapshot,
-                                    weights = weights
+                                    s,
+                                    closestAnchorIdx,
+                                    snapshot,
+                                    weights
                                 )
                             )
                         }
@@ -634,7 +658,7 @@ class DrawingView @JvmOverloads constructor(
 
     fun deleteStrokes() {
         val highlightedStrokes = getHighlightedStrokes
-        
+
         if (highlightedStrokes.isNotEmpty()) {
             // Check if we should revert instead of delete
             if (highlightedStrokes.size == 1) {
@@ -658,8 +682,7 @@ class DrawingView @JvmOverloads constructor(
             strokes.removeAt(strokes.lastIndex)
         }
 
-        if( currentState == State.NORMAL_DRAWING )
-        {
+        if (currentState == State.NORMAL_DRAWING) {
             deselectAndDeHighlight() // Deselect everything
             setState(currentState) // Update screen and UI
         } else {
@@ -723,52 +746,19 @@ class DrawingView @JvmOverloads constructor(
     private fun moveEditingPoint(dx: Float, dy: Float) {
         // Move all anchor points (either bezier anchors or polyline anchors)
         anchorPointsToEdit.forEach { anchor ->
-            anchor.stroke.isModified = true
-
             // Check if this is a bezier anchor (empty weights list is the signal)
             if (anchor.weights.isEmpty() && anchor.stroke.renderAsBezier) {
                 // Bezier mode: move the bezier anchor AND its associated control points
-                if (anchor.pointIndex >= 0 && anchor.pointIndex < anchor.stroke.bezierAnchorPoints.size) {
-                    // Move the anchor point itself
-                    anchor.stroke.bezierAnchorPoints[anchor.pointIndex].offset(dx, dy)
-
-                    // Move both control points associated with this anchor
-                    if (anchor.pointIndex < anchor.stroke.bezierControlPoints1.size) {
-                        anchor.stroke.bezierControlPoints1[anchor.pointIndex].offset(dx, dy)
-                    }
-                    if (anchor.pointIndex < anchor.stroke.bezierControlPoints2.size) {
-                        anchor.stroke.bezierControlPoints2[anchor.pointIndex].offset(dx, dy)
-                    }
-
-                    // Regenerate the curve from the modified bezier data
-                    anchor.stroke.regenerateBezierCurve()
-                    anchor.stroke.applySmoothing()
-                }
+                BezierUtils.moveBezierAnchor(anchor.stroke, anchor.pointIndex, dx, dy)
             } else {
                 // Polyline mode: apply weighted transformation to unsmoothedPoints
-                if (anchor.weights.size == anchor.stroke.unsmoothedPoints.size) {
-                    anchor.stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
-                        pathPoint.point.offset(dx * anchor.weights[index], dy * anchor.weights[index])
-                    }
-                }
-
-                // Recalculate distances for unsmoothed points
-                val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
-                    anchor.stroke.unsmoothedPoints.map { it.point }
-                )
-                anchor.stroke.unsmoothedPoints.clear()
-                anchor.stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-                anchor.stroke.totalDistance = newTotalDistance
-
-                // Regenerate interpolated polyline points and apply smoothing
-                anchor.stroke.regenerateInterpolatedPolylinePoints()
-                anchor.stroke.applySmoothing()
+                PolylineUtils.movePolylineAnchorWithWeights(anchor.stroke, anchor.weights, dx, dy)
             }
         }
 
         invalidate()
     }
-    
+
     fun setStrokeSmoothness(smoothness: Int) {
         currentSmoothness = smoothness
         val selectedStroke = singleHighlightedStroke
@@ -785,18 +775,18 @@ class DrawingView @JvmOverloads constructor(
     fun setColor(color: Int, applyToSelected: Boolean) {
         if (applyToSelected) {
             val highlightedStrokes = getHighlightedStrokes
-            
+
             if (highlightedStrokes.isNotEmpty()) {
                 // Get the common color from the first stroke
                 val firstStrokeColor = highlightedStrokes.first().getSingleColor()
-                
+
                 // Only apply if the first stroke has a uniform color
                 if (firstStrokeColor != null) {
                     // Check if ALL highlighted strokes have the SAME single color
                     val allHaveSameColor = highlightedStrokes.all { stroke ->
                         stroke.getSingleColor() == firstStrokeColor
                     }
-                    
+
                     if (allHaveSameColor) {
                         highlightedStrokes.forEach { stroke ->
                             stroke.setColor(color)
@@ -851,7 +841,8 @@ class DrawingView @JvmOverloads constructor(
         if (stroke.isGroup) {
             val groupThicknessMultiplier = stroke.paint.strokeWidth / 10f
             val newTotalWidthMultiplier = cumulativeWidthMultiplier * groupThicknessMultiplier
-            val newCumulativeOpacityMultiplier = cumulativeOpacityMultiplier * (stroke.paint.alpha / 255f)
+            val newCumulativeOpacityMultiplier =
+                cumulativeOpacityMultiplier * (stroke.paint.alpha / 255f)
 
             // Ensure stroke is regenerated if needed
             if (stroke.needsToRegenerate) {
@@ -860,7 +851,14 @@ class DrawingView @JvmOverloads constructor(
             }
 
             stroke.childStrokes.forEach { childStroke ->
-                drawStroke(canvas, childStroke, newCumulativeOpacityMultiplier, newTotalWidthMultiplier, drawEndpoints, drawMask)
+                drawStroke(
+                    canvas,
+                    childStroke,
+                    newCumulativeOpacityMultiplier,
+                    newTotalWidthMultiplier,
+                    drawEndpoints,
+                    drawMask
+                )
             }
         } else {
             if (stroke.pointsForDrawing.size >= 2) {
@@ -889,24 +887,31 @@ class DrawingView @JvmOverloads constructor(
 
                         // Draw circles for associated polyline points
                         if (!stroke.renderAsBezier)
-                        if (stroke.polylineIndices.isNotEmpty()) {
-                            val associatedPoints = stroke.getAssociatedPolylinePointsOnSmoothedCurve()
-                            val vertexPaint = Paint().apply {
-                                style = Paint.Style.FILL
-                                color = Color.BLUE
-                            }
-                            val radius = haloPaintToUse.strokeWidth / 2f
+                            if (stroke.polylineIndices.isNotEmpty()) {
+                                val associatedPoints =
+                                    stroke.getAssociatedPolylinePointsOnSmoothedCurve()
+                                val vertexPaint = Paint().apply {
+                                    style = Paint.Style.FILL
+                                    color = Color.BLUE
+                                }
+                                val radius = haloPaintToUse.strokeWidth / 2f
 
-                            associatedPoints.forEach { point ->
-                                val transformedPoint = floatArrayOf(point.x, point.y)
-                                globalTransform.mapPoints(transformedPoint)
-                                canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, vertexPaint)
+                                associatedPoints.forEach { point ->
+                                    val transformedPoint = floatArrayOf(point.x, point.y)
+                                    globalTransform.mapPoints(transformedPoint)
+                                    canvas.drawCircle(
+                                        transformedPoint[0],
+                                        transformedPoint[1],
+                                        radius,
+                                        vertexPaint
+                                    )
+                                }
                             }
-                        }
 
                         // Draw red squares for bezier anchor points
                         if (stroke.bezierAnchorIndices.isNotEmpty()) {
-                            val bezierAnchorPoints = stroke.getAssociatedBezierAnchorPointsOnSmoothedCurve()
+                            val bezierAnchorPoints =
+                                stroke.getAssociatedBezierAnchorPointsOnSmoothedCurve()
                             val bezierPaint = Paint().apply {
                                 style = Paint.Style.FILL
                                 color = Color.RED
@@ -929,7 +934,8 @@ class DrawingView @JvmOverloads constructor(
                         // Draw bezier handles (control points and connecting lines)
                         if (stroke.bezierAnchorPoints.isNotEmpty() &&
                             stroke.bezierControlPoints1.isNotEmpty() &&
-                            stroke.bezierControlPoints2.isNotEmpty()) {
+                            stroke.bezierControlPoints2.isNotEmpty()
+                        ) {
 
                             // Paint for handle lines
                             val handleLinePaint = Paint().apply {
@@ -945,7 +951,8 @@ class DrawingView @JvmOverloads constructor(
                                 color = Color.GREEN
                             }
 
-                            val controlSize = haloPaintToUse.strokeWidth / 3f // Smaller than anchors
+                            val controlSize =
+                                haloPaintToUse.strokeWidth / 3f // Smaller than anchors
 
                             for (anchorIndex in 0 until stroke.bezierAnchorPoints.size) {
                                 val anchor = stroke.bezierAnchorPoints[anchorIndex]
@@ -1007,8 +1014,10 @@ class DrawingView @JvmOverloads constructor(
                             if (addAnchorPointGestureInProgress &&
                                 location.stroke == stroke &&
                                 location.pointIndex != -1 &&
-                                location.pointIndex < stroke.pointsForDrawing.size) {
-                                val previewPoint = stroke.pointsForDrawing[location.pointIndex].point
+                                location.pointIndex < stroke.pointsForDrawing.size
+                            ) {
+                                val previewPoint =
+                                    stroke.pointsForDrawing[location.pointIndex].point
                                 val transformedPoint = floatArrayOf(previewPoint.x, previewPoint.y)
                                 globalTransform.mapPoints(transformedPoint)
 
@@ -1017,7 +1026,12 @@ class DrawingView @JvmOverloads constructor(
                                     color = Color.RED
                                 }
                                 val radius = haloPaintToUse.strokeWidth / 1.5f
-                                canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, previewPaint)
+                                canvas.drawCircle(
+                                    transformedPoint[0],
+                                    transformedPoint[1],
+                                    radius,
+                                    previewPaint
+                                )
                             }
                         }
                     }
@@ -1025,7 +1039,7 @@ class DrawingView @JvmOverloads constructor(
                     // Draw green circles for all anchor points being edited
                     // Check independently of drawEndpoints and gesture flags
                     if (!twoFingerGestureOccured && !threeFingerGestureOccured) { // Do not draw highlighted endpoint during a 2- or 3- finger gesture
-                        val radius = haloPaintToUse.strokeWidth/2f
+                        val radius = haloPaintToUse.strokeWidth / 2f
                         val endpointPaint = Paint().apply {
                             style = Paint.Style.FILL
                             color = Color.GREEN
@@ -1035,10 +1049,17 @@ class DrawingView @JvmOverloads constructor(
                         anchorPointsToEdit.forEach { anchor ->
                             if (anchor.stroke == stroke && anchor.pointIndex < stroke.pointsForDrawing.size) {
                                 // Draw green circle on the SMOOTHED position of this anchor point
-                                val pointToHighlight = stroke.pointsForDrawing[anchor.pointIndex].point
-                                val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
+                                val pointToHighlight =
+                                    stroke.pointsForDrawing[anchor.pointIndex].point
+                                val transformedPoint =
+                                    floatArrayOf(pointToHighlight.x, pointToHighlight.y)
                                 globalTransform.mapPoints(transformedPoint)
-                                canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
+                                canvas.drawCircle(
+                                    transformedPoint[0],
+                                    transformedPoint[1],
+                                    radius,
+                                    endpointPaint
+                                )
                             }
                         }
                     }
@@ -1064,7 +1085,7 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onSingleTapEnd(event: MotionEvent): Boolean {
 
-        if( advancedGestureInProgress )
+        if (advancedGestureInProgress)
             return true
 
         performClick()
@@ -1072,7 +1093,7 @@ class DrawingView @JvmOverloads constructor(
         when (currentState) {
             State.NORMAL_DRAWING,
             State.CHOSEN_STROKE_IN_NORMAL_MODE,
-            State.STROKE_EDITING-> {
+            State.STROKE_EDITING -> {
                 if (selectStrokeAt(screenPoint)) {
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 } else {
@@ -1086,7 +1107,7 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onDoubleTapEnd(event: MotionEvent): Boolean {
 
-        if( advancedGestureInProgress )
+        if (advancedGestureInProgress)
             return true
 
         deselectAndDeHighlight() // Note: doesn't cause a redraw on its own
@@ -1096,13 +1117,13 @@ class DrawingView @JvmOverloads constructor(
 
     override fun onFirstFingerDown(event: MotionEvent): Boolean {
 
-        twoFingerGestureOccured   = false // this is the only place it becomes "false"
+        twoFingerGestureOccured = false // this is the only place it becomes "false"
         threeFingerGestureOccured = false // this is the only place it becomes "false"
-        dragGestureHasEnded       = false // this is the only place it becomes "false"
-        
+        dragGestureHasEnded = false // this is the only place it becomes "false"
+
         firstFingerDownTime = System.currentTimeMillis()  // Record when first finger landed
 
-        if( advancedGestureInProgress )
+        if (advancedGestureInProgress)
             return true
 
         val downPoint = PointF(event.x, event.y)
@@ -1113,6 +1134,7 @@ class DrawingView @JvmOverloads constructor(
             State.NORMAL_DRAWING -> {
                 touchStart(downPoint.x, downPoint.y)
             }
+
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
                 if (selectEndpointOfCurrentStroke(worldPoint)) {
                     setState(State.STROKE_EDITING)
@@ -1127,11 +1149,12 @@ class DrawingView @JvmOverloads constructor(
                     }
                 }
             }
+
             State.STROKE_EDITING -> {
                 selectEndpointOfCurrentStroke(worldPoint)
             }
         }
-        if( globalSetStateIsNeeded ) setState(currentState) // Refresh UI and Canvas
+        if (globalSetStateIsNeeded) setState(currentState) // Refresh UI and Canvas
         return true
     }
 
@@ -1143,33 +1166,37 @@ class DrawingView @JvmOverloads constructor(
                 strokeInProgress = null
             }
         }
-        
+
         // Calculate time difference between first and second finger
         val timeBetweenFingers = System.currentTimeMillis() - firstFingerDownTime
         val simultaneousThreshold = 100L // milliseconds - tune this value as needed
-        
+
         // Determine if this should be a control point edit gesture:
         // 1. Must be in stroke editing mode
         // 2. Must have an anchor point being edited
         // 3. Fingers must NOT land simultaneously (sequential touch)
-        val shouldEditControlPoint = currentState == State.STROKE_EDITING && 
-                                     anchorPointsToEdit.isNotEmpty() &&
-                                     timeBetweenFingers > simultaneousThreshold
-        
+        val shouldEditControlPoint = currentState == State.STROKE_EDITING &&
+                anchorPointsToEdit.isNotEmpty() &&
+                timeBetweenFingers > simultaneousThreshold
+
         if (shouldEditControlPoint) {
             val primaryAnchor = anchorPointsToEdit.firstOrNull()
             if (primaryAnchor != null && primaryAnchor.stroke.renderAsBezier && primaryAnchor.weights.isEmpty()) {
                 // We're in bezier mode - find closest control point for second finger
                 if (event.pointerCount >= 2) {
                     val secondFingerWorldPoint = toWorldCoordinates(event.getX(1), event.getY(1))
-                    selectSecondFingerControlPoint(secondFingerWorldPoint, primaryAnchor.stroke, primaryAnchor.pointIndex)
+                    selectSecondFingerControlPoint(
+                        secondFingerWorldPoint,
+                        primaryAnchor.stroke,
+                        primaryAnchor.pointIndex
+                    )
                 }
                 // Don't set twoFingerGestureOccured - this prevents canvas transformation
                 redrawHistory()
                 return true
             }
         }
-        
+
         // Otherwise, this is a normal two-finger gesture (canvas transformation)
         redrawHistory()
         twoFingerGestureOccured = true
@@ -1196,7 +1223,7 @@ class DrawingView @JvmOverloads constructor(
 
         run {
             // Check if we're adding an anchor point
-            if( addAnchorPointGestureInProgress && addAnchorPointHere != null ) {
+            if (addAnchorPointGestureInProgress && addAnchorPointHere != null) {
                 addAnchorPointAtIndex(addAnchorPointHere!!.pointIndex)
                 addAnchorPointHere = null
                 return@run
@@ -1210,10 +1237,10 @@ class DrawingView @JvmOverloads constructor(
                 return@run
             }
 
-            if( threeFingerGestureOccured )
+            if (threeFingerGestureOccured)
                 return@run
 
-            if( selectionGestureInProgress ) {
+            if (selectionGestureInProgress) {
                 val highlightedStrokes = getHighlightedStrokes
                 if (highlightedStrokes.size == 1) {
                     val singleHighlightedStroke = highlightedStrokes.first()
@@ -1236,17 +1263,20 @@ class DrawingView @JvmOverloads constructor(
                         touchUp()
                     }
                 }
-                State.CHOSEN_STROKE_IN_NORMAL_MODE-> {
+
+                State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
                     val screenPoint = PointF(event.x, event.y)
                     if (selectStrokeAt(screenPoint))
                         setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                     else
                         setState(State.NORMAL_DRAWING)
                 }
+
                 State.STROKE_EDITING -> {
                     anchorPointsToEdit.clear()
                     setState(State.CHOSEN_STROKE_IN_NORMAL_MODE)
                 }
+
                 else -> {}
             }
         }
@@ -1255,26 +1285,29 @@ class DrawingView @JvmOverloads constructor(
         addAnchorPointHere = null  // Clear the location
         strokesToTransform.clear()
         dragGestureHasEnded = true
-        if( globalSetStateIsNeeded ) setState(currentState) // Update drawing and UI
+        if (globalSetStateIsNeeded) setState(currentState) // Update drawing and UI
         return true
     }
 
 
     override fun onSingleFingerDrag(event: MotionEvent, dx: Float, dy: Float): Boolean {
 
-        if( dragGestureHasEnded )
+        if (dragGestureHasEnded)
             return true
 
-        if( selectionGestureInProgress )
+        if (selectionGestureInProgress)
             return true
 
         val inverseGlobalTransform = Matrix()
         globalTransform.invert(inverseGlobalTransform)
 
         // Handle add anchor point gesture - find closest point across ALL highlighted strokes
-        if( addAnchorPointGestureInProgress ) {
+        if (addAnchorPointGestureInProgress) {
             val worldPoint = toWorldCoordinates(event.x, event.y)
-            val result = StrokeUtils.findClosestPointAcrossHighlightedStrokes(worldPoint, getHighlightedStrokes)
+            val result = StrokeUtils.findClosestPointAcrossHighlightedStrokes(
+                worldPoint,
+                getHighlightedStrokes
+            )
 
             addAnchorPointHere = if (result != null) {
                 AnchorPointLocation(result.stroke, result.pointIndex)
@@ -1287,7 +1320,7 @@ class DrawingView @JvmOverloads constructor(
         }
 
         // Continue transforming strokes (translation only) after transitioning from 2 to 1 finger
-        if ( threeFingerGestureOccured && strokesToTransform.isNotEmpty()) {
+        if (threeFingerGestureOccured && strokesToTransform.isNotEmpty()) {
             val worldDelta = floatArrayOf(dx, dy)
             inverseGlobalTransform.mapVectors(worldDelta)
 
@@ -1303,7 +1336,7 @@ class DrawingView @JvmOverloads constructor(
             return true
         }
 
-        if( twoFingerGestureOccured ) {
+        if (twoFingerGestureOccured) {
             val worldDelta = floatArrayOf(dx, dy)
             inverseGlobalTransform.mapVectors(worldDelta)
 
@@ -1324,6 +1357,7 @@ class DrawingView @JvmOverloads constructor(
             State.NORMAL_DRAWING -> {
                 touchMove(event.x, event.y)
             }
+
             State.STROKE_EDITING -> {
                 val delta = floatArrayOf(dx, dy)
                 inverseGlobalTransform.mapVectors(delta) // Transform delta into world-space
@@ -1331,6 +1365,7 @@ class DrawingView @JvmOverloads constructor(
                 // Only move first finger anchor point(s) - not the second finger control point
                 moveEditingPoint(delta[0], delta[1])
             }
+
             State.CHOSEN_STROKE_IN_NORMAL_MODE -> {
                 singleHighlightedStroke?.let { current ->
                     if (current.isGroup) {
@@ -1341,7 +1376,8 @@ class DrawingView @JvmOverloads constructor(
                             val centerX = bounds.centerX()
                             val centerY = bounds.centerY()
                             val centerScreen = toScreenCoordinates(centerX, centerY)
-                            val initialHeight = centerScreen.y - initialTouchY  // yes, it can be negative
+                            val initialHeight =
+                                centerScreen.y - initialTouchY  // yes, it can be negative
 
                             val totalDx = event.x - initialTouchX
                             var totalDy = event.y - initialTouchY
@@ -1356,14 +1392,25 @@ class DrawingView @JvmOverloads constructor(
                             if (initialHeight != 0f) {
                                 val newHeight = initialHeight - totalDy
                                 val scaleY = newHeight / initialHeight
-                                screenspaceTransform.preScale(1.0f, scaleY, centerScreen.x, centerScreen.y)
+                                screenspaceTransform.preScale(
+                                    1.0f,
+                                    scaleY,
+                                    centerScreen.x,
+                                    centerScreen.y
+                                )
                             }
 
                             // Calculate the world-space transform matrix to be applied to stroke points
                             val worldspaceTransform = Matrix()
                             worldspaceTransform.set(globalTransform)                                // 1. First thing, transform everything to screen-space
-                            postTransform(worldspaceTransform,screenspaceTransform)  // 2. Next, apply our transformation, in screen-space
-                            postTransform(worldspaceTransform,inverseGlobalTransform)// 3. Finally, transform back to world-space
+                            postTransform(
+                                worldspaceTransform,
+                                screenspaceTransform
+                            )  // 2. Next, apply our transformation, in screen-space
+                            postTransform(
+                                worldspaceTransform,
+                                inverseGlobalTransform
+                            )// 3. Finally, transform back to world-space
 
                             // Applying the transformations, in world-space
                             StrokeUtils.transformStroke(current, worldspaceTransform)
@@ -1371,16 +1418,22 @@ class DrawingView @JvmOverloads constructor(
                     }
                 }
             }
+
             else -> {}
         }
         redrawHistory()
         return true
     }
 
-    private fun selectSecondFingerControlPoint(tapPoint: PointF, primaryStroke: Stroke, editingAnchorIndex: Int) {
+    private fun selectSecondFingerControlPoint(
+        tapPoint: PointF,
+        primaryStroke: Stroke,
+        editingAnchorIndex: Int
+    ) {
         if (!primaryStroke.renderAsBezier ||
             primaryStroke.bezierControlPoints1.isEmpty() ||
-            primaryStroke.bezierControlPoints2.isEmpty()) return
+            primaryStroke.bezierControlPoints2.isEmpty()
+        ) return
 
         // Find the closest control point to the tap point
         var closestDist = Float.MAX_VALUE
@@ -1420,64 +1473,25 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun moveBezierAnchorAndControlPoints(anchorDx: Float, anchorDy: Float, controlDx: Float, controlDy: Float) {
+    private fun moveBezierAnchorAndControlPoints(
+        anchorDx: Float,
+        anchorDy: Float,
+        controlDx: Float,
+        controlDy: Float
+    ) {
         val controlEdit = secondFingerControlEdit ?: return
         val primaryAnchor = anchorPointsToEdit.firstOrNull() ?: return
 
-        controlEdit.stroke.isModified = true
-
-        val editingAnchorIndex = primaryAnchor.pointIndex
-        val anchorPoint = controlEdit.stroke.bezierAnchorPoints[editingAnchorIndex]
-
-        // Get references to the control points based on arrayIdx
-        val primaryControl = if (controlEdit.arrayIdx == 1) {
-            controlEdit.stroke.bezierControlPoints1[controlEdit.controlIndex]
-        } else {
-            controlEdit.stroke.bezierControlPoints2[controlEdit.controlIndex]
-        }
-
-        val oppositeControl = if (controlEdit.arrayIdx == 1) {
-            controlEdit.stroke.bezierControlPoints2.getOrNull(controlEdit.controlIndex)
-        } else {
-            controlEdit.stroke.bezierControlPoints1.getOrNull(controlEdit.controlIndex)
-        }
-
-        // Store original distances from anchor before any movement
-        val originalPrimaryDistance = distance(anchorPoint, primaryControl)
-        val originalOppositeDistance = oppositeControl?.let { distance(anchorPoint, it) } ?: 0f
-
-        // Move the anchor point
-        anchorPoint.offset(anchorDx, anchorDy)
-
-        // Move the primary control point (the one being dragged)
-        primaryControl.offset(controlDx, controlDy)
-
-        // Calculate the new distance and direction from anchor to primary control
-        val newPrimaryDistance = distance(anchorPoint, primaryControl)
-        val primaryDirX = primaryControl.x - anchorPoint.x
-        val primaryDirY = primaryControl.y - anchorPoint.y
-
-        // Update the opposite control point to maintain collinearity
-        if (oppositeControl != null && newPrimaryDistance > 0f) {
-            // Calculate how much the primary lever length changed
-            val leverLengthChange = newPrimaryDistance - originalPrimaryDistance
-
-            // The opposite lever should change by the same amount
-            val newOppositeDistance = originalOppositeDistance + leverLengthChange
-
-            if (newOppositeDistance > 0f) {
-                // Normalize the primary direction and scale by new opposite distance
-                val oppositeDirX = -(primaryDirX / newPrimaryDistance) * newOppositeDistance
-                val oppositeDirY = -(primaryDirY / newPrimaryDistance) * newOppositeDistance
-
-                // Set the opposite control point position relative to the (now moved) anchor
-                oppositeControl.set(anchorPoint.x + oppositeDirX, anchorPoint.y + oppositeDirY)
-            }
-        }
-
-        // Regenerate the curve from the modified bezier data
-        controlEdit.stroke.regenerateBezierCurve()
-        controlEdit.stroke.applySmoothing()
+        BezierUtils.moveBezierAnchorAndControlPoint(
+            controlEdit.stroke,
+            primaryAnchor.pointIndex,
+            controlEdit.controlIndex,
+            (controlEdit.arrayIdx == 1),
+            anchorDx,
+            anchorDy,
+            controlDx,
+            controlDy
+        )
 
         invalidate()
     }
@@ -1490,9 +1504,17 @@ class DrawingView @JvmOverloads constructor(
     }
 
 
-    override fun onTwoFingerDrag(event: MotionEvent, dx0: Float, dy0: Float, dx1: Float, dy1: Float, scale: Float, rotate: Float): Boolean {
+    override fun onTwoFingerDrag(
+        event: MotionEvent,
+        dx0: Float,
+        dy0: Float,
+        dx1: Float,
+        dy1: Float,
+        scale: Float,
+        rotate: Float
+    ): Boolean {
 
-        if( dragGestureHasEnded )
+        if (dragGestureHasEnded)
             return true
 
         val invertedGlobal = Matrix()
@@ -1510,7 +1532,12 @@ class DrawingView @JvmOverloads constructor(
 
                 // Move anchor (finger 0) and control point (finger 1) together
                 // This also handles the opposite control point automatically
-                moveBezierAnchorAndControlPoints(finger0Delta[0],finger0Delta[1],finger1Delta[0],finger1Delta[1])
+                moveBezierAnchorAndControlPoints(
+                    finger0Delta[0],
+                    finger0Delta[1],
+                    finger1Delta[0],
+                    finger1Delta[1]
+                )
 
                 redrawHistory()
                 return true  // Early return - don't do canvas transformation
@@ -1525,8 +1552,7 @@ class DrawingView @JvmOverloads constructor(
         val worldDelta = floatArrayOf(midDx, midDy)
         invertedGlobal.mapVectors(worldDelta)
 
-        if( selectionGestureInProgress )
-        {
+        if (selectionGestureInProgress) {
             if (event.pointerCount >= 2) {
                 val p1 = toWorldCoordinates(event.getX(0), event.getY(0))
                 val p2 = toWorldCoordinates(event.getX(1), event.getY(1))
@@ -1536,7 +1562,13 @@ class DrawingView @JvmOverloads constructor(
                     strokes.forEach { stroke ->
                         var strokeInCircle = false
                         stroke.forEachStroke { s ->
-                            if (s.pointsForDrawing.any { isPointInCircle(it.point, center, radius) }) {
+                            if (s.pointsForDrawing.any {
+                                    isPointInCircle(
+                                        it.point,
+                                        center,
+                                        radius
+                                    )
+                                }) {
                                 strokeInCircle = true
                             }
                         }
@@ -1545,8 +1577,7 @@ class DrawingView @JvmOverloads constructor(
                     }
                 }
             }
-        }
-        else if (threeFingerGestureOccured) {
+        } else if (threeFingerGestureOccured) {
             // Continue transforming strokes even after transitioning from 3 to 2 fingers
             if (strokesToTransform.isNotEmpty()) {
                 // Calculate common bounding box for all strokes to transform
@@ -1566,11 +1597,14 @@ class DrawingView @JvmOverloads constructor(
                 deltaMatrix.postTranslate(worldDelta[0], worldDelta[1])
 
                 // Apply transformation to all strokes
-                strokesToTransform.forEach { stroke -> StrokeUtils.transformStroke(stroke, deltaMatrix) }
+                strokesToTransform.forEach { stroke ->
+                    StrokeUtils.transformStroke(
+                        stroke,
+                        deltaMatrix
+                    )
+                }
             }
-        }
-        else
-        {
+        } else {
             val screenMidPoint = midpoint(event)
             val worldMidPoint = toWorldCoordinates(screenMidPoint.x, screenMidPoint.y)
             globalTransform.preTranslate(worldDelta[0], worldDelta[1])
@@ -1593,9 +1627,15 @@ class DrawingView @JvmOverloads constructor(
         return distance(point, circleCenter) < circleRadius
     }
 
-    override fun onThreeFingerDrag(event: MotionEvent, dx: Float, dy: Float, scale: Float, rotate: Float): Boolean {
+    override fun onThreeFingerDrag(
+        event: MotionEvent,
+        dx: Float,
+        dy: Float,
+        scale: Float,
+        rotate: Float
+    ): Boolean {
 
-        if( dragGestureHasEnded )
+        if (dragGestureHasEnded)
             return true
 
         val invertedGlobal = Matrix()
@@ -1604,7 +1644,7 @@ class DrawingView @JvmOverloads constructor(
         invertedGlobal.mapVectors(worldDelta)
 
         // Get all highlighted strokes and include currentStroke
-        if( strokesToTransform.isEmpty()) {
+        if (strokesToTransform.isEmpty()) {
             strokesToTransform = getHighlightedStrokes.toMutableSet()
             singleHighlightedStroke?.let { strokesToTransform.add(it) }
         }
@@ -1635,93 +1675,5 @@ class DrawingView @JvmOverloads constructor(
         }
 
         return true
-    }
-
-    private fun calculateWeightsForAnchorPoint(stroke: Stroke, pointIndex: Int): List<Float> {
-        // Calculate weight function for this specific anchor point
-        if (stroke.polylineIndices.isNotEmpty() && stroke.polylineIndices.size >= 2 &&
-            stroke.distancesForWeights.isNotEmpty()) {
-
-            // Find which polyline anchor this corresponds to
-            val closestDrawingDistance = if (pointIndex < stroke.distancesForWeights.size) {
-                stroke.distancesForWeights[pointIndex]
-            } else {
-                return List(stroke.unsmoothedPoints.size) { 0f }
-            }
-
-            var closestPolylineIdxInArray = 0
-            var minDistToAnchor = Float.MAX_VALUE
-
-            for (i in stroke.polylineIndices.indices) {
-                val anchorIndexInOriginal = stroke.polylineIndices[i]
-                if (anchorIndexInOriginal >= 0 && anchorIndexInOriginal < stroke.distancesForWeights.size) {
-                    val anchorDistance = stroke.distancesForWeights[anchorIndexInOriginal]
-                    val distDiff = abs(anchorDistance - closestDrawingDistance)
-                    if (distDiff < minDistToAnchor) {
-                        minDistToAnchor = distDiff
-                        closestPolylineIdxInArray = i
-                    }
-                }
-            }
-
-            if (closestPolylineIdxInArray >= 0 && closestPolylineIdxInArray < stroke.polylineIndices.size) {
-                val leftPolylineArrayIdx = if (closestPolylineIdxInArray > 0) closestPolylineIdxInArray - 1 else 0
-                val rightPolylineArrayIdx = if (closestPolylineIdxInArray < stroke.polylineIndices.size - 1) {
-                    closestPolylineIdxInArray + 1
-                } else {
-                    stroke.polylineIndices.size - 1
-                }
-
-                val leftOriginalIdx = stroke.polylineIndices[leftPolylineArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
-                val middleOriginalIdx = stroke.polylineIndices[closestPolylineIdxInArray].coerceIn(0, stroke.distancesForWeights.size - 1)
-                val rightOriginalIdx = stroke.polylineIndices[rightPolylineArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
-
-                val leftDist = stroke.distancesForWeights[leftOriginalIdx]
-                val middleDist = stroke.distancesForWeights[middleOriginalIdx]
-                val rightDist = stroke.distancesForWeights[rightOriginalIdx]
-
-                return stroke.distancesForWeights.mapIndexed { index, dist ->
-                    when {
-                        dist < leftDist || dist > rightDist -> 0f
-                        dist <= middleDist -> {
-                            val segmentLength = middleDist - leftDist
-                            if (segmentLength == 0f) 1f
-                            else {
-                                val t = (dist - leftDist) / segmentLength
-                                val angle = t * PI.toFloat() / 2f
-                                sin(angle) * sin(angle)
-                            }
-                        }
-                        else -> {
-                            val segmentLength = rightDist - middleDist
-                            if (segmentLength == 0f) 1f
-                            else {
-                                val t = (dist - middleDist) / segmentLength
-                                val angle = (1f - t) * PI.toFloat() / 2f
-                                sin(angle) * sin(angle)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Fallback to original behavior
-        val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.lastOrNull()?.distance ?: return List(stroke.unsmoothedPoints.size) { 0f }
-        val middlePointRelativeDistance = if (pointIndex < stroke.unsmoothedPoints.size) {
-            stroke.unsmoothedPoints[pointIndex].distance / totalDistanceOfUnsmoothed
-        } else {
-            0.5f
-        }
-
-        return stroke.unsmoothedPoints.map {
-            val relativeDistance = it.distance / totalDistanceOfUnsmoothed
-            val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
-                relativeDistance / middlePointRelativeDistance
-            } else {
-                1 - ((relativeDistance - middlePointRelativeDistance) / (1 - middlePointRelativeDistance))
-            }
-            sin(mappedDistance * PI / 2).toFloat()
-        }
     }
 }

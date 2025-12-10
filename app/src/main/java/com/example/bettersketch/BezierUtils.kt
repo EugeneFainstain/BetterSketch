@@ -210,4 +210,109 @@ object BezierUtils {
         stroke.bezierControlPoints1.removeAt(anchorIndex)
         stroke.bezierControlPoints2.removeAt(anchorIndex)
     }
+
+    /**
+     * Move a bezier anchor point and its associated control points.
+     * 
+     * @param stroke The stroke being edited
+     * @param anchorIndex Index into bezierAnchorPoints
+     * @param dx Delta X movement
+     * @param dy Delta Y movement
+     */
+    fun moveBezierAnchor(stroke: Stroke, anchorIndex: Int, dx: Float, dy: Float) {
+        if (anchorIndex >= 0 && anchorIndex < stroke.bezierAnchorPoints.size) {
+            // Move the anchor point itself
+            stroke.bezierAnchorPoints[anchorIndex].offset(dx, dy)
+
+            // Move both control points associated with this anchor
+            if (anchorIndex < stroke.bezierControlPoints1.size) {
+                stroke.bezierControlPoints1[anchorIndex].offset(dx, dy)
+            }
+            if (anchorIndex < stroke.bezierControlPoints2.size) {
+                stroke.bezierControlPoints2[anchorIndex].offset(dx, dy)
+            }
+
+            stroke.isModified = true
+            // Regenerate the curve from the modified bezier data
+            stroke.regenerateBezierCurve()
+            stroke.applySmoothing()
+        }
+    }
+
+    /**
+     * Move a bezier anchor and one control point while maintaining collinearity with the opposite control.
+     * Used for two-finger bezier control point editing.
+     * 
+     * @param stroke The stroke being edited
+     * @param anchorIndex Index of the anchor being moved
+     * @param controlIndex Index of the control point being dragged
+     * @param isControl1 True if dragging controlPoints1, false if controlPoints2
+     * @param anchorDx Delta X for anchor movement
+     * @param anchorDy Delta Y for anchor movement
+     * @param controlDx Delta X for control point movement
+     * @param controlDy Delta Y for control point movement
+     */
+    fun moveBezierAnchorAndControlPoint(
+        stroke: Stroke,
+        anchorIndex: Int,
+        controlIndex: Int,
+        isControl1: Boolean,
+        anchorDx: Float,
+        anchorDy: Float,
+        controlDx: Float,
+        controlDy: Float
+    ) {
+        val anchorPoint = stroke.bezierAnchorPoints[anchorIndex]
+
+        // Get references to the control points
+        val primaryControl = if (isControl1) {
+            stroke.bezierControlPoints1[controlIndex]
+        } else {
+            stroke.bezierControlPoints2[controlIndex]
+        }
+
+        val oppositeControl = if (isControl1) {
+            stroke.bezierControlPoints2.getOrNull(controlIndex)
+        } else {
+            stroke.bezierControlPoints1.getOrNull(controlIndex)
+        }
+
+        // Store original distances from anchor before any movement
+        val originalPrimaryDistance = GeometryUtils.distance(anchorPoint, primaryControl)
+        val originalOppositeDistance = oppositeControl?.let { GeometryUtils.distance(anchorPoint, it) } ?: 0f
+
+        // Move the anchor point
+        anchorPoint.offset(anchorDx, anchorDy)
+
+        // Move the primary control point (the one being dragged)
+        primaryControl.offset(controlDx, controlDy)
+
+        // Calculate the new distance and direction from anchor to primary control
+        val newPrimaryDistance = GeometryUtils.distance(anchorPoint, primaryControl)
+        val primaryDirX = primaryControl.x - anchorPoint.x
+        val primaryDirY = primaryControl.y - anchorPoint.y
+
+        // Update the opposite control point to maintain collinearity
+        if (oppositeControl != null && newPrimaryDistance > 0f) {
+            // Calculate how much the primary lever length changed
+            val leverLengthChange = newPrimaryDistance - originalPrimaryDistance
+
+            // The opposite lever should change by the same amount
+            val newOppositeDistance = originalOppositeDistance + leverLengthChange
+
+            if (newOppositeDistance > 0f) {
+                // Normalize the primary direction and scale by new opposite distance
+                val oppositeDirX = -(primaryDirX / newPrimaryDistance) * newOppositeDistance
+                val oppositeDirY = -(primaryDirY / newPrimaryDistance) * newOppositeDistance
+
+                // Set the opposite control point position relative to the (now moved) anchor
+                oppositeControl.set(anchorPoint.x + oppositeDirX, anchorPoint.y + oppositeDirY)
+            }
+        }
+
+        stroke.isModified = true
+        // Regenerate the curve from the modified bezier data
+        stroke.regenerateBezierCurve()
+        stroke.applySmoothing()
+    }
 }

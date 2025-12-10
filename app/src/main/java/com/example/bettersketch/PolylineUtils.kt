@@ -2,6 +2,7 @@
 package com.example.bettersketch
 
 import android.graphics.PointF
+import kotlin.math.abs
 
 object PolylineUtils {
     /**
@@ -88,5 +89,127 @@ object PolylineUtils {
         stroke.applySmoothing()
 
         return true
+    }
+
+    /**
+     * Calculate weight function for a specific polyline anchor point.
+     * Returns weights for each point in the stroke based on distance from the anchor.
+     */
+    fun calculateWeightsForAnchorPoint(stroke: Stroke, pointIndex: Int): List<Float> {
+        // Calculate weight function for this specific anchor point
+        if (stroke.polylineIndices.isNotEmpty() && stroke.polylineIndices.size >= 2 &&
+            stroke.distancesForWeights.isNotEmpty()) {
+
+            // Find which polyline anchor this corresponds to
+            val closestDrawingDistance = if (pointIndex < stroke.distancesForWeights.size) {
+                stroke.distancesForWeights[pointIndex]
+            } else {
+                return List(stroke.unsmoothedPoints.size) { 0f }
+            }
+
+            var closestPolylineIdxInArray = 0
+            var minDistToAnchor = Float.MAX_VALUE
+
+            for (i in stroke.polylineIndices.indices) {
+                val anchorIndexInOriginal = stroke.polylineIndices[i]
+                if (anchorIndexInOriginal >= 0 && anchorIndexInOriginal < stroke.distancesForWeights.size) {
+                    val anchorDistance = stroke.distancesForWeights[anchorIndexInOriginal]
+                    val distDiff = abs(anchorDistance - closestDrawingDistance)
+                    if (distDiff < minDistToAnchor) {
+                        minDistToAnchor = distDiff
+                        closestPolylineIdxInArray = i
+                    }
+                }
+            }
+
+            if (closestPolylineIdxInArray >= 0 && closestPolylineIdxInArray < stroke.polylineIndices.size) {
+                val leftPolylineArrayIdx = if (closestPolylineIdxInArray > 0) closestPolylineIdxInArray - 1 else 0
+                val rightPolylineArrayIdx = if (closestPolylineIdxInArray < stroke.polylineIndices.size - 1) {
+                    closestPolylineIdxInArray + 1
+                } else {
+                    stroke.polylineIndices.size - 1
+                }
+
+                val leftOriginalIdx = stroke.polylineIndices[leftPolylineArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
+                val middleOriginalIdx = stroke.polylineIndices[closestPolylineIdxInArray].coerceIn(0, stroke.distancesForWeights.size - 1)
+                val rightOriginalIdx = stroke.polylineIndices[rightPolylineArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
+
+                val leftDist = stroke.distancesForWeights[leftOriginalIdx]
+                val middleDist = stroke.distancesForWeights[middleOriginalIdx]
+                val rightDist = stroke.distancesForWeights[rightOriginalIdx]
+
+                return stroke.distancesForWeights.mapIndexed { index, dist ->
+                    when {
+                        dist < leftDist || dist > rightDist -> 0f
+                        dist <= middleDist -> {
+                            val segmentLength = middleDist - leftDist
+                            if (segmentLength == 0f) 1f
+                            else {
+                                val t = (dist - leftDist) / segmentLength
+                                val angle = t * kotlin.math.PI.toFloat() / 2f
+                                kotlin.math.sin(angle) * kotlin.math.sin(angle)
+                            }
+                        }
+                        else -> {
+                            val segmentLength = rightDist - middleDist
+                            if (segmentLength == 0f) 1f
+                            else {
+                                val t = (dist - middleDist) / segmentLength
+                                val angle = (1f - t) * kotlin.math.PI.toFloat() / 2f
+                                kotlin.math.sin(angle) * kotlin.math.sin(angle)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback to original behavior
+        val totalDistanceOfUnsmoothed = stroke.unsmoothedPoints.lastOrNull()?.distance ?: return List(stroke.unsmoothedPoints.size) { 0f }
+        val middlePointRelativeDistance = if (pointIndex < stroke.unsmoothedPoints.size) {
+            stroke.unsmoothedPoints[pointIndex].distance / totalDistanceOfUnsmoothed
+        } else {
+            0.5f
+        }
+
+        return stroke.unsmoothedPoints.map {
+            val relativeDistance = it.distance / totalDistanceOfUnsmoothed
+            val mappedDistance = if (relativeDistance <= middlePointRelativeDistance) {
+                relativeDistance / middlePointRelativeDistance
+            } else {
+                1 - ((relativeDistance - middlePointRelativeDistance) / (1 - middlePointRelativeDistance))
+            }
+            kotlin.math.sin(mappedDistance * kotlin.math.PI / 2).toFloat()
+        }
+    }
+
+    /**
+     * Move a polyline anchor point using weighted transformation.
+     * 
+     * @param stroke The stroke being edited
+     * @param weights Pre-calculated weights for each point
+     * @param dx Delta X movement
+     * @param dy Delta Y movement
+     */
+    fun movePolylineAnchorWithWeights(stroke: Stroke, weights: List<Float>, dx: Float, dy: Float) {
+        // Apply weighted transformation to unsmoothedPoints
+        if (weights.size == stroke.unsmoothedPoints.size) {
+            stroke.unsmoothedPoints.forEachIndexed { index, pathPoint ->
+                pathPoint.point.offset(dx * weights[index], dy * weights[index])
+            }
+        }
+
+        // Recalculate distances for unsmoothed points
+        val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
+            stroke.unsmoothedPoints.map { it.point }
+        )
+        stroke.unsmoothedPoints.clear()
+        stroke.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
+        stroke.totalDistance = newTotalDistance
+
+        stroke.isModified = true
+        // Regenerate interpolated polyline points and apply smoothing
+        stroke.regenerateInterpolatedPolylinePoints()
+        stroke.applySmoothing()
     }
 }
