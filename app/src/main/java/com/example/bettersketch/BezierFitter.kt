@@ -391,7 +391,7 @@ class BezierFitter {
          * Evaluate Bezier curve at parameter t
          */
         private fun evaluateBezier(bezier: BezierSegment, t: Float): PointF {
-            return GeometryUtils.evaluateCubicBezier(bezier.p0, bezier.p1, bezier.p2, bezier.p3, t)
+            return BezierUtils.evaluateCubicBezier(bezier.p0, bezier.p1, bezier.p2, bezier.p3, t)
         }
 
         /**

@@ -24,28 +24,6 @@ object GeometryUtils {
     }
 
     /**
-     * Evaluate a cubic Bezier curve at parameter t.
-     * @param p0 Start anchor point
-     * @param p1 First control point (outgoing from p0)
-     * @param p2 Second control point (incoming to p3)
-     * @param p3 End anchor point
-     * @param t Parameter (0.0 = p0, 1.0 = p3)
-     * @return Point on the curve at parameter t
-     */
-    fun evaluateCubicBezier(p0: PointF, p1: PointF, p2: PointF, p3: PointF, t: Float): PointF {
-        val t2 = t * t
-        val t3 = t2 * t
-        val mt = 1.0f - t
-        val mt2 = mt * mt
-        val mt3 = mt2 * mt
-
-        return PointF(
-            p0.x * mt3 + 3 * p1.x * mt2 * t + 3 * p2.x * mt * t2 + p3.x * t3,
-            p0.y * mt3 + 3 * p1.y * mt2 * t + 3 * p2.y * mt * t2 + p3.y * t3
-        )
-    }
-
-    /**
      * Calculate Euclidean distance between two points.
      */
     fun distance(p1: PointF, p2: PointF): Float {
