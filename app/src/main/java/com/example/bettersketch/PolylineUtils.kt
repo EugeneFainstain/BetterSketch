@@ -3,8 +3,133 @@ package com.example.bettersketch
 
 import android.graphics.PointF
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 object PolylineUtils {
+
+    /**
+     * Helper function to interpolate points along a polyline.
+     * Used by regenerateUnsmoothedPointsFromAnalytical for all shape types.
+     */
+    fun interpolateAlongPolyLine(vertices: List<PointF>, targetPointCount: Int): List<PointF> {
+        if (vertices.size < 2 || targetPointCount < 2) return vertices
+
+        val interpolatedPoints = mutableListOf<PointF>()
+
+        // Calculate cumulative distances for each vertex
+        val vertexDistances = mutableListOf(0f)
+        var totalDistance = 0f
+        for (i in 1 until vertices.size) {
+            val dx = vertices[i].x - vertices[i - 1].x
+            val dy = vertices[i].y - vertices[i - 1].y
+            totalDistance += sqrt(dx * dx + dy * dy)
+            vertexDistances.add(totalDistance)
+        }
+
+        if (totalDistance <= 0f) {
+            // Degenerate case: all vertices are at the same point
+            return listOf(vertices.first())
+        }
+
+        // Generate uniform spacing points and include vertex points
+        val targetDistances = mutableSetOf<Float>()
+        val spacing = totalDistance / (targetPointCount - 1)
+
+        // Add uniformly spaced points
+        for (i in 0 until targetPointCount) {
+            targetDistances.add(i * spacing)
+        }
+
+        // Add all vertex distances to ensure they're included
+        targetDistances.addAll(vertexDistances)
+
+        // Interpolate at all target distances
+        for (targetDist in targetDistances) {
+            val point = interpolatePointOnPolyLine(vertices, targetDist)
+            interpolatedPoints.add(point)
+        }
+
+        return interpolatedPoints
+    }
+
+    /**
+     * Helper to create the initial interpolation for a polyline stroke
+     */
+    public fun interpolateAlongPolyLineWithIndices(
+        vertices: List<PointF>,
+        vertexIndices: List<Int>,
+        targetPointCount: Int
+    ): List<PointF> {
+        if (vertices.size < 2 || vertexIndices.size < 2) return vertices
+        if (targetPointCount < 2) return vertices
+
+        val interpolatedPoints = MutableList<PointF?>(targetPointCount) { null }
+
+        // Place each vertex at its designated index
+        for (i in vertices.indices) {
+            val index = vertexIndices[i]
+            if (index < targetPointCount) {
+                interpolatedPoints[index] = vertices[i]
+            }
+        }
+
+        // Fill in the gaps between vertices with linear interpolation
+        for (i in 0 until vertices.size - 1) {
+            val startIdx = vertexIndices[i]
+            val endIdx = vertexIndices[i + 1]
+
+            if (startIdx >= targetPointCount || endIdx >= targetPointCount) continue
+
+            val startPoint = vertices[i]
+            val endPoint = vertices[i + 1]
+
+            val segmentPointCount = endIdx - startIdx + 1
+
+            // Interpolate points between startIdx and endIdx
+            for (j in 0 until segmentPointCount) {
+                val t = j.toFloat() / (segmentPointCount - 1).toFloat()
+                val x = startPoint.x + t * (endPoint.x - startPoint.x)
+                val y = startPoint.y + t * (endPoint.y - startPoint.y)
+                interpolatedPoints[startIdx + j] = PointF(x, y)
+            }
+        }
+
+        // Return the list, filtering out any nulls
+        return interpolatedPoints.filterNotNull()
+    }
+
+    /**
+     * Interpolates a point at a specific distance along the polyline.
+     * Private - only used internally by interpolateAlongPolyLine.
+     */
+    private fun interpolatePointOnPolyLine(vertices: List<PointF>, targetDistance: Float): PointF {
+        if (vertices.size < 2) return vertices.first()
+
+        var accumulatedDistance = 0f
+
+        for (i in 1 until vertices.size) {
+            val start = vertices[i - 1]
+            val end = vertices[i]
+            val dx = end.x - start.x
+            val dy = end.y - start.y
+            val segmentLength = sqrt(dx * dx + dy * dy)
+
+            if (accumulatedDistance + segmentLength >= targetDistance) {
+                // Target distance is within this segment
+                val remainingDistance = targetDistance - accumulatedDistance
+                val t = if (segmentLength > 0f) remainingDistance / segmentLength else 0f
+                val x = start.x + t * dx
+                val y = start.y + t * dy
+                return PointF(x, y)
+            }
+
+            accumulatedDistance += segmentLength
+        }
+
+        // If we reach here, return the last vertex
+        return vertices.last()
+    }
+
     /**
      * Add a polyline anchor point at the specified index.
      * 

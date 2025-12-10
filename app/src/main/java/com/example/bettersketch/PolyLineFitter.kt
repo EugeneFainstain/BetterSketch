@@ -377,7 +377,7 @@ class PolyLineFitter {
 
             // Initialize unsmoothedPoints with a basic interpolation
             val initialPoints =
-                interpolateAlongPolyLineWithIndices(vertices, indices, targetPointCount)
+                PolylineUtils.interpolateAlongPolyLineWithIndices(vertices, indices, targetPointCount)
             val (pathPoints, totalDist) = Stroke.calculatePathPointsWithDistances(initialPoints)
             stroke.unsmoothedPoints.addAll(pathPoints)
             stroke.totalDistance = totalDist
@@ -387,52 +387,6 @@ class PolyLineFitter {
             stroke.applySmoothing()
 
             return stroke
-        }
-
-        /**
-         * Helper to create the initial interpolation for a polyline stroke
-         */
-        private fun interpolateAlongPolyLineWithIndices(
-            vertices: List<PointF>,
-            vertexIndices: List<Int>,
-            targetPointCount: Int
-        ): List<PointF> {
-            if (vertices.size < 2 || vertexIndices.size < 2) return vertices
-            if (targetPointCount < 2) return vertices
-
-            val interpolatedPoints = MutableList<PointF?>(targetPointCount) { null }
-
-            // Place each vertex at its designated index
-            for (i in vertices.indices) {
-                val index = vertexIndices[i]
-                if (index < targetPointCount) {
-                    interpolatedPoints[index] = vertices[i]
-                }
-            }
-
-            // Fill in the gaps between vertices with linear interpolation
-            for (i in 0 until vertices.size - 1) {
-                val startIdx = vertexIndices[i]
-                val endIdx = vertexIndices[i + 1]
-
-                if (startIdx >= targetPointCount || endIdx >= targetPointCount) continue
-
-                val startPoint = vertices[i]
-                val endPoint = vertices[i + 1]
-
-                val segmentPointCount = endIdx - startIdx + 1
-
-                // Interpolate points between startIdx and endIdx
-                for (j in 0 until segmentPointCount) {
-                    val t = j.toFloat() / (segmentPointCount - 1).toFloat()
-                    val x = startPoint.x + t * (endPoint.x - startPoint.x)
-                    val y = startPoint.y + t * (endPoint.y - startPoint.y)
-                    interpolatedPoints[startIdx + j] = PointF(x, y)
-                }
-            }
-
-            // Return the list, filtering out any nulls
-            return interpolatedPoints.filterNotNull()
         }
     }
 }
