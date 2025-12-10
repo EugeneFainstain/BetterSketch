@@ -88,7 +88,8 @@ class DrawingView @JvmOverloads constructor(
         val stroke: Stroke,
         val pointIndex: Int,
         val snapshotUnsmoothedPoints: MutableList<PathPoint>,
-        val weights: List<Float>
+        val weights: List<Float>,
+        val resampledSegmentPoints: List<PointF>? = null  // For Bezier: uniformly resampled points from adjacent segments
     )
 
     data class ControlPointToEdit(
@@ -442,10 +443,122 @@ class DrawingView @JvmOverloads constructor(
         setState(currentState) // Refresh UI and Canvas
     }
 
+
     /**
-     * Remove a Bezier anchor and refit the adjacent control points.
-     * Optimizes only the control point lengths while keeping directions fixed.
+     * Resample two adjacent Bezier segments uniformly in arc-length.
+     * This provides consistent sample points for refitting when an anchor is removed.
      */
+    private fun resampleAdjacentBezierSegments(stroke: Stroke, anchorIndex: Int): List<PointF> {
+        // Get the two segments
+        val p0 = stroke.bezierAnchorPoints[anchorIndex - 1]
+        val c1_left = stroke.bezierControlPoints1[anchorIndex - 1]
+        val c2_mid = stroke.bezierControlPoints2[anchorIndex]
+        val p_mid = stroke.bezierAnchorPoints[anchorIndex]
+        val c1_mid = stroke.bezierControlPoints1[anchorIndex]
+        val c2_right = stroke.bezierControlPoints2[anchorIndex + 1]
+        val p3 = stroke.bezierAnchorPoints[anchorIndex + 1]
+
+        // Estimate arc lengths of both segments
+        val samplesForLength = 100  // More samples for better accuracy
+        var leftLength = 0f
+        var prevPoint = p0
+        for (i in 1..samplesForLength) {
+            val t = i.toFloat() / samplesForLength
+            val point = GeometryUtils.evaluateCubicBezier(p0, c1_left, c2_mid, p_mid, t)
+            leftLength += GeometryUtils.distance(point, prevPoint)
+            prevPoint = point
+        }
+
+        var rightLength = 0f
+        prevPoint = p_mid
+        for (i in 1..samplesForLength) {
+            val t = i.toFloat() / samplesForLength
+            val point = GeometryUtils.evaluateCubicBezier(p_mid, c1_mid, c2_right, p3, t)
+            rightLength += GeometryUtils.distance(point, prevPoint)
+            prevPoint = point
+        }
+
+        val totalLength = leftLength + rightLength
+        if (totalLength <= 0f) return emptyList()
+
+        // Determine how many samples we want (aim for good density)
+        val targetSamples = maxOf(40, (totalLength / 5f).toInt())  // ~5 pixels per sample
+
+        // Resample both segments uniformly by arc-length
+        val resampledPoints = mutableListOf<PointF>()
+
+        for (i in 0..targetSamples) {
+            val targetDist = (i.toFloat() / targetSamples) * totalLength
+
+            val point = if (targetDist <= leftLength) {
+                // Sample from left segment
+                val t = findParameterForArcLength(p0, c1_left, c2_mid, p_mid, targetDist, leftLength)
+                GeometryUtils.evaluateCubicBezier(p0, c1_left, c2_mid, p_mid, t)
+            } else {
+                // Sample from right segment
+                val distInRightSeg = targetDist - leftLength
+                val t = findParameterForArcLength(p_mid, c1_mid, c2_right, p3, distInRightSeg, rightLength)
+                GeometryUtils.evaluateCubicBezier(p_mid, c1_mid, c2_right, p3, t)
+            }
+
+            resampledPoints.add(point)
+        }
+
+        // CRITICAL: Ensure exact endpoints (floating point errors can cause issues)
+        if (resampledPoints.isNotEmpty()) {
+            resampledPoints[0] = PointF(p0.x, p0.y)  // Exact copy of first anchor
+            resampledPoints[resampledPoints.size - 1] = PointF(p3.x, p3.y)  // Exact copy of last anchor
+        }
+
+        return resampledPoints
+    }
+
+    /**
+     * Find the parameter t that corresponds to a given arc length along a Bezier segment.
+     * Uses binary search for efficiency.
+     */
+    private fun findParameterForArcLength(
+        p0: PointF, p1: PointF, p2: PointF, p3: PointF,
+        targetLength: Float,
+        totalLength: Float
+    ): Float {
+        if (targetLength <= 0f) return 0f
+        if (targetLength >= totalLength) return 1f
+
+        // Binary search for the parameter
+        var tLow = 0f
+        var tHigh = 1f
+        val tolerance = 0.0001f  // Tighter tolerance
+        val maxIterations = 20
+        var iteration = 0
+
+        while (tHigh - tLow > tolerance && iteration < maxIterations) {
+            val tMid = (tLow + tHigh) / 2f
+
+            // Calculate arc length up to tMid with adaptive sampling
+            var length = 0f
+            var prevPoint = p0
+            val samples = 30  // More samples for better accuracy
+
+            for (i in 1..(tMid * samples).toInt().coerceAtLeast(1)) {
+                val t = i.toFloat() / samples
+                val point = GeometryUtils.evaluateCubicBezier(p0, p1, p2, p3, t)
+                length += GeometryUtils.distance(point, prevPoint)
+                prevPoint = point
+            }
+
+            if (length < targetLength) {
+                tLow = tMid
+            } else {
+                tHigh = tMid
+            }
+
+            iteration++
+        }
+
+        return (tLow + tHigh) / 2f
+    }
+
     private fun removeBezierAnchorWithRefit(stroke: Stroke, anchorIndex: Int) {
         // Edge cases: can't remove first or last anchor point
         if (anchorIndex == 0 || anchorIndex >= stroke.bezierAnchorPoints.size - 1) {
@@ -462,39 +575,35 @@ class DrawingView @JvmOverloads constructor(
             return
         }
 
-        // Get the two segments we're merging
+        // Get the resampled points from the anchor being edited
+        val resampledPoints = anchorPointsToEdit.firstOrNull {
+            it.stroke == stroke &&
+                    it.pointIndex == findPointIndexForAnchor(stroke, anchorIndex)
+        }?.resampledSegmentPoints
+
+        if (resampledPoints == null || resampledPoints.size < 2) {
+            // Fallback: just remove without refitting
+            stroke.bezierAnchorPoints.removeAt(anchorIndex)
+            stroke.bezierAnchorIndices.removeAt(anchorIndex)
+            stroke.bezierControlPoints1.removeAt(anchorIndex)
+            stroke.bezierControlPoints2.removeAt(anchorIndex)
+            return
+        }
+
+        // Get anchor points
         val p0 = stroke.bezierAnchorPoints[anchorIndex - 1]
-        val c1_left = stroke.bezierControlPoints1[anchorIndex - 1]
-        val c2_mid = stroke.bezierControlPoints2[anchorIndex]
-        val p_mid = stroke.bezierAnchorPoints[anchorIndex]
-        val c1_mid = stroke.bezierControlPoints1[anchorIndex]
-        val c2_right = stroke.bezierControlPoints2[anchorIndex + 1]
         val p3 = stroke.bezierAnchorPoints[anchorIndex + 1]
 
-        // The tangent directions are FIXED - they come from the existing control points
+        // Get FIXED tangent directions from existing control points
+        val c1_left = stroke.bezierControlPoints1[anchorIndex - 1]
+        val c2_right = stroke.bezierControlPoints2[anchorIndex + 1]
         val tHat1 = normalize(PointF(c1_left.x - p0.x, c1_left.y - p0.y))
         val tHat2 = normalize(PointF(c2_right.x - p3.x, c2_right.y - p3.y))
 
-        // Sample both curves to get target points
-        val samples = 20
-        val samplePoints = mutableListOf<PointF>()
-
-        // Sample left segment
-        for (i in 0..samples) {
-            val t = i.toFloat() / samples
-            samplePoints.add(GeometryUtils.evaluateCubicBezier(p0, c1_left, c2_mid, p_mid, t))
-        }
-
-        // Sample right segment (skip first to avoid duplication)
-        for (i in 1..samples) {
-            val t = i.toFloat() / samples
-            samplePoints.add(GeometryUtils.evaluateCubicBezier(p_mid, c1_mid, c2_right, p3, t))
-        }
-
-        // Chord-length parameterization
+        // Chord-length parameterization of the resampled points
         val u = mutableListOf(0f)
-        for (i in 1 until samplePoints.size) {
-            u.add(u.last() + GeometryUtils.distance(samplePoints[i], samplePoints[i - 1]))
+        for (i in 1 until resampledPoints.size) {
+            u.add(u.last() + GeometryUtils.distance(resampledPoints[i], resampledPoints[i - 1]))
         }
         val total = u.last()
         if (total > 0f) {
@@ -503,10 +612,10 @@ class DrawingView @JvmOverloads constructor(
             }
         }
 
-        // Optimize ONLY the alphas (control point lengths) - same as BezierFitter.generateBezier
-        val (alphaL, alphaR) = optimizeControlPointLengths(p0, p3, samplePoints, u, tHat1, tHat2)
+        // Optimize control point lengths with fixed directions
+        val (alphaL, alphaR) = optimizeControlPointLengths(p0, p3, resampledPoints, u, tHat1, tHat2)
 
-        // Compute new control points with optimized lengths but FIXED directions
+        // Compute new control points
         val p1_new = PointF(p0.x + tHat1.x * alphaL, p0.y + tHat1.y * alphaL)
         val p2_new = PointF(p3.x + tHat2.x * alphaR, p3.y + tHat2.y * alphaR)
 
@@ -520,6 +629,28 @@ class DrawingView @JvmOverloads constructor(
         stroke.bezierControlPoints1.removeAt(anchorIndex)
         stroke.bezierControlPoints2.removeAt(anchorIndex)
     }
+
+    /**
+     * Helper to find the pointIndex in pointsForDrawing that corresponds to a bezier anchor
+     */
+    private fun findPointIndexForAnchor(stroke: Stroke, anchorIndex: Int): Int {
+        if (anchorIndex < 0 || anchorIndex >= stroke.bezierAnchorPoints.size) return -1
+
+        val anchor = stroke.bezierAnchorPoints[anchorIndex]
+        var closestIndex = 0
+        var minDist = Float.MAX_VALUE
+
+        stroke.pointsForDrawing.forEachIndexed { index, pathPoint ->
+            val dist = GeometryUtils.distance(anchor, pathPoint.point)
+            if (dist < minDist) {
+                minDist = dist
+                closestIndex = index
+            }
+        }
+
+        return closestIndex
+    }
+
 
     /**
      * Optimize control point lengths (alphas) with fixed tangent directions.
@@ -577,8 +708,17 @@ class DrawingView @JvmOverloads constructor(
         val segLength = GeometryUtils.distance(p0, p3)
         val epsilon = EPSILON * segLength
 
+        val originalAlphaL = alphaL
+        val originalAlphaR = alphaR
+
         if (alphaL < epsilon) alphaL = segLength / 3f
         if (alphaR < epsilon) alphaR = segLength / 3f
+
+        // Add some debug logging
+        android.util.Log.d("BezierRefit", "Segment length: $segLength")
+        android.util.Log.d("BezierRefit", "Computed alphas: L=$originalAlphaL, R=$originalAlphaR")
+        android.util.Log.d("BezierRefit", "Final alphas: L=$alphaL, R=$alphaR")
+        android.util.Log.d("BezierRefit", "Sample point count: ${points.size}")
 
         return Pair(alphaL, alphaR)
     }
@@ -985,90 +1125,68 @@ class DrawingView @JvmOverloads constructor(
         return false
     }
 
+
+
     private fun selectEndpointOfCurrentStroke(tapPoint: PointF): Boolean {
-        if (addAnchorPointGestureInProgress) return false
+        if (getHighlightedStrokes.isEmpty()) return false
 
-        // Clear previous editing state
-        anchorPointsToEdit.clear()
+        val closestResult = findClosestPointAcrossHighlightedStrokes(tapPoint) ?: return false
+        val stroke = closestResult.stroke
+        val pointIndex = closestResult.pointIndex
 
-        // Find the absolute nearest ANCHOR point across all highlighted strokes
-        val nearestResult = findClosestAnchorPointAcrossAllStrokes(tapPoint) ?: return false
-        // Primary stroke is the stroke who's endpoint has been selected for editing
-        val (primaryStroke, primaryIndex) = nearestResult
+        // Check if this is a Bezier anchor or polyline vertex
+        val isBezierAnchor = stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()
 
-        // Determine if we're in bezier mode or polyline mode
-        val inBezierMode = primaryStroke.renderAsBezier && primaryStroke.bezierAnchorPoints.isNotEmpty()
+        // For Bezier mode, we need to find which ANCHOR this pointIndex corresponds to
+        var anchorIndex = -1
+        val resampledPoints: List<PointF>? = if (isBezierAnchor) {
+            // Find which anchor this corresponds to (by finding closest anchor to the point)
+            val clickedPoint = stroke.pointsForDrawing[pointIndex].point
+            var closestDist = Float.MAX_VALUE
 
-        if (inBezierMode) {
-            // Bezier mode: primaryIndex is an index into bezierAnchorPoints
-            val primaryAnchor = primaryStroke.bezierAnchorPoints[primaryIndex]
-
-            // Save snapshot for undo
-            val snapshot = primaryStroke.unsmoothedPoints.map {
-                PathPoint(PointF(it.point.x, it.point.y), it.distance)
-            }.toMutableList()
-
-            // For bezier anchors, we don't use weights - we move the anchor directly
-            // Create a weight list that's all zeros except at the anchor location
-            // (We'll handle bezier anchor movement differently in moveEditingPoint)
-            anchorPointsToEdit.add(
-                AnchorPointToEdit(
-                    stroke = primaryStroke,
-                    pointIndex = primaryIndex,  // This is bezierAnchorPoints index, not unsmoothedPoints index
-                    snapshotUnsmoothedPoints = snapshot,
-                    weights = emptyList()  // Empty weights signals this is a bezier anchor
-                )
-            )
-        } else {
-            // Polyline/normal mode: primaryIndex is an index into unsmoothedPoints
-            val primaryPoint = primaryStroke.unsmoothedPoints[primaryIndex].point
-
-            // Now find all co-located anchor points on other strokes
-            val highlightedStrokes = getHighlightedStrokes
-
-            highlightedStrokes.forEach { stroke ->
-                stroke.forEachStroke { s ->
-                    if (!s.isGroup && s.polylineIndices.isNotEmpty()) {
-                        // Find the closest ANCHOR point on this stroke to the primary point
-                        var closestAnchorIdx = -1
-                        var closestDist = Float.MAX_VALUE
-
-                        s.polylineIndices.forEach { anchorIndex ->
-                            if (anchorIndex >= 0 && anchorIndex < s.unsmoothedPoints.size) {
-                                val anchorPoint = s.unsmoothedPoints[anchorIndex].point
-                                val d = distance(anchorPoint, primaryPoint)
-                                if (d < closestDist) {
-                                    closestDist = d
-                                    closestAnchorIdx = anchorIndex
-                                }
-                            }
-                        }
-
-                        // Check if this anchor point is within the stroke width threshold
-                        if (closestAnchorIdx != -1 && closestDist < s.paint.strokeWidth) {
-                            // Save snapshot of unsmoothed points before editing
-                            val snapshot = s.unsmoothedPoints.map {
-                                PathPoint(PointF(it.point.x, it.point.y), it.distance)
-                            }.toMutableList()
-
-                            // Calculate weights for this anchor point
-                            val weights = calculateWeightsForAnchorPoint(s, closestAnchorIdx)
-
-                            anchorPointsToEdit.add(
-                                AnchorPointToEdit(
-                                    stroke = s,
-                                    pointIndex = closestAnchorIdx,
-                                    snapshotUnsmoothedPoints = snapshot,
-                                    weights = weights
-                                )
-                            )
-                        }
-                    }
+            stroke.bezierAnchorPoints.forEachIndexed { idx, anchor ->
+                val dist = GeometryUtils.distance(anchor, clickedPoint)
+                if (dist < closestDist) {
+                    closestDist = dist
+                    anchorIndex = idx
                 }
             }
+
+            if (anchorIndex > 0 && anchorIndex < stroke.bezierAnchorPoints.size - 1) {
+                // Resample the two adjacent segments uniformly in arc-length
+                resampleAdjacentBezierSegments(stroke, anchorIndex)
+            } else {
+                null  // First or last anchor - no resampling needed
+            }
+        } else {
+            null
         }
 
-        return anchorPointsToEdit.isNotEmpty()
+        // For Bezier mode: weights should be empty (that's the signal), pointIndex should be the anchorIndex
+        // For Polyline mode: weights are calculated, pointIndex is the index in pointsForDrawing/unsmoothedPoints
+        val weights = if (isBezierAnchor) {
+            emptyList()  // Empty weights = Bezier mode
+        } else {
+            calculateWeightsForAnchorPoint(stroke, pointIndex)
+        }
+
+        // Snapshot the unsmoothed points
+        val snapshotPoints = stroke.unsmoothedPoints.map {
+            PathPoint(PointF(it.point.x, it.point.y), it.distance)
+        }.toMutableList()
+
+        anchorPointsToEdit.add(
+            AnchorPointToEdit(
+                stroke,
+                if (isBezierAnchor) anchorIndex else pointIndex,  // Store anchor index for Bezier, point index for polyline
+                snapshotPoints,
+                weights,
+                resampledPoints
+            )
+        )
+
+        setState(State.STROKE_EDITING)
+        return true
     }
 
     fun deleteStrokes() {
@@ -1210,6 +1328,7 @@ class DrawingView @JvmOverloads constructor(
         return singleHighlightedStroke?.isGroup ?: false
     }
 
+
     private fun moveEditingPoint(dx: Float, dy: Float) {
         // Move all anchor points (either bezier anchors or polyline anchors)
         anchorPointsToEdit.forEach { anchor ->
@@ -1217,17 +1336,19 @@ class DrawingView @JvmOverloads constructor(
 
             // Check if this is a bezier anchor (empty weights list is the signal)
             if (anchor.weights.isEmpty() && anchor.stroke.renderAsBezier) {
-                // Bezier mode: move the bezier anchor AND its associated control points
-                if (anchor.pointIndex >= 0 && anchor.pointIndex < anchor.stroke.bezierAnchorPoints.size) {
-                    // Move the anchor point itself
-                    anchor.stroke.bezierAnchorPoints[anchor.pointIndex].offset(dx, dy)
+                // Bezier mode: pointIndex is actually the anchorIndex
+                val anchorIndex = anchor.pointIndex
+
+                // Move the anchor point itself
+                if (anchorIndex >= 0 && anchorIndex < anchor.stroke.bezierAnchorPoints.size) {
+                    anchor.stroke.bezierAnchorPoints[anchorIndex].offset(dx, dy)
 
                     // Move both control points associated with this anchor
-                    if (anchor.pointIndex < anchor.stroke.bezierControlPoints1.size) {
-                        anchor.stroke.bezierControlPoints1[anchor.pointIndex].offset(dx, dy)
+                    if (anchorIndex < anchor.stroke.bezierControlPoints1.size) {
+                        anchor.stroke.bezierControlPoints1[anchorIndex].offset(dx, dy)
                     }
-                    if (anchor.pointIndex < anchor.stroke.bezierControlPoints2.size) {
-                        anchor.stroke.bezierControlPoints2[anchor.pointIndex].offset(dx, dy)
+                    if (anchorIndex < anchor.stroke.bezierControlPoints2.size) {
+                        anchor.stroke.bezierControlPoints2[anchorIndex].offset(dx, dy)
                     }
 
                     // Regenerate the curve from the modified bezier data
@@ -1512,6 +1633,7 @@ class DrawingView @JvmOverloads constructor(
                         }
                     }
 
+
                     // Draw green circles for all anchor points being edited
                     // Check independently of drawEndpoints and gesture flags
                     if (!twoFingerGestureOccured && !threeFingerGestureOccured) { // Do not draw highlighted endpoint during a 2- or 3- finger gesture
@@ -1523,12 +1645,24 @@ class DrawingView @JvmOverloads constructor(
 
                         // Check if this stroke has any anchor points being edited
                         anchorPointsToEdit.forEach { anchor ->
-                            if (anchor.stroke == stroke && anchor.pointIndex < stroke.pointsForDrawing.size) {
-                                // Draw green circle on the SMOOTHED position of this anchor point
-                                val pointToHighlight = stroke.pointsForDrawing[anchor.pointIndex].point
-                                val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
-                                globalTransform.mapPoints(transformedPoint)
-                                canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
+                            if (anchor.stroke == stroke) {
+                                val pointToHighlight = if (anchor.weights.isEmpty() && stroke.renderAsBezier) {
+                                    // Bezier mode: pointIndex is actually anchorIndex
+                                    if (anchor.pointIndex >= 0 && anchor.pointIndex < stroke.bezierAnchorPoints.size) {
+                                        stroke.bezierAnchorPoints[anchor.pointIndex]
+                                    } else null
+                                } else {
+                                    // Polyline mode: pointIndex is index in pointsForDrawing
+                                    if (anchor.pointIndex < stroke.pointsForDrawing.size) {
+                                        stroke.pointsForDrawing[anchor.pointIndex].point
+                                    } else null
+                                }
+
+                                pointToHighlight?.let { point ->
+                                    val transformedPoint = floatArrayOf(point.x, point.y)
+                                    globalTransform.mapPoints(transformedPoint)
+                                    canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
+                                }
                             }
                         }
                     }
