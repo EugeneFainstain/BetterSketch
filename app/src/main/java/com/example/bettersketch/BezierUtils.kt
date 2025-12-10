@@ -347,29 +347,40 @@ object BezierUtils {
         }
     }
 
+
     /**
      * Move a bezier anchor and one control point while maintaining collinearity with the opposite control.
      * Used for two-finger bezier control point editing.
-     * 
-     * @param stroke The stroke being edited
-     * @param anchorIndex Index of the anchor being moved
-     * @param controlIndex Index of the control point being dragged
-     * @param isControl1 True if dragging controlPoints1, false if controlPoints2
+     *
+     * @param controlEdit The control point being edited (nullable)
+     * @param anchorEdit The anchor point being edited (nullable)
      * @param anchorDx Delta X for anchor movement
      * @param anchorDy Delta Y for anchor movement
      * @param controlDx Delta X for control point movement
      * @param controlDy Delta Y for control point movement
      */
     fun moveBezierAnchorAndControlPoint(
-        stroke: Stroke,
-        anchorIndex: Int,
-        controlIndex: Int,
-        isControl1: Boolean,
+        controlEdit: DrawingView.ControlPointToEdit?,
+        anchorEdit: DrawingView.AnchorPointToEdit?,
         anchorDx: Float,
         anchorDy: Float,
         controlDx: Float,
         controlDy: Float
     ) {
+        // Validate inputs
+        if (controlEdit == null || anchorEdit == null) return
+
+        val stroke = controlEdit.stroke
+        val anchorIndex = anchorEdit.pointIndex
+        val controlIndex = controlEdit.controlIndex
+        val isControl1 = (controlEdit.arrayIdx == 1)
+
+        // Guard against invalid indices
+        if (anchorIndex < 0 || anchorIndex >= stroke.bezierAnchorPoints.size ||
+            controlIndex < 0 || controlIndex >= stroke.bezierControlPoints1.size) {
+            return
+        }
+
         val anchorPoint = stroke.bezierAnchorPoints[anchorIndex]
 
         // Get references to the control points

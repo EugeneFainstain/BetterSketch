@@ -92,7 +92,7 @@ class DrawingView @JvmOverloads constructor(
     private var isSecondFingerEditing = false
     private var firstFingerDownTime: Long = 0  // Track when first finger landed
 
-    private data class AnchorPointToEdit(
+    public data class AnchorPointToEdit(
         val stroke: Stroke,
         val pointIndex: Int,
         val snapshotUnsmoothedPoints: MutableList<PathPoint>,
@@ -1328,22 +1328,12 @@ class DrawingView @JvmOverloads constructor(
         return true
     }
 
-    private fun moveBezierAnchorAndControlPoints(anchorDx: Float, anchorDy: Float, controlDx: Float, controlDy: Float) {
-        val controlEdit = secondFingerControlEdit ?: return
-        val primaryAnchor = anchorPointsToEdit.firstOrNull() ?: return
-
-        BezierUtils.moveBezierAnchorAndControlPoint(controlEdit.stroke, primaryAnchor.pointIndex, controlEdit.controlIndex, (controlEdit.arrayIdx == 1), anchorDx, anchorDy, controlDx, controlDy)
-
-        invalidate()
-    }
-
     private fun midpoint(event: MotionEvent): PointF {
         if (event.pointerCount < 2) return PointF(event.x, event.y)
         val x = (event.getX(0) + event.getX(1)) / 2f
         val y = (event.getY(0) + event.getY(1)) / 2f
         return PointF(x, y)
     }
-
 
     override fun onTwoFingerDrag(
         event: MotionEvent,
@@ -1373,7 +1363,8 @@ class DrawingView @JvmOverloads constructor(
 
                 // Move anchor (finger 0) and control point (finger 1) together
                 // This also handles the opposite control point automatically
-                moveBezierAnchorAndControlPoints(finger0Delta[0], finger0Delta[1], finger1Delta[0], finger1Delta[1])
+                BezierUtils.moveBezierAnchorAndControlPoint(secondFingerControlEdit, anchorPointsToEdit.firstOrNull(),
+                    finger0Delta[0], finger0Delta[1], finger1Delta[0], finger1Delta[1])
 
                 redrawHistory()
                 return true  // Early return - don't do canvas transformation
