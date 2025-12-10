@@ -101,10 +101,10 @@ class Stroke(
         totalDistance = newTotalDistance
     }
 
-    /**
-     * Interpolate points along the bezier curve
-     */
 
+    /**
+     * Interpolate points along the bezier curve, with anchors pinned at specific indices
+     */
     private fun interpolateAlongBezierCurve(targetPointCount: Int): List<PointF> {
         if (bezierAnchorPoints.size < 2) return emptyList()
 
@@ -120,12 +120,11 @@ class Stroke(
         var totalLength = 0f
 
         for (segIndex in 0 until numSegments) {
-            val p0 = bezierAnchorPoints[segIndex]          // Start anchor
-            val p1 = bezierControlPoints1[segIndex]        // Outgoing control from start anchor
-            val p2 = bezierControlPoints2[segIndex + 1]    // Incoming control to end anchor
-            val p3 = bezierAnchorPoints[segIndex + 1]      // End anchor
+            val p0 = bezierAnchorPoints[segIndex]
+            val p1 = bezierControlPoints1[segIndex]
+            val p2 = bezierControlPoints2[segIndex + 1]
+            val p3 = bezierAnchorPoints[segIndex + 1]
 
-            // Estimate arc length by sampling the curve
             val length = estimateBezierArcLength(p0, p1, p2, p3)
             segmentLengths.add(length)
             totalLength += length
@@ -133,54 +132,40 @@ class Stroke(
 
         if (totalLength <= 0f) return listOf(bezierAnchorPoints.first())
 
-        // Distribute points proportionally to arc length
+        // Allocate points to each segment proportionally to its arc length
+        val pointsPerSegment = IntArray(numSegments)
+
+        for (segIndex in 0 until numSegments) {
+            val ratio = segmentLengths[segIndex] / totalLength
+            val idealPointCount = (targetPointCount - 1) * ratio
+            pointsPerSegment[segIndex] = idealPointCount.toInt().coerceAtLeast(1)
+        }
+
+        // Generate points with anchors pinned
         val interpolatedPoints = mutableListOf<PointF>()
-        val spacing = totalLength / (targetPointCount - 1)
 
-        var currentDistance = 0f
-        var segIndex = 0
-        var segmentStartDistance = 0f
-
-        for (i in 0 until targetPointCount) {
-            val targetDistance = i * spacing
-
-            // Find which segment contains this distance
-            while (segIndex < numSegments && targetDistance > segmentStartDistance + segmentLengths[segIndex]) {
-                segmentStartDistance += segmentLengths[segIndex]
-                segIndex++
-            }
-
-            if (segIndex >= numSegments) {
-                // We've gone past the last segment, add the last anchor point
-                interpolatedPoints.add(PointF(bezierAnchorPoints.last().x, bezierAnchorPoints.last().y))
-                break
-            }
-
-            // Interpolate within the current segment
-            val distanceIntoSegment = targetDistance - segmentStartDistance
-            val t = if (segmentLengths[segIndex] > 0) {
-                (distanceIntoSegment / segmentLengths[segIndex]).coerceIn(0f, 1f)
-            } else {
-                0f
-            }
-
+        for (segIndex in 0 until numSegments) {
             val p0 = bezierAnchorPoints[segIndex]
             val p1 = bezierControlPoints1[segIndex]
             val p2 = bezierControlPoints2[segIndex + 1]
             val p3 = bezierAnchorPoints[segIndex + 1]
 
-            val point = evaluateCubicBezier(p0, p1, p2, p3, t)
-            interpolatedPoints.add(point)
+            val numPointsInSegment = pointsPerSegment[segIndex]
+
+            // Add points for this segment (excluding the end anchor)
+            for (i in 0 until numPointsInSegment) {
+                val t = i.toFloat() / numPointsInSegment
+                val point = evaluateCubicBezier(p0, p1, p2, p3, t)
+                interpolatedPoints.add(point)
+            }
         }
 
-        // Ensure we have exactly targetPointCount points
-        while (interpolatedPoints.size < targetPointCount) {
-            interpolatedPoints.add(PointF(bezierAnchorPoints.last().x, bezierAnchorPoints.last().y))
-        }
+        // Always add the last anchor explicitly to ensure it's pinned
+        interpolatedPoints.add(PointF(bezierAnchorPoints.last().x, bezierAnchorPoints.last().y))
 
-        return interpolatedPoints.take(targetPointCount)
+        return interpolatedPoints
     }
-
+    
     /**
      * Estimate the arc length of a cubic Bezier curve
      */
