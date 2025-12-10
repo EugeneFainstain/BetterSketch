@@ -4,6 +4,31 @@ import android.graphics.PointF
 import com.example.bettersketch.GeometryUtils.distance
 
 object BezierUtils {
+    /**
+     * Remove a Bezier anchor point at the specified index.
+     *
+     * @param stroke The stroke to modify
+     * @param anchorIndex Index into bezierAnchorPoints
+     * @return True if the anchor was removed, false if removal was not allowed
+     */
+    fun removeBezierAnchorPointAtIndex(stroke: Stroke, anchorIndex: Int): Boolean {
+        // Don't allow removing if it would leave fewer than 2 anchors
+        if (stroke.bezierAnchorPoints.size <= 2) return false
+
+        // Remove the anchor and refit the adjacent control points
+        if (anchorIndex >= 0 && anchorIndex < stroke.bezierAnchorPoints.size) {
+            removeBezierAnchorWithRefit(stroke, anchorIndex)
+            stroke.isModified = true
+
+            // Regenerate the curve from the modified bezier data
+            stroke.regenerateBezierCurve()
+            stroke.applySmoothing()
+            return true
+        }
+
+        return false
+    }
+
     fun addBezierAnchorPoint(stroke: Stroke, pointIndex: Int) {
         // pointIndex is an index into pointsForDrawing (the smoothed/regenerated curve)
         // We need to find which bezier segment this point falls on

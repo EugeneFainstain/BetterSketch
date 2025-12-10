@@ -271,57 +271,14 @@ class DrawingView @JvmOverloads constructor(
             val stroke = anchor.stroke
 
             // Check if this is a bezier anchor (empty weights list is the signal)
-            if (anchor.weights.isEmpty() && stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()) {
-                // Bezier mode: remove bezier anchor
-                val anchorIndex = anchor.pointIndex
+            val isBezierAnchor = anchor.weights.isEmpty() && stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()
 
-                // Don't allow removing if it would leave fewer than 2 anchors
-                if (stroke.bezierAnchorPoints.size <= 2) return@forEach
-
-                // Remove the anchor and refit the adjacent control points
-                if (anchorIndex >= 0 && anchorIndex < stroke.bezierAnchorPoints.size) {
-                    BezierUtils.removeBezierAnchorWithRefit(stroke, anchorIndex)
-                    stroke.isModified = true
-
-                    // Regenerate the curve from the modified bezier data
-                    stroke.regenerateBezierCurve()
-                    stroke.applySmoothing()
-                }
-            } else {
-                // Polyline mode: original behavior
-                if (stroke.polylineIndices.isEmpty()) return@forEach
-
-                // Find which polyline index corresponds to the editing point
-                val polylineIndexToRemove = stroke.polylineIndices.indexOfFirst { it == anchor.pointIndex }
-                if (polylineIndexToRemove == -1) return@forEach
-
-                // Don't allow removing if it would leave fewer than 2 vertices
-                if (stroke.polylineIndices.size <= 2) return@forEach
-
-                // Restore unsmoothedPoints to the snapshot
-                stroke.unsmoothedPoints.clear()
-                stroke.unsmoothedPoints.addAll(
-                    anchor.snapshotUnsmoothedPoints.map {
-                        PathPoint(PointF(it.point.x, it.point.y), it.distance)
-                    }
-                )
-
-                // Recalculate distances
-                val (recalculatedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
-                    stroke.unsmoothedPoints.map { it.point }
-                )
-                stroke.unsmoothedPoints.clear()
-                stroke.unsmoothedPoints.addAll(recalculatedPoints)
-                stroke.totalDistance = newTotalDistance
-
-                // Remove the polyline index
-                stroke.polylineIndices.removeAt(polylineIndexToRemove)
-                stroke.isModified = true
-
-                // Regenerate the stroke
-                stroke.regenerateInterpolatedPolylinePoints()
-                stroke.applySmoothing()
-            }
+            StrokeUtils.removeAnchorPointAtIndex(
+                stroke = stroke,
+                pointIndex = anchor.pointIndex,
+                snapshotUnsmoothedPoints = anchor.snapshotUnsmoothedPoints,
+                isBezierAnchor = isBezierAnchor
+            )
         }
 
         // Clear editing state
