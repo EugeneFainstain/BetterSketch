@@ -2,6 +2,7 @@ package com.example.bettersketch
 
 import android.graphics.PointF
 import kotlin.math.sqrt
+import android.graphics.Matrix
 
 /**
  * Utility object for common geometric operations used across the application.
@@ -88,5 +89,21 @@ object GeometryUtils {
     fun normalize(p: PointF): PointF {
         val len = sqrt(p.x * p.x + p.y * p.y)
         return if (len > 1e-6f) PointF(p.x / len, p.y / len) else PointF(0f, 0f)
+    }
+
+    /**
+     * Calculate the scale factor from a transformation matrix.
+     * Uses the Pythagorean theorem to calculate the scale, which is robust against rotation.
+     * 
+     * @param matrix The transformation matrix
+     * @return The scale factor
+     */
+    fun getScaleFromMatrix(matrix: Matrix): Float {
+        val values = FloatArray(9)
+        matrix.getValues(values)
+        // Use the pythagorean theorem to calculate the scale, which is robust against rotation
+        val scaleX = values[Matrix.MSCALE_X]
+        val skewY = values[Matrix.MSKEW_Y]
+        return sqrt(scaleX * scaleX + skewY * skewY)
     }
 }

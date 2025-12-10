@@ -176,47 +176,6 @@ class DrawingView @JvmOverloads constructor(
     // Data class to hold the result of finding closest point across multiple strokes
     private data class ClosestPointResult(val stroke: Stroke, val pointIndex: Int, val distance: Float)
 
-    private fun findClosestPointAcrossHighlightedStrokes(tapPoint: PointF): ClosestPointResult? {
-        val highlighted = getHighlightedStrokes
-        var bestResult: ClosestPointResult? = null
-        var minDistance = Float.MAX_VALUE
-
-        highlighted.forEach { stroke ->
-            stroke.forEachStroke { s ->
-                if (!s.isGroup) {
-                    val pointIndex = findClosestPointOnCurve(s, tapPoint)
-                    if (pointIndex != -1 && pointIndex < s.pointsForDrawing.size) {
-                        val point = s.pointsForDrawing[pointIndex].point
-                        val dist = distance(point, tapPoint)
-                        if (dist < minDistance) {
-                            minDistance = dist
-                            bestResult = ClosestPointResult(s, pointIndex, dist)
-                        }
-                    }
-                }
-            }
-        }
-
-        return bestResult
-    }
-
-    private fun findClosestPointOnCurve(stroke: Stroke, tapPoint: PointF): Int {
-        if (stroke.isGroup) return -1
-
-        var closestDist = Float.MAX_VALUE
-        var closestPointIndex = -1
-
-        stroke.pointsForDrawing.forEachIndexed { index, pathPoint ->
-            val d = distance(pathPoint.point, tapPoint)
-            if (d < closestDist) {
-                closestDist = d
-                closestPointIndex = index
-            }
-        }
-
-        return closestPointIndex
-    }
-
     fun addAnchorPointAtIndex(index: Int) {
         // Use the stored location from the preview
         val location = addAnchorPointHere ?: return
@@ -230,37 +189,8 @@ class DrawingView @JvmOverloads constructor(
             BezierUtils.addBezierAnchorPoint(stroke, index)
         } else {
             // Polyline mode: add a polyline anchor
-            addPolylineAnchorPoint(stroke, index)
+            PolylineUtils.addPolylineAnchorPoint(stroke, index)
         }
-    }
-
-    private fun addPolylineAnchorPoint(stroke: Stroke, index: Int) {
-        // Initialize polylineIndices if empty (first anchor being added)
-        if (stroke.polylineIndices.isEmpty()) {
-            // Add first and last points as anchors
-            stroke.polylineIndices.add(0)
-            stroke.polylineIndices.add(stroke.unsmoothedPoints.size - 1)
-        }
-
-        // Find where to insert the new anchor in the sorted polylineIndices list
-        var insertPosition = stroke.polylineIndices.size
-        for (i in stroke.polylineIndices.indices) {
-            if (index < stroke.polylineIndices[i]) {
-                insertPosition = i
-                break
-            } else if (index == stroke.polylineIndices[i]) {
-                // Already an anchor at this position, don't add
-                return
-            }
-        }
-
-        // Insert the new anchor
-        stroke.polylineIndices.add(insertPosition, index)
-        stroke.isModified = true
-
-        // Regenerate the stroke
-        stroke.regenerateInterpolatedPolylinePoints()
-        stroke.applySmoothing()
     }
 
     fun removeAnchorPointAtEditingIndex() {
@@ -288,19 +218,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun undoModificationsForHighlightedStrokes() {
-        val highlightedStrokes = getHighlightedStrokes
-        highlightedStrokes.forEach { stroke ->
-            stroke.forEachStroke {
-                it.unsmoothedPoints.clear()
-                it.unsmoothedPoints.addAll(it.originalPoints.map { p -> PathPoint(PointF(p.point.x, p.point.y), p.distance) })
-                val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(it.unsmoothedPoints.map { p -> p.point })
-                it.unsmoothedPoints.clear()
-                it.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-                it.totalDistance = newTotalDistance
-                it.applySmoothing()
-                it.isModified = false
-            }
-        }
+        StrokeUtils.undoModificationsForHighlightedStrokes(getHighlightedStrokes)
         setState(currentState)
     }
 
@@ -436,62 +354,6 @@ class DrawingView @JvmOverloads constructor(
         val point = floatArrayOf(x, y)
         globalTransform.mapPoints(point)
         return PointF(point[0], point[1])
-    }
-
-    private fun transformStroke(stroke: Stroke, matrix: Matrix) {
-        val scale = getScaleFromMatrix(matrix)
-        stroke.forEachStroke { s ->
-            s.isModified = true
-
-            s.unsmoothedPoints.forEach { pathPoint ->
-                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                matrix.mapPoints(point)
-                pathPoint.point.set(point[0], point[1])
-            }
-            val (recalculatedUnsmoothedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(s.unsmoothedPoints.map { it.point })
-            s.unsmoothedPoints.clear()
-            s.unsmoothedPoints.addAll(recalculatedUnsmoothedPoints)
-            s.totalDistance = newTotalDistance
-
-            s.interpolatedPolylinePoints.forEach { pathPoint ->
-                val point = floatArrayOf(pathPoint.point.x, pathPoint.point.y)
-                matrix.mapPoints(point)
-                pathPoint.point.set(point[0], point[1])
-            }
-            val (recalculatedInterpolatedPolylinePoints, _) = Stroke.calculatePathPointsWithDistances(s.interpolatedPolylinePoints.map { it.point })
-            s.interpolatedPolylinePoints.clear()
-            s.interpolatedPolylinePoints.addAll(recalculatedInterpolatedPolylinePoints)
-
-            // Transform bezier data
-            s.bezierAnchorPoints.forEach { point ->
-                val p = floatArrayOf(point.x, point.y)
-                matrix.mapPoints(p)
-                point.set(p[0], p[1])
-            }
-
-            s.bezierControlPoints1.forEach { point ->
-                val p = floatArrayOf(point.x, point.y)
-                matrix.mapPoints(p)
-                point.set(p[0], p[1])
-            }
-
-            s.bezierControlPoints2.forEach { point ->
-                val p = floatArrayOf(point.x, point.y)
-                matrix.mapPoints(p)
-                point.set(p[0], p[1])
-            }
-
-            s.applySmoothing()
-        }
-    }
-
-    private fun getScaleFromMatrix(matrix: Matrix): Float {
-        val values = FloatArray(9)
-        matrix.getValues(values)
-        // Use the pythagorean theorem to calculate the scale, which is robust against rotation
-        val scaleX = values[Matrix.MSCALE_X]
-        val skewY = values[Matrix.MSKEW_Y]
-        return sqrt(scaleX * scaleX + skewY * skewY)
     }
 
     private fun preTransform(matrix: Matrix, pre: Matrix) {
@@ -691,7 +553,7 @@ class DrawingView @JvmOverloads constructor(
         anchorPointsToEdit.clear()
 
         // Find the absolute nearest ANCHOR point across all highlighted strokes
-        val nearestResult = findClosestAnchorPointAcrossAllStrokes(tapPoint) ?: return false
+        val nearestResult = StrokeUtils.findClosestAnchorPointAcrossAllStrokes(tapPoint, getHighlightedStrokes) ?: return false
         // Primary stroke is the stroke who's endpoint has been selected for editing
         val (primaryStroke, primaryIndex) = nearestResult
 
@@ -778,7 +640,7 @@ class DrawingView @JvmOverloads constructor(
             if (highlightedStrokes.size == 1) {
                 val stroke = highlightedStrokes.first()
                 if (stroke.analyticalShapeType != AnalyticalShapeType.NONE || stroke.renderAsPolyline) {
-                    revertStrokeToOriginal(stroke)
+                    StrokeUtils.revertStrokeToOriginal(stroke)
                     setState(currentState) // Refresh UI and Canvas
                     return
                 }
@@ -789,7 +651,7 @@ class DrawingView @JvmOverloads constructor(
             // Delete the last stroke as fallback
             val lastStroke = strokes.last()
             if (lastStroke.analyticalShapeType != AnalyticalShapeType.NONE || lastStroke.renderAsPolyline) {
-                revertStrokeToOriginal(lastStroke)
+                StrokeUtils.revertStrokeToOriginal(lastStroke)
                 setState(currentState)
                 return
             }
@@ -810,62 +672,11 @@ class DrawingView @JvmOverloads constructor(
         }
     }
 
-    private fun revertStrokeToOriginal(stroke: Stroke) {
-        // Reset analytical shape properties
-        stroke.analyticalShapeType = AnalyticalShapeType.NONE
-        stroke.renderAsPolyline = false
-        stroke.renderAsBezier = false
-        stroke.needsToRegenerate = false
-        stroke.polylineIndices.clear()
-        stroke.shapeParameterPoints.clear()
-
-        // Clear bezier data
-        stroke.bezierAnchorPoints.clear()
-        stroke.bezierControlPoints1.clear()
-        stroke.bezierControlPoints2.clear()
-        stroke.bezierAnchorIndices.clear()
-
-        // Restore from originalPoints
-        stroke.unsmoothedPoints.clear()
-        stroke.unsmoothedPoints.addAll(
-            stroke.originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }
-        )
-
-        // Recalculate distances
-        val (recalculatedPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(
-            stroke.unsmoothedPoints.map { it.point }
-        )
-        stroke.unsmoothedPoints.clear()
-        stroke.unsmoothedPoints.addAll(recalculatedPoints)
-        stroke.totalDistance = newTotalDistance
-
-        // Reapply smoothing
-        stroke.applySmoothing()
-
-        // Re-detect shape for the reverted stroke
-        detectShape(stroke)
-    }
-
     fun duplicateCurrentStroke() {
         singleHighlightedStroke?.let { originalStroke ->
             strokes.forEach { it.setHighlightedRecursively(false) }
 
-            val duplicatedStroke = originalStroke.newFrom() // Create a copy of the original stroke
-            transformStroke(duplicatedStroke, globalTransform) // Bring it into screen-space
-
-            val bounds = duplicatedStroke.getBounds() // Calculate the bounds, in screen-space
-            val offsetY = -max(bounds.width(), bounds.height()) / 2f
-            val matrix = Matrix().apply { postTranslate(0f, offsetY) }
-            transformStroke(duplicatedStroke, matrix) // Offset in screen-space
-
-            val inverseGlobalTransform = Matrix()
-            globalTransform.invert(inverseGlobalTransform)
-            transformStroke(duplicatedStroke, inverseGlobalTransform) // Bring it back into world-space
-
-            // Explicitly deleting "undo" history:
-            duplicatedStroke.originalPoints.clear()
-            duplicatedStroke.originalPoints.addAll(duplicatedStroke.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-            duplicatedStroke.isModified = false
+            val duplicatedStroke = StrokeUtils.duplicateStroke(originalStroke, globalTransform)
 
             // Highlighting
             duplicatedStroke.setHighlightedRecursively(true)
@@ -1063,7 +874,7 @@ class DrawingView @JvmOverloads constructor(
 
                 val finalPaint = Paint(stroke.paint)
                 path.transform(globalTransform)
-                val currentScale = getScaleFromMatrix(globalTransform)
+                val currentScale = GeometryUtils.getScaleFromMatrix(globalTransform)
 
                 finalPaint.strokeWidth *= cumulativeWidthMultiplier * currentScale
                 finalPaint.alpha = (finalPaint.alpha * cumulativeOpacityMultiplier).toInt()
@@ -1463,7 +1274,7 @@ class DrawingView @JvmOverloads constructor(
         // Handle add anchor point gesture - find closest point across ALL highlighted strokes
         if( addAnchorPointGestureInProgress ) {
             val worldPoint = toWorldCoordinates(event.x, event.y)
-            val result = findClosestPointAcrossHighlightedStrokes(worldPoint)
+            val result = StrokeUtils.findClosestPointAcrossHighlightedStrokes(worldPoint, getHighlightedStrokes)
 
             addAnchorPointHere = if (result != null) {
                 AnchorPointLocation(result.stroke, result.pointIndex)
@@ -1486,7 +1297,7 @@ class DrawingView @JvmOverloads constructor(
 
             // Apply transformation to all strokes
             strokesToTransform.forEach { stroke ->
-                transformStroke(stroke, deltaMatrix)
+                StrokeUtils.transformStroke(stroke, deltaMatrix)
             }
             redrawHistory()
             return true
@@ -1555,7 +1366,7 @@ class DrawingView @JvmOverloads constructor(
                             postTransform(worldspaceTransform,inverseGlobalTransform)// 3. Finally, transform back to world-space
 
                             // Applying the transformations, in world-space
-                            transformStroke(current, worldspaceTransform)
+                            StrokeUtils.transformStroke(current, worldspaceTransform)
                         }
                     }
                 }
@@ -1755,7 +1566,7 @@ class DrawingView @JvmOverloads constructor(
                 deltaMatrix.postTranslate(worldDelta[0], worldDelta[1])
 
                 // Apply transformation to all strokes
-                strokesToTransform.forEach { stroke -> transformStroke(stroke, deltaMatrix) }
+                strokesToTransform.forEach { stroke -> StrokeUtils.transformStroke(stroke, deltaMatrix) }
             }
         }
         else
@@ -1817,62 +1628,13 @@ class DrawingView @JvmOverloads constructor(
 
             // Apply transformation to all strokes
             strokesToTransform.forEach { stroke ->
-                transformStroke(stroke, deltaMatrix)
+                StrokeUtils.transformStroke(stroke, deltaMatrix)
             }
 
             redrawHistory()
         }
 
         return true
-    }
-
-    private fun findClosestAnchorPointAcrossAllStrokes(tapPoint: PointF): Pair<Stroke, Int>? {
-        // Returns (stroke, pointIndex/anchorIndex) of the closest ANCHOR point
-        // In bezier mode: searches bezierAnchorPoints (returns anchor index)
-        // In polyline/normal mode: searches polylineIndices (returns pointIndex in unsmoothedPoints)
-        var closestStroke: Stroke? = null
-        var closestPointIndex = -1
-        var closestDist = Float.MAX_VALUE
-
-        // Get all highlighted strokes
-        val highlightedStrokes = getHighlightedStrokes
-        if (highlightedStrokes.isEmpty()) return null
-
-        highlightedStrokes.forEach { stroke ->
-            stroke.forEachStroke { s ->
-                if (!s.isGroup) {
-                    // Check if in bezier mode
-                    if (s.renderAsBezier && s.bezierAnchorPoints.isNotEmpty()) {
-                        // Search through bezier anchor points directly
-                        s.bezierAnchorPoints.forEachIndexed { anchorIndex, anchorPoint ->
-                            val d = distance(anchorPoint, tapPoint)
-                            if (d < closestDist) {
-                                closestDist = d
-                                closestPointIndex = anchorIndex  // This is the index in bezierAnchorPoints
-                                closestStroke = s
-                            }
-                        }
-                    } else if (s.polylineIndices.isNotEmpty()) {
-                        // Search through polyline anchor points (indices into unsmoothedPoints)
-                        s.polylineIndices.forEach { anchorIndex ->
-                            if (anchorIndex >= 0 && anchorIndex < s.unsmoothedPoints.size) {
-                                val anchorPoint = s.unsmoothedPoints[anchorIndex].point
-                                val d = distance(anchorPoint, tapPoint)
-                                if (d < closestDist) {
-                                    closestDist = d
-                                    closestPointIndex = anchorIndex  // This is an index in unsmoothedPoints
-                                    closestStroke = s
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return if (closestStroke != null && closestPointIndex != -1) {
-            Pair(closestStroke!!, closestPointIndex)
-        } else null
     }
 
     private fun calculateWeightsForAnchorPoint(stroke: Stroke, pointIndex: Int): List<Float> {

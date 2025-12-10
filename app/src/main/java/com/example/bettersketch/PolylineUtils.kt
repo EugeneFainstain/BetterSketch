@@ -5,8 +5,43 @@ import android.graphics.PointF
 
 object PolylineUtils {
     /**
+     * Add a polyline anchor point at the specified index.
+     * 
+     * @param stroke The stroke to modify
+     * @param index Index in unsmoothedPoints where the anchor should be added
+     */
+    fun addPolylineAnchorPoint(stroke: Stroke, index: Int) {
+        // Initialize polylineIndices if empty (first anchor being added)
+        if (stroke.polylineIndices.isEmpty()) {
+            // Add first and last points as anchors
+            stroke.polylineIndices.add(0)
+            stroke.polylineIndices.add(stroke.unsmoothedPoints.size - 1)
+        }
+
+        // Find where to insert the new anchor in the sorted polylineIndices list
+        var insertPosition = stroke.polylineIndices.size
+        for (i in stroke.polylineIndices.indices) {
+            if (index < stroke.polylineIndices[i]) {
+                insertPosition = i
+                break
+            } else if (index == stroke.polylineIndices[i]) {
+                // Already an anchor at this position, don't add
+                return
+            }
+        }
+
+        // Insert the new anchor
+        stroke.polylineIndices.add(insertPosition, index)
+        stroke.isModified = true
+
+        // Regenerate the stroke
+        stroke.regenerateInterpolatedPolylinePoints()
+        stroke.applySmoothing()
+    }
+
+    /**
      * Remove a polyline anchor point at the specified index.
-     *
+     * 
      * @param stroke The stroke to modify
      * @param pointIndex Index into unsmoothedPoints
      * @param snapshotUnsmoothedPoints Snapshot of unsmoothedPoints for restoration
