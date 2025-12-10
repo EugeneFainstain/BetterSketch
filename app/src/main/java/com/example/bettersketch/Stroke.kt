@@ -101,7 +101,6 @@ class Stroke(
         totalDistance = newTotalDistance
     }
 
-
     /**
      * Interpolate points along the bezier curve, with anchors pinned at specific indices
      */
@@ -141,6 +140,16 @@ class Stroke(
             pointsPerSegment[segIndex] = idealPointCount.toInt().coerceAtLeast(1)
         }
 
+        // Update bezierAnchorIndices to reflect where anchors map to in the interpolated points
+        bezierAnchorIndices.clear()
+        var cumulativePoints = 0
+        for (i in bezierAnchorPoints.indices) {
+            bezierAnchorIndices.add(cumulativePoints)
+            if (i < numSegments) {
+                cumulativePoints += pointsPerSegment[i]
+            }
+        }
+
         // Generate points with anchors pinned
         val interpolatedPoints = mutableListOf<PointF>()
 
@@ -169,7 +178,7 @@ class Stroke(
     /**
      * Estimate the arc length of a cubic Bezier curve
      */
-    private fun estimateBezierArcLength(p0: PointF, p1: PointF, p2: PointF, p3: PointF): Float {
+    public fun estimateBezierArcLength(p0: PointF, p1: PointF, p2: PointF, p3: PointF): Float {
         // Use adaptive sampling to estimate arc length
         val samples = 20
         var length = 0f
