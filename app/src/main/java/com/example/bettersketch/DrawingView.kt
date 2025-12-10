@@ -14,6 +14,7 @@ import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import androidx.core.graphics.createBitmap
 import com.example.bettersketch.GeometryUtils.distance
 import kotlin.math.*
@@ -91,6 +92,7 @@ class DrawingView @JvmOverloads constructor(
     private var secondFingerControlEdit: ControlPointToEdit? = null
     private var isSecondFingerEditing = false
     private var firstFingerDownTime: Long = 0  // Track when first finger landed
+    private var firstFingerDownPosition: PointF? = null  // Track where first finger landed
 
     public data class AnchorPointToEdit(
         val stroke: Stroke,
@@ -1028,6 +1030,7 @@ class DrawingView @JvmOverloads constructor(
         dragGestureHasEnded = false // this is the only place it becomes "false"
 
         firstFingerDownTime = System.currentTimeMillis()  // Record when first finger landed
+        firstFingerDownPosition = PointF(event.x, event.y)  // Record where first finger landed
 
         if (advancedGestureInProgress)
             return true
@@ -1075,7 +1078,11 @@ class DrawingView @JvmOverloads constructor(
 
         // Calculate time difference between first and second finger
         val timeBetweenFingers = System.currentTimeMillis() - firstFingerDownTime
-        val simultaneousThreshold = 40L // milliseconds - tune this value as needed
+        val firstFingerPosition = PointF(event.getX(0), event.getY(0))
+        val firstFingerTravel = distance(firstFingerDownPosition!!, firstFingerPosition)
+
+        val simultaneousThreshold = ViewConfiguration.getTapTimeout() // milliseconds - tune this value as needed
+        val travelThreshold = ViewConfiguration.get(context).scaledTouchSlop // tune this value as needed
 
         // Determine if this should be a control point edit gesture:
         // 1. Must be in stroke editing mode
@@ -1083,7 +1090,8 @@ class DrawingView @JvmOverloads constructor(
         // 3. Fingers must NOT land simultaneously (sequential touch)
         val shouldEditControlPoint = currentState == State.STROKE_EDITING &&
                 anchorPointsToEdit.isNotEmpty() &&
-                timeBetweenFingers > simultaneousThreshold
+                    ((timeBetweenFingers > simultaneousThreshold) or
+                     (firstFingerTravel > travelThreshold)) // if the first finger traveled far
 
         if (shouldEditControlPoint) {
             val primaryAnchor = anchorPointsToEdit.firstOrNull()

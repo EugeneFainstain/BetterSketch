@@ -7,7 +7,6 @@ import android.view.ViewConfiguration
 import com.example.bettersketch.GeometryUtils.distance
 import kotlin.math.abs
 import kotlin.math.atan2
-import kotlin.math.sqrt
 
 class CustomGestureDetector(context: Context, private val listener: OnGestureListener) {
 
@@ -33,12 +32,12 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
     private val tapTimeout: Int = ViewConfiguration.getTapTimeout()
 
     private var lastTapTime: Long = 0
-    private var downTime: Long = 0
-    private var downX: Float = 0f
-    private var downY: Float = 0f
+    private var firstFingerDownTime: Long = 0
+    private var firstFingerDownX: Float = 0f
+    private var firstFingerDownY: Float = 0f
     private var lastMoveX: Float = 0f
     private var lastMoveY: Float = 0f
-    private var isDragging: Boolean = false
+    private var isSingleFingerDragging: Boolean = false
     private var activePointerCount: Int = 0
 
     // Multi-touch state
@@ -63,12 +62,12 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
         when (action) {
             MotionEvent.ACTION_DOWN -> {
                 activePointerCount = 1
-                downX = event.x
-                downY = event.y
-                downTime = System.currentTimeMillis()
+                firstFingerDownX = event.x
+                firstFingerDownY = event.y
+                firstFingerDownTime = System.currentTimeMillis()
                 lastMoveX = event.x
                 lastMoveY = event.y
-                isDragging = false
+                isSingleFingerDragging = false
 
                 listener.onFirstFingerDown(event)
             }
@@ -86,7 +85,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                     lastThreeFingerAngle = primaryAngle(event, centroid)
                     listener.onThirdFingerDown(event)
                 }
-                isDragging = false
+                isSingleFingerDragging = false
             }
             MotionEvent.ACTION_MOVE -> {
                 var dx = event.x - lastMoveX
@@ -94,14 +93,20 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                 lastMoveX = event.x
                 lastMoveY = event.y
 
-                if( gestureTagChanged ) { // Prevents the jump if touching the button second
+                if (gestureTagChanged) { // Prevents the jump if touching the button second
                     dx = 0f
                     dy = 0f
                 }
 
-                if (abs(event.x - downX) > touchSlop || abs(event.y - downY) > touchSlop || (System.currentTimeMillis() - downTime) > 100 ) {
-                    isDragging = true
-                }
+                // If only 1 finger is moving, and it moved far since the landing,
+                // or timeout expired since the landing ==> this is a single-finger drag
+                if (activePointerCount == 1)
+                    if (abs(event.x - firstFingerDownX) > touchSlop ||
+                        abs(event.y - firstFingerDownY) > touchSlop ||
+                        (System.currentTimeMillis() - firstFingerDownTime) > 100
+                    ) {
+                        isSingleFingerDragging = true
+                    }
 
                 if (pointerCount >= 3) {
                     val currentCentroid = centroid(event)
@@ -124,7 +129,7 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                     val newAngle = angle(event)
                     val currentMidpoint = midpoint(event)
 
-                    if( gestureTagChanged ) { // Prevents the jump if touching the button second
+                    if (gestureTagChanged) { // Prevents the jump if touching the button second
                         lastMultiTouchDistance = newDist
                         lastMultiTouchAngle = newAngle
                         lastMultiTouchMidpoint.set(currentMidpoint)
@@ -144,8 +149,13 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                     lastMultiTouchDistance = newDist
                     lastMultiTouchAngle = newAngle
                     lastMultiTouchMidpoint.set(currentMidpoint)
-                } else if (isDragging) {
-                    listener.onSingleFingerDrag(event, dx, dy)
+
+                } else if (pointerCount == 1) {
+                    if (isSingleFingerDragging) {
+                        listener.onSingleFingerDrag(event, dx, dy)
+                    }
+                } else {
+                    // Shouldn't happen
                 }
             }
             MotionEvent.ACTION_POINTER_UP -> {
@@ -192,13 +202,13 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
             MotionEvent.ACTION_UP -> {
                 activePointerCount = 0
                 val currentTime = System.currentTimeMillis()
-                val totalDx = abs(event.x - downX)
-                val totalDy = abs(event.y - downY)
-                val duration = currentTime - downTime
+                val totalDx = abs(event.x - firstFingerDownX)
+                val totalDy = abs(event.y - firstFingerDownY)
+                val duration = currentTime - firstFingerDownTime
 
                 val isTap = totalDx < touchSlop && totalDy < touchSlop && duration < tapTimeout
 
-                if (isTap && !isDragging) {
+                if (isTap && !isSingleFingerDragging) {
                     if (currentTime - lastTapTime < doubleTapTimeout) {
                         lastTapTime = 0
                         listener.onDoubleTapEnd(event)
@@ -207,13 +217,13 @@ class CustomGestureDetector(context: Context, private val listener: OnGestureLis
                         listener.onSingleTapEnd(event)
                     }
                 } else {
-                    isDragging = false
+                    isSingleFingerDragging = false
                     listener.onLastRemainingFingerUp(event)
                 }
             }
             MotionEvent.ACTION_CANCEL -> {
                 activePointerCount = 0
-                isDragging = false
+                isSingleFingerDragging = false
                 lastTapTime = 0
                 listener.onLastRemainingFingerUp(event)
             }
