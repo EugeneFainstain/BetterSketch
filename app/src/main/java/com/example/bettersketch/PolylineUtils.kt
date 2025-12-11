@@ -333,8 +333,5 @@ object PolylineUtils {
         stroke.totalDistance = newTotalDistance
 
         stroke.isModified = true
-        // Regenerate interpolated polyline points and apply smoothing
-        stroke.regenerateInterpolatedPolylinePoints()
-        stroke.applySmoothing()
     }
 }

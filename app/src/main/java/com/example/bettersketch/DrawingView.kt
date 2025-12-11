@@ -660,10 +660,15 @@ class DrawingView @JvmOverloads constructor(
             if (anchor.isBezierAnchor) {
                 // Bezier mode: move the bezier anchor AND its associated control points
                 BezierUtils.moveBezierAnchor(anchor.stroke, anchor.pointIndex, dx, dy)
+                // Regenerate the curve from the modified bezier data
+                BezierUtils.regenerateBezierCurve(anchor.stroke)
             } else {
                 // Polyline mode: apply weighted transformation to unsmoothedPoints
                 PolylineUtils.movePolylineAnchorWithWeights(anchor.stroke, anchor.weightsForPolylineEditing, dx, dy)
+                // Regenerate interpolated polyline points and apply smoothing
+                anchor.stroke.regenerateInterpolatedPolylinePoints()
             }
+            anchor.stroke.applySmoothing()
         }
 
         invalidate()

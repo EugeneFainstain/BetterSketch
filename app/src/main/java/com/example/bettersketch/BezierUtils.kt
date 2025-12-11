@@ -33,7 +33,7 @@ object BezierUtils {
     fun regenerateBezierCurve(stroke: Stroke) {
         if (!stroke.hasBezierData() || !stroke.renderAsBezier) return
 
-        val pointCount = stroke.originalPoints.size * 1 //* 4 // Quadruple the number of points to make Bezier look smoother
+        val pointCount = stroke.originalPoints.size * 4 // Quadruple the number of points to make Bezier look smoother
         if (pointCount < 2) return
 
         // Interpolate points along the bezier curve
@@ -162,7 +162,7 @@ object BezierUtils {
             stroke.isModified = true
 
             // Regenerate the curve from the modified bezier data
-            BezierUtils.regenerateBezierCurve(stroke)
+            regenerateBezierCurve(stroke)
             stroke.applySmoothing()
             return true
         }
@@ -245,7 +245,7 @@ object BezierUtils {
 
         // Regenerate the curve from the modified bezier data
         // This will update bezierAnchorPointsForDrawingIndices with correct values
-        BezierUtils.regenerateBezierCurve(stroke)
+        regenerateBezierCurve(stroke)
         stroke.applySmoothing()
     }
 
@@ -341,9 +341,7 @@ object BezierUtils {
             }
 
             stroke.isModified = true
-            // Regenerate the curve from the modified bezier data
-            BezierUtils.regenerateBezierCurve(stroke)
-            stroke.applySmoothing()
+
         }
     }
 
@@ -425,7 +423,7 @@ object BezierUtils {
 
         stroke.isModified = true
         // Regenerate the curve from the modified bezier data
-        BezierUtils.regenerateBezierCurve(stroke)
+        regenerateBezierCurve(stroke)
         stroke.applySmoothing()
     }
 
