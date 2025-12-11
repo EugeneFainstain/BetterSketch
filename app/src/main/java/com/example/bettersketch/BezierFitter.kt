@@ -91,12 +91,18 @@ class BezierFitter {
 
         /**
          * Fit optimal control points for a single segment with fixed endpoints.
-         * Uses the Schneider least-squares approach.
+         * Uses gradient descent to jointly optimize tangent angles and control point distances.
+         *
+         * The 4 degrees of freedom are:
+         * - theta1: angle of outgoing tangent at p0
+         * - theta2: angle of incoming tangent at p3
+         * - alpha1: distance from p0 to control point c1
+         * - alpha2: distance from p3 to control point c2
          */
         private fun fitSegmentControlPoints(
             segmentPoints: List<PointF>,
-            tHat1: PointF,
-            tHat2: PointF
+            initialTHat1: PointF,
+            initialTHat2: PointF
         ): Pair<PointF, PointF> {
             val p0 = segmentPoints.first()
             val p3 = segmentPoints.last()
@@ -104,78 +110,127 @@ class BezierFitter {
             if (segmentPoints.size <= 2) {
                 // Simple heuristic for very short segments
                 val dist = distance(p0, p3) / 3.0f
-                val c1 = PointF(p0.x + tHat1.x * dist, p0.y + tHat1.y * dist)
-                val c2 = PointF(p3.x + tHat2.x * dist, p3.y + tHat2.y * dist)
+                val c1 = PointF(p0.x + initialTHat1.x * dist, p0.y + initialTHat1.y * dist)
+                val c2 = PointF(p3.x + initialTHat2.x * dist, p3.y + initialTHat2.y * dist)
                 return Pair(c1, c2)
             }
 
-            // Chord-length parameterization
+            // Chord-length parameterization for t values
             val u = chordLengthParameterize(segmentPoints)
 
-            // Compute the A's (basis functions scaled by tangents)
-            val A = Array(segmentPoints.size) { i ->
-                val ui = u[i]
-                val b1 = bezierBasis(1, ui)
-                val b2 = bezierBasis(2, ui)
-                Pair(
-                    PointF(tHat1.x * b1, tHat1.y * b1),
-                    PointF(tHat2.x * b2, tHat2.y * b2)
-                )
-            }
-
-            // Create the C and X matrices for least-squares
-            var C00 = 0.0f
-            var C01 = 0.0f
-            var C11 = 0.0f
-            var X0 = 0.0f
-            var X1 = 0.0f
-
-            for (i in segmentPoints.indices) {
-                val ui = u[i]
-                val a0 = A[i].first
-                val a1 = A[i].second
-
-                C00 += dot(a0, a0)
-                C01 += dot(a0, a1)
-                C11 += dot(a1, a1)
-
-                val tmp = subtract(
-                    segmentPoints[i],
-                    add(
-                        scale(p0, bezierBasis(0, ui)),
-                        add(
-                            scale(p0, bezierBasis(1, ui)),
-                            add(
-                                scale(p3, bezierBasis(2, ui)),
-                                scale(p3, bezierBasis(3, ui))
-                            )
-                        )
-                    )
-                )
-
-                X0 += dot(a0, tmp)
-                X1 += dot(a1, tmp)
-            }
-
-            // Compute the determinants
-            val det_C0_C1 = C00 * C11 - C01 * C01
-            val det_C0_X = C00 * X1 - C01 * X0
-            val det_X_C1 = X0 * C11 - X1 * C01
-
-            // Derive alpha values
-            val alphaL = if (abs(det_C0_C1) < EPSILON) 0.0f else det_X_C1 / det_C0_C1
-            val alphaR = if (abs(det_C0_C1) < EPSILON) 0.0f else det_C0_X / det_C0_C1
-
-            // If alpha negative, use the Wu/Barsky heuristic
+            // Initialize parameters
+            var theta1 = atan2(initialTHat1.y, initialTHat1.x)
+            var theta2 = atan2(initialTHat2.y, initialTHat2.x)
             val segLength = distance(p0, p3)
-            val epsilon = 1.0e-6f * segLength
+            var alpha1 = segLength / 3.0f
+            var alpha2 = segLength / 3.0f
 
-            val finalAlphaL = if (alphaL < epsilon) segLength / 3.0f else alphaL
-            val finalAlphaR = if (alphaR < epsilon) segLength / 3.0f else alphaR
+            // Gradient descent parameters
+            val maxIterations = 50
+            var learningRate = segLength * 0.1f
+            val minLearningRate = segLength * 0.001f
+            val convergenceThreshold = 1e-6f
 
-            // Control points
-            val c1 = add(p0, scale(tHat1, finalAlphaL))
-            val c2 = add(p3, scale(tHat2, finalAlphaR))
+            var prevError = Float.MAX_VALUE
+
+            for (iter in 0 until maxIterations) {
+                // Current tangent directions
+                val t1x = cos(theta1)
+                val t1y = sin(theta1)
+                val t2x = cos(theta2)
+                val t2y = sin(theta2)
+
+                // Current control points
+                val c1x = p0.x + t1x * alpha1
+                val c1y = p0.y + t1y * alpha1
+                val c2x = p3.x + t2x * alpha2
+                val c2y = p3.y + t2y * alpha2
+
+                // Calculate error and gradients
+                var totalError = 0f
+                var dTheta1 = 0f
+                var dTheta2 = 0f
+                var dAlpha1 = 0f
+                var dAlpha2 = 0f
+
+                for (i in segmentPoints.indices) {
+                    val t = u[i]
+                    val px = segmentPoints[i].x
+                    val py = segmentPoints[i].y
+
+                    // Bezier basis functions
+                    val mt = 1f - t
+                    val mt2 = mt * mt
+                    val mt3 = mt2 * mt
+                    val t2 = t * t
+                    val t3 = t2 * t
+                    val b0 = mt3
+                    val b1 = 3f * mt2 * t
+                    val b2 = 3f * mt * t2
+                    val b3 = t3
+
+                    // Bezier point
+                    val bx = b0 * p0.x + b1 * c1x + b2 * c2x + b3 * p3.x
+                    val by = b0 * p0.y + b1 * c1y + b2 * c2y + b3 * p3.y
+
+                    // Error
+                    val ex = bx - px
+                    val ey = by - py
+                    totalError += ex * ex + ey * ey
+
+                    // Partial derivatives of control points w.r.t. parameters
+                    // c1 = p0 + alpha1 * (cos(theta1), sin(theta1))
+                    // dc1/dtheta1 = alpha1 * (-sin(theta1), cos(theta1))
+                    // dc1/dalpha1 = (cos(theta1), sin(theta1))
+                    val dc1x_dtheta1 = -alpha1 * t1y
+                    val dc1y_dtheta1 = alpha1 * t1x
+                    val dc1x_dalpha1 = t1x
+                    val dc1y_dalpha1 = t1y
+
+                    // c2 = p3 + alpha2 * (cos(theta2), sin(theta2))
+                    val dc2x_dtheta2 = -alpha2 * t2y
+                    val dc2y_dtheta2 = alpha2 * t2x
+                    val dc2x_dalpha2 = t2x
+                    val dc2y_dalpha2 = t2y
+
+                    // Chain rule: dError/dparam = 2 * (bx - px) * dbx/dparam + 2 * (by - py) * dby/dparam
+                    // dbx/dtheta1 = b1 * dc1x/dtheta1
+                    dTheta1 += 2f * (ex * b1 * dc1x_dtheta1 + ey * b1 * dc1y_dtheta1)
+                    dTheta2 += 2f * (ex * b2 * dc2x_dtheta2 + ey * b2 * dc2y_dtheta2)
+                    dAlpha1 += 2f * (ex * b1 * dc1x_dalpha1 + ey * b1 * dc1y_dalpha1)
+                    dAlpha2 += 2f * (ex * b2 * dc2x_dalpha2 + ey * b2 * dc2y_dalpha2)
+                }
+
+                // Check convergence
+                if (abs(prevError - totalError) < convergenceThreshold * segLength * segLength) {
+                    break
+                }
+
+                // Adaptive learning rate
+                if (totalError > prevError) {
+                    learningRate *= 0.5f
+                    if (learningRate < minLearningRate) break
+                }
+                prevError = totalError
+
+                // Normalize gradients for stability
+                val gradNorm = sqrt(dTheta1 * dTheta1 + dTheta2 * dTheta2 + dAlpha1 * dAlpha1 + dAlpha2 * dAlpha2)
+                if (gradNorm > EPSILON) {
+                    // Update parameters with gradient descent
+                    theta1 -= learningRate * dTheta1 / (gradNorm + EPSILON) * 0.1f  // Smaller step for angles
+                    theta2 -= learningRate * dTheta2 / (gradNorm + EPSILON) * 0.1f
+                    alpha1 -= learningRate * dAlpha1 / (gradNorm + EPSILON)
+                    alpha2 -= learningRate * dAlpha2 / (gradNorm + EPSILON)
+
+                    // Clamp alpha values to reasonable range
+                    alpha1 = alpha1.coerceIn(segLength * 0.01f, segLength * 2f)
+                    alpha2 = alpha2.coerceIn(segLength * 0.01f, segLength * 2f)
+                }
+            }
+
+            // Final control points
+            val c1 = PointF(p0.x + cos(theta1) * alpha1, p0.y + sin(theta1) * alpha1)
+            val c2 = PointF(p3.x + cos(theta2) * alpha2, p3.y + sin(theta2) * alpha2)
 
             return Pair(c1, c2)
         }
