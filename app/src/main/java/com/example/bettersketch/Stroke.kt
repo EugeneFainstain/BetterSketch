@@ -532,33 +532,33 @@ class Stroke(
     /**
      * Postprocess a newly drawn stroke to merge bezier and polyline fitting.
      * This runs only once when the stroke is first drawn.
+     *
+     * @return true if postprocessing succeeded, false if either fit failed
      */
-    fun postProcessAfterDrawing() {
+    fun postProcessAfterDrawing(): Boolean {
+        // NOTE: This function is called only once per stroke after drawing.
+        // The data structures (bezierAnchorPoints, polylineIndices, etc.) are already empty,
+        // so we don't need to clear them before populating. If we fail, the stroke will be
+        // abandoned by the caller, so cleanup is unnecessary.
+
         // Fit bezier curve
         val errorTolerance = paint.strokeWidth
         val bezierFitResult = BezierFitter.fit(this, errorTolerance)
 
-        if (bezierFitResult != null) {
-            // Store bezier data in the stroke
-            bezierAnchorPoints.clear()
-            bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
-
-            bezierControlPoints1.clear()
-            bezierControlPoints1.addAll(bezierFitResult.controlPoints1)
-
-            bezierControlPoints2.clear()
-            bezierControlPoints2.addAll(bezierFitResult.controlPoints2)
-
-            bezierAnchorIndices.clear()
-            bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
-        }
-
         // Fit polyline
         val polylineFitResult = ShapeFitter.polylineFit(this, this)
-        if (polylineFitResult != null) {
-            polylineIndices.clear()
-            polylineIndices.addAll(polylineFitResult.fittedStroke.polylineIndices)
+
+        // Check if BOTH fits succeeded - if not, gracefully fail
+        if (bezierFitResult == null || polylineFitResult == null) {
+            return false
         }
+
+        // Both fits succeeded - store the data
+        bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
+        bezierControlPoints1.addAll(bezierFitResult.controlPoints1)
+        bezierControlPoints2.addAll(bezierFitResult.controlPoints2)
+        bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
+        polylineIndices.addAll(polylineFitResult.fittedStroke.polylineIndices)
 
         // Step 1: Move polyline anchors to match the bezier curve
         if (hasBezierData() && polylineIndices.isNotEmpty()) {
@@ -603,5 +603,7 @@ class Stroke(
             renderAsBezier = false
             applySmoothing()
         }
+
+        return true
     }
 }

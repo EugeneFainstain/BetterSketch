@@ -402,13 +402,17 @@ class DrawingView @JvmOverloads constructor(
             val newStroke = Stroke(finalUnsmoothedPoints, Paint(currentStrokeInProgress.paint), totalDistanceForNewStroke, currentStrokeInProgress.smoothness)
 
             // Postprocess the stroke immediately after creation
-            newStroke.postProcessAfterDrawing()
+            val postprocessSucceeded = newStroke.postProcessAfterDrawing()
 
-            strokes.add(newStroke)
+            // Only add the stroke if postprocessing succeeded
+            // If it failed, we gracefully abandon this stroke
+            if (postprocessSucceeded) {
+                strokes.add(newStroke)
+                detectShape(newStroke)
+            }
+
             strokeInProgress = null
             setState(State.NORMAL_DRAWING)
-
-            detectShape(newStroke)
         }
     }
 
