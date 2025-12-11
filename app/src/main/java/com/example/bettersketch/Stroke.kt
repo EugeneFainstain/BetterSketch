@@ -528,4 +528,80 @@ class Stroke(
             return points
         }
     }
+
+    /**
+     * Postprocess a newly drawn stroke to merge bezier and polyline fitting.
+     * This runs only once when the stroke is first drawn.
+     */
+    fun postProcessAfterDrawing() {
+        // Fit bezier curve
+        val errorTolerance = paint.strokeWidth
+        val bezierFitResult = BezierFitter.fit(this, errorTolerance)
+
+        if (bezierFitResult != null) {
+            // Store bezier data in the stroke
+            bezierAnchorPoints.clear()
+            bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
+
+            bezierControlPoints1.clear()
+            bezierControlPoints1.addAll(bezierFitResult.controlPoints1)
+
+            bezierControlPoints2.clear()
+            bezierControlPoints2.addAll(bezierFitResult.controlPoints2)
+
+            bezierAnchorIndices.clear()
+            bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
+        }
+
+        // Fit polyline
+        val polylineFitResult = ShapeFitter.polylineFit(this, this)
+        if (polylineFitResult != null) {
+            polylineIndices.clear()
+            polylineIndices.addAll(polylineFitResult.fittedStroke.polylineIndices)
+        }
+
+        // Step 1: Move polyline anchors to match the bezier curve
+        if (hasBezierData() && polylineIndices.isNotEmpty()) {
+            // Save current state
+            val savedUnsmoothedPoints = unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
+
+            // Temporarily enable bezier rendering and regenerate to get bezier curve
+            renderAsBezier = true
+            BezierUtils.regenerateBezierCurve(this)
+            applySmoothing()
+
+            // Now unsmoothedPoints contains the bezier curve
+            // For each polyline anchor, move it to the bezier position
+            polylineIndices.forEach { polylineIndex ->
+                if (polylineIndex >= 0 && polylineIndex < savedUnsmoothedPoints.size && polylineIndex < unsmoothedPoints.size) {
+                    // Get original position
+                    val originalPos = savedUnsmoothedPoints[polylineIndex].point
+
+                    // Get target position from bezier curve
+                    val bezierPos = unsmoothedPoints[polylineIndex].point
+
+                    // Calculate movement delta
+                    val dx = bezierPos.x - originalPos.x
+                    val dy = bezierPos.y - originalPos.y
+
+                    // Restore original points to calculate weights correctly
+                    unsmoothedPoints.clear()
+                    unsmoothedPoints.addAll(savedUnsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+
+                    val weights = PolylineUtils.calculateWeightsForAnchorPoint(this, polylineIndex)
+
+                    // Apply weighted movement
+                    PolylineUtils.movePolylineAnchorWithWeights(this, weights, dx, dy)
+
+                    // Update savedUnsmoothedPoints to reflect the change
+                    savedUnsmoothedPoints.clear()
+                    savedUnsmoothedPoints.addAll(unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+                }
+            }
+
+            // Turn off bezier rendering - we want to keep the deformed original
+            renderAsBezier = false
+            applySmoothing()
+        }
+    }
 }
