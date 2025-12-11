@@ -329,28 +329,33 @@ class Stroke(
      * The resulting stroke will look identical visually but with evenly distributed sample points.
      *
      * @param N The desired number of uniformly spaced points
+     * @param sourcePoints The source points to sample from (defaults to pointsForDrawing)
      * @return A new Stroke with uniformly sampled points, or null if N < 2 or stroke has no points
      */
-    fun generateUniformSampled(N: Int): Stroke {
-        if (N < 2 || pointsForDrawing.isEmpty()) return Stroke(mutableListOf(), Paint(), 0f, 0)
+    fun generateUniformSampled(N: Int, sourcePoints: List<PathPoint>): Stroke {
+        if (N < 2 || sourcePoints.isEmpty()) return Stroke(mutableListOf(), Paint(), 0f, 0)
+
+        // Calculate total distance of source points
+        val sourceTotalDistance = if (sourcePoints.isNotEmpty()) sourcePoints.last().distance else 0f
+        if (sourceTotalDistance <= 0f) return Stroke(mutableListOf(), Paint(), 0f, 0)
 
         val uniformPoints = mutableListOf<PointF>()
-        val spacing = totalDistance / (N - 1)
+        val spacing = sourceTotalDistance / (N - 1)
 
         // Always add the first point
-        uniformPoints.add(PointF(pointsForDrawing.first().point.x, pointsForDrawing.first().point.y))
+        uniformPoints.add(PointF(sourcePoints.first().point.x, sourcePoints.first().point.y))
 
         // Generate N-2 intermediate points at uniform distances
         for (i in 1 until N - 1) {
             val targetDistance = i * spacing
-            val interpolatedPoint = interpolatePointAtDistance(targetDistance)
+            val interpolatedPoint = interpolatePointAtDistanceFrom(targetDistance, sourcePoints)
             if (interpolatedPoint != null) {
                 uniformPoints.add(interpolatedPoint)
             }
         }
 
         // Always add the last point
-        uniformPoints.add(PointF(pointsForDrawing.last().point.x, pointsForDrawing.last().point.y))
+        uniformPoints.add(PointF(sourcePoints.last().point.x, sourcePoints.last().point.y))
 
         // Create new stroke with uniformly sampled points
         val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(uniformPoints)
@@ -358,20 +363,23 @@ class Stroke(
     }
 
     /**
-     * Interpolates a point at a specific distance along the stroke path.
+     * Interpolates a point at a specific distance along a given path.
      *
      * @param targetDistance The distance along the path where the point should be interpolated
+     * @param sourcePoints The source points to interpolate from
      * @return The interpolated PointF, or null if targetDistance is out of bounds
      */
-    private fun interpolatePointAtDistance(targetDistance: Float): PointF? {
-        if (targetDistance < 0 || targetDistance > totalDistance || pointsForDrawing.size < 2) {
+    private fun interpolatePointAtDistanceFrom(targetDistance: Float, sourcePoints: List<PathPoint>): PointF? {
+        if (sourcePoints.size < 2) return null
+        val sourceTotalDistance = sourcePoints.last().distance
+        if (targetDistance < 0 || targetDistance > sourceTotalDistance) {
             return null
         }
 
         // Find the two points that bracket the target distance
-        for (i in 1 until pointsForDrawing.size) {
-            val prevPoint = pointsForDrawing[i - 1]
-            val currPoint = pointsForDrawing[i]
+        for (i in 1 until sourcePoints.size) {
+            val prevPoint = sourcePoints[i - 1]
+            val currPoint = sourcePoints[i]
 
             if (targetDistance <= currPoint.distance) {
                 // Interpolate between prevPoint and currPoint
@@ -388,7 +396,7 @@ class Stroke(
         }
 
         // If we reach here, return the last point
-        return PointF(pointsForDrawing.last().point.x, pointsForDrawing.last().point.y)
+        return PointF(sourcePoints.last().point.x, sourcePoints.last().point.y)
     }
 
     /**
@@ -509,13 +517,42 @@ class Stroke(
         // so we don't need to clear them before populating. If we fail, the stroke will be
         // abandoned by the caller, so cleanup is unnecessary.
 
-        // Step 1: Fit polyline to get anchor indices
+        // Step 1: Resample the stroke uniformly with 4x the original point count
+        // This improves fitting accuracy by providing uniform sampling
+        val originalPointCount = originalPoints.size
+        val upsampledPointCount = originalPointCount * 4
+
+        // Generate uniformly sampled points from originalPoints
+        val upsampledStroke = generateUniformSampled(upsampledPointCount, originalPoints)
+        if (upsampledStroke.unsmoothedPoints.isEmpty()) {
+            return false
+        }
+
+        // Replace this stroke's points with the upsampled version
+        originalPoints.clear()
+        originalPoints.addAll(upsampledStroke.unsmoothedPoints.map {
+            PathPoint(PointF(it.point.x, it.point.y), it.distance)
+        })
+        unsmoothedPoints.clear()
+        unsmoothedPoints.addAll(originalPoints.map {
+            PathPoint(PointF(it.point.x, it.point.y), it.distance)
+        })
+        totalDistance = upsampledStroke.totalDistance
+
+        // Update distancesForWeights with the new distances
+        distancesForWeights.clear()
+        distancesForWeights.addAll(unsmoothedPoints.map { it.distance })
+
+        // Reapply smoothing to ensure pointsForDrawing is consistent
+        applySmoothing()
+
+        // Step 2: Fit polyline to get anchor indices (using the upsampled stroke)
         val polylineFitResult = ShapeFitter.polylineFit(this, this)
         if (polylineFitResult == null) {
             return false
         }
 
-        // Step 2: Use polyline anchor indices to fit bezier with fixed anchors
+        // Step 3: Use polyline anchor indices to fit bezier with fixed anchors
         val polylineIndicesList = polylineFitResult.fittedStroke.polylineIndices.toList()
         val bezierFitResult = BezierFitter.fitWithFixedAnchors(this, polylineIndicesList)
         if (bezierFitResult == null) {

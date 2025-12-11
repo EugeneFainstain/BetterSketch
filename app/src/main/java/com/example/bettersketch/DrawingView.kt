@@ -422,7 +422,7 @@ class DrawingView @JvmOverloads constructor(
             return
         }
 
-        val strokeForFitting = stroke.generateUniformSampled(256)
+        val strokeForFitting = stroke.generateUniformSampled(256, stroke.pointsForDrawing)
 
         // Get the best shape fit - use the uniformly sampled stroke for better fitting
         val shapeFitResult = ShapeFitter.shapeFit(stroke, strokeForFitting)
