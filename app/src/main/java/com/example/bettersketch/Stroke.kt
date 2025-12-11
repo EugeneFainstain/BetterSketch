@@ -209,7 +209,7 @@ class Stroke(
         renderAsPolyline = !renderAsPolyline
         isModified = true
 
-        regenerateInterpolatedPolylinePoints()
+        PolylineUtils.regenerateInterpolatedPolylinePoints(this)
         applySmoothing()
     }
     fun forEachStroke(action: (Stroke) -> Unit) {
@@ -428,38 +428,6 @@ class Stroke(
 
         // Reapply smoothing to update pointsForDrawing
         applySmoothing()
-    }
-
-    /**
-     * Regenerates interpolatedPolylinePoints from polylinePoints (vertex-only representation).
-     * This creates a piece-wise linear interpolation between vertices.
-     */
-    fun regenerateInterpolatedPolylinePoints() {
-        // Try to regenerate interpolatedPolylinePoints, or skip if conditions aren't met
-        // Early exit conditions - if any fail, skip to applySmoothing
-        if (polylineIndices.isEmpty() || unsmoothedPoints.isEmpty()) return
-
-        val pointCount = originalPoints.size
-        if (pointCount < 2) return
-
-        // Extract vertices from unsmoothedPoints using polylineIndices
-        val vertices = polylineIndices.mapNotNull { index ->
-            if (index >= 0 && index < unsmoothedPoints.size) {
-                unsmoothedPoints[index].point
-            } else {
-                null
-            }
-        }
-
-        if (vertices.isEmpty()) return
-
-        // Interpolate along the polyline vertices with vertices placed at their specific indices
-        val interpolatedPoints = PolylineUtils.interpolateAlongPolyLineWithIndices(vertices, polylineIndices, pointCount)
-
-        // Update interpolatedPolylinePoints
-        val (pathPoints, newTotalDistance) = calculatePathPointsWithDistances(interpolatedPoints)
-        interpolatedPolylinePoints.clear()
-        interpolatedPolylinePoints.addAll(pathPoints)
     }
 
     /**

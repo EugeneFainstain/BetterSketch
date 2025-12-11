@@ -383,7 +383,7 @@ class PolyLineFitter {
             stroke.totalDistance = totalDist
 
             // Now regenerate interpolatedPolylinePoints from the vertices in unsmoothedPoints
-            stroke.regenerateInterpolatedPolylinePoints()
+            PolylineUtils.regenerateInterpolatedPolylinePoints(stroke)
             stroke.applySmoothing()
 
             return stroke

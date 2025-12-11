@@ -666,7 +666,7 @@ class DrawingView @JvmOverloads constructor(
                 // Polyline mode: apply weighted transformation to unsmoothedPoints
                 PolylineUtils.movePolylineAnchorWithWeights(anchor.stroke, anchor.weightsForPolylineEditing, dx, dy)
                 // Regenerate interpolated polyline points and apply smoothing
-                anchor.stroke.regenerateInterpolatedPolylinePoints()
+                PolylineUtils.regenerateInterpolatedPolylinePoints(anchor.stroke)
             }
             anchor.stroke.applySmoothing()
         }

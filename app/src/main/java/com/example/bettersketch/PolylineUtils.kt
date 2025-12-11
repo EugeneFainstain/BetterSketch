@@ -161,7 +161,7 @@ object PolylineUtils {
         stroke.isModified = true
 
         // Regenerate the stroke
-        stroke.regenerateInterpolatedPolylinePoints()
+        regenerateInterpolatedPolylinePoints(stroke)
         stroke.applySmoothing()
     }
 
@@ -210,7 +210,7 @@ object PolylineUtils {
         stroke.isModified = true
 
         // Regenerate the stroke
-        stroke.regenerateInterpolatedPolylinePoints()
+        regenerateInterpolatedPolylinePoints(stroke)
         stroke.applySmoothing()
 
         return true
@@ -333,5 +333,37 @@ object PolylineUtils {
         stroke.totalDistance = newTotalDistance
 
         stroke.isModified = true
+    }
+
+    /**
+     * Regenerates interpolatedPolylinePoints from polylinePoints (vertex-only representation).
+     * This creates a piece-wise linear interpolation between vertices.
+     */
+    fun regenerateInterpolatedPolylinePoints(stroke: Stroke) {
+        // Try to regenerate interpolatedPolylinePoints, or skip if conditions aren't met
+        // Early exit conditions - if any fail, skip to applySmoothing
+        if (stroke.polylineIndices.isEmpty() || stroke.unsmoothedPoints.isEmpty()) return
+
+        val pointCount = stroke.originalPoints.size
+        if (pointCount < 2) return
+
+        // Extract vertices from unsmoothedPoints using polylineIndices
+        val vertices = stroke.polylineIndices.mapNotNull { index ->
+            if (index >= 0 && index < stroke.unsmoothedPoints.size) {
+                stroke.unsmoothedPoints[index].point
+            } else {
+                null
+            }
+        }
+
+        if (vertices.isEmpty()) return
+
+        // Interpolate along the polyline vertices with vertices placed at their specific indices
+        val interpolatedPoints = interpolateAlongPolyLineWithIndices(vertices, stroke.polylineIndices, pointCount)
+
+        // Update interpolatedPolylinePoints
+        val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(interpolatedPoints)
+        stroke.interpolatedPolylinePoints.clear()
+        stroke.interpolatedPolylinePoints.addAll(pathPoints)
     }
 }
