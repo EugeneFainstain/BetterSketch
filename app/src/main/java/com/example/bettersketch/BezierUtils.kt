@@ -381,45 +381,56 @@ object BezierUtils {
         val anchorPoint = stroke.bezierAnchorPoints[anchorIndex]
 
         // Get references to the control points
-        val primaryControl = if (isControl1) {
-            stroke.bezierControlPoints1[controlIndex]
-        } else {
-            stroke.bezierControlPoints2[controlIndex]
-        }
+        val primaryControl  = if (isControl1) stroke.bezierControlPoints1[controlIndex] else stroke.bezierControlPoints2[controlIndex]
+        val oppositeControl = if (isControl1) stroke.bezierControlPoints2[controlIndex] else stroke.bezierControlPoints1[controlIndex]
 
-        val oppositeControl = if (isControl1) {
-            stroke.bezierControlPoints2.getOrNull(controlIndex)
-        } else {
-            stroke.bezierControlPoints1.getOrNull(controlIndex)
-        }
+        // Step 1: Calculate original angles and distances BEFORE any movement
+        val originalPrimaryDx = primaryControl.x - anchorPoint.x
+        val originalPrimaryDy = primaryControl.y - anchorPoint.y
+        val originalPrimaryAngle = kotlin.math.atan2(originalPrimaryDy, originalPrimaryDx)
+        val originalPrimaryDistance = kotlin.math.sqrt(originalPrimaryDx * originalPrimaryDx + originalPrimaryDy * originalPrimaryDy)
 
-        // Store original distances from anchor before any movement
-        val originalPrimaryDistance = GeometryUtils.distance(anchorPoint, primaryControl)
-        val originalOppositeDistance = oppositeControl?.let { GeometryUtils.distance(anchorPoint, it) } ?: 0f
+        val originalOppositeDx = oppositeControl.x - anchorPoint.x
+        val originalOppositeDy = oppositeControl.y - anchorPoint.y
+        val originalOppositeAngle = kotlin.math.atan2(originalOppositeDy, originalOppositeDx)
+        val originalOppositeDistance = kotlin.math.sqrt(originalOppositeDx * originalOppositeDx + originalOppositeDy * originalOppositeDy)
 
-        // Move the anchor point
+        // Step 2: Move the anchor point
         anchorPoint.offset(anchorDx, anchorDy)
 
-        // Move the primary control point (the one being dragged)
-        primaryControl.offset(controlDx, controlDy)
+        // Step 3: Move the primary control point (the one being dragged)
+        val okToMoveAnchors = originalPrimaryDistance > 0.001f // Not moving a deprecated control point
+        if( okToMoveAnchors )
+            primaryControl.offset(controlDx, controlDy)
+        else
+            primaryControl.set(anchorPoint.x + originalPrimaryDx, anchorPoint.y + originalPrimaryDy) // Move the control point synchronously with the anchor
 
-        // Calculate the new distance and direction from anchor to primary control
-        val newPrimaryDistance = GeometryUtils.distance(anchorPoint, primaryControl)
-        val primaryDirX = primaryControl.x - anchorPoint.x
-        val primaryDirY = primaryControl.y - anchorPoint.y
+        // Step 4: Calculate new angle and distance for primary control point
+        val newPrimaryDx = primaryControl.x - anchorPoint.x
+        val newPrimaryDy = primaryControl.y - anchorPoint.y
+        val newPrimaryAngle = kotlin.math.atan2(newPrimaryDy, newPrimaryDx)
+        val newPrimaryDistance = kotlin.math.sqrt(newPrimaryDx * newPrimaryDx + newPrimaryDy * newPrimaryDy)
 
-        // Update the opposite control point to maintain collinearity
-        if (oppositeControl != null && newPrimaryDistance > 0f) {
+        // Step 5: Update the opposite control point by rotating and scaling proportionally
+        // Calculate the angle change
+        val angleDelta = newPrimaryAngle - originalPrimaryAngle
 
-            if (originalPrimaryDistance > 0.001f) {
-                // The opposite lever should change proportionally to the primary lever
-                val oppositeDirX = -primaryDirX * originalOppositeDistance / originalPrimaryDistance
-                val oppositeDirY = -primaryDirY * originalOppositeDistance / originalPrimaryDistance
+        // Calculate the new angle for the opposite control (rotate by the same amount)
+        val newOppositeAngle = originalOppositeAngle + angleDelta
 
-                // Set the opposite control point position relative to the (now moved) anchor
-                oppositeControl.set(anchorPoint.x + oppositeDirX, anchorPoint.y + oppositeDirY)
-            }
-        }
+        // Calculate the new distance for the opposite control (scale proportionally)
+        val lengthRatio = newPrimaryDistance / kotlin.math.max(0.001f, originalPrimaryDistance)
+        val newOppositeDistance = originalOppositeDistance * lengthRatio
+
+        // Set the opposite control point position using the new angle and distance
+        val newOppositeDx = kotlin.math.cos(newOppositeAngle) * newOppositeDistance
+        val newOppositeDy = kotlin.math.sin(newOppositeAngle) * newOppositeDistance
+
+        // Step 6: Move the opposing control point
+        if( okToMoveAnchors )
+            oppositeControl.set(anchorPoint.x + newOppositeDx, anchorPoint.y + newOppositeDy)
+        else
+            oppositeControl.set(anchorPoint.x + originalOppositeDx, anchorPoint.y + originalOppositeDy) // Move the control point synchronously with the anchor
 
         stroke.isModified = true
         // Regenerate the curve from the modified bezier data
