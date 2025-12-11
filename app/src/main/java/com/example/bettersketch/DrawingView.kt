@@ -400,11 +400,91 @@ class DrawingView @JvmOverloads constructor(
             val (finalUnsmoothedPoints, totalDistanceForNewStroke) = Stroke.calculatePathPointsWithDistances(
                 preprocessedUnsmoothedPoints.map { it.point })
             val newStroke = Stroke(finalUnsmoothedPoints, Paint(currentStrokeInProgress.paint), totalDistanceForNewStroke, currentStrokeInProgress.smoothness)
+
+            // Postprocess the stroke immediately after creation
+            postprocessStrokeAfterDrawing(newStroke)
+
             strokes.add(newStroke)
             strokeInProgress = null
             setState(State.NORMAL_DRAWING)
 
             detectShape(newStroke)
+        }
+    }
+
+    /**
+     * Postprocess a newly drawn stroke to merge bezier and polyline fitting.
+     * This runs only once when the stroke is first drawn.
+     */
+    private fun postprocessStrokeAfterDrawing(stroke: Stroke) {
+        // Fit bezier curve
+        val errorTolerance = stroke.paint.strokeWidth
+        val bezierFitResult = BezierFitter.fit(stroke, errorTolerance)
+
+        if (bezierFitResult != null) {
+            // Store bezier data in the stroke
+            stroke.bezierAnchorPoints.clear()
+            stroke.bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
+
+            stroke.bezierControlPoints1.clear()
+            stroke.bezierControlPoints1.addAll(bezierFitResult.controlPoints1)
+
+            stroke.bezierControlPoints2.clear()
+            stroke.bezierControlPoints2.addAll(bezierFitResult.controlPoints2)
+
+            stroke.bezierAnchorIndices.clear()
+            stroke.bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
+        }
+
+        // Fit polyline
+        val polylineFitResult = ShapeFitter.polylineFit(stroke, stroke)
+        if (polylineFitResult != null) {
+            stroke.polylineIndices.clear()
+            stroke.polylineIndices.addAll(polylineFitResult.fittedStroke.polylineIndices)
+        }
+
+        // Step 1: Move polyline anchors to match the bezier curve
+        if (stroke.hasBezierData() && stroke.polylineIndices.isNotEmpty()) {
+            // Save current state
+            val savedUnsmoothedPoints = stroke.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
+
+            // Temporarily enable bezier rendering and regenerate to get bezier curve
+            stroke.renderAsBezier = true
+            BezierUtils.regenerateBezierCurve(stroke)
+            stroke.applySmoothing()
+
+            // Now stroke.unsmoothedPoints contains the bezier curve
+            // For each polyline anchor, move it to the bezier position
+            stroke.polylineIndices.forEach { polylineIndex ->
+                if (polylineIndex >= 0 && polylineIndex < savedUnsmoothedPoints.size && polylineIndex < stroke.unsmoothedPoints.size) {
+                    // Get original position
+                    val originalPos = savedUnsmoothedPoints[polylineIndex].point
+
+                    // Get target position from bezier curve
+                    val bezierPos = stroke.unsmoothedPoints[polylineIndex].point
+
+                    // Calculate movement delta
+                    val dx = bezierPos.x - originalPos.x
+                    val dy = bezierPos.y - originalPos.y
+
+                    // Restore original points to calculate weights correctly
+                    stroke.unsmoothedPoints.clear()
+                    stroke.unsmoothedPoints.addAll(savedUnsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+
+                    val weights = PolylineUtils.calculateWeightsForAnchorPoint(stroke, polylineIndex)
+
+                    // Apply weighted movement
+                    PolylineUtils.movePolylineAnchorWithWeights(stroke, weights, dx, dy)
+
+                    // Update savedUnsmoothedPoints to reflect the change
+                    savedUnsmoothedPoints.clear()
+                    savedUnsmoothedPoints.addAll(stroke.unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
+                }
+            }
+
+            // Turn off bezier rendering - we want to keep the deformed original
+            stroke.renderAsBezier = false
+            stroke.applySmoothing()
         }
     }
 
@@ -416,49 +496,13 @@ class DrawingView @JvmOverloads constructor(
 
         val strokeForFitting = stroke.generateUniformSampled(256)
 
-        // Only fit bezier curve if the stroke doesn't already have bezier data
-        if (!stroke.hasBezierData()) {
-            val errorTolerance = stroke.paint.strokeWidth
-            val bezierFitResult = BezierFitter.fit(stroke, errorTolerance)
-
-            if (bezierFitResult != null) {
-                // Store bezier data in the original stroke
-                stroke.bezierAnchorPoints.clear()
-                stroke.bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
-
-                stroke.bezierControlPoints1.clear()
-                stroke.bezierControlPoints1.addAll(bezierFitResult.controlPoints1)
-
-                stroke.bezierControlPoints2.clear()
-                stroke.bezierControlPoints2.addAll(bezierFitResult.controlPoints2)
-
-                stroke.bezierAnchorIndices.clear()
-                stroke.bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
-            }
-        }
-
-        // Only compute polyline fit if the stroke doesn't already have polyline indices
-        val polylineFitResult = if (stroke.polylineIndices.isEmpty()) {
-            // Get the polyline fit - use the ORIGINAL stroke, not the uniformly sampled one
-            val result = ShapeFitter.polylineFit(stroke, stroke)
-
-            // Update the original stroke's polylineIndices if renderAsPolyline is false
-            if (result != null && !stroke.renderAsPolyline) {
-                stroke.polylineIndices.clear()
-                stroke.polylineIndices.addAll(result.fittedStroke.polylineIndices)
-            }
-
-            result
-        } else {
-            // Stroke already has polyline data, don't recompute
-            null
-        }
-
         // Get the best shape fit - use the uniformly sampled stroke for better fitting
         val shapeFitResult = ShapeFitter.shapeFit(stroke, strokeForFitting)
 
         if (shapeFitResult != null) {
-            shapeDetectionListener?.onShapeDetected(shapeFitResult, polylineFitResult)
+            // Pass null for polylineFitResult since polyline data already exists in the stroke
+            // (it was computed in postprocessStrokeAfterDrawing)
+            shapeDetectionListener?.onShapeDetected(shapeFitResult, null)
         } else {
             shapeDetectionListener?.onNoShapeDetected()
         }
