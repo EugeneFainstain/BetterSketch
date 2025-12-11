@@ -33,7 +33,7 @@ object BezierUtils {
     fun regenerateBezierCurve(stroke: Stroke) {
         if (!stroke.hasBezierData() || !stroke.renderAsBezier) return
 
-        val pointCount = stroke.originalPoints.size * 4
+        val pointCount = stroke.originalPoints.size * 1 //* 4 // Quadruple the number of points to make Bezier look smoother
         if (pointCount < 2) return
 
         // Interpolate points along the bezier curve

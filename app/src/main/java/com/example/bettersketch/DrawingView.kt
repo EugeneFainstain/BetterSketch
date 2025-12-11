@@ -832,7 +832,7 @@ class DrawingView @JvmOverloads constructor(
                                     style = Paint.Style.FILL
                                     color = Color.BLUE
                                 }
-                                val radius = haloPaintToUse.strokeWidth / 2f
+                                val radius = haloPaintToUse.strokeWidth // / 2f
 
                                 associatedPoints.forEach { point ->
                                     val transformedPoint = floatArrayOf(point.x, point.y)
