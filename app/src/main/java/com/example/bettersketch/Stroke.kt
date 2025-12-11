@@ -509,15 +509,16 @@ class Stroke(
         // so we don't need to clear them before populating. If we fail, the stroke will be
         // abandoned by the caller, so cleanup is unnecessary.
 
-        // Fit bezier curve
-        val errorTolerance = paint.strokeWidth
-        val bezierFitResult = BezierFitter.fit(this, errorTolerance)
-
-        // Fit polyline
+        // Step 1: Fit polyline to get anchor indices
         val polylineFitResult = ShapeFitter.polylineFit(this, this)
+        if (polylineFitResult == null) {
+            return false
+        }
 
-        // Check if BOTH fits succeeded - if not, gracefully fail
-        if (bezierFitResult == null || polylineFitResult == null) {
+        // Step 2: Use polyline anchor indices to fit bezier with fixed anchors
+        val polylineIndicesList = polylineFitResult.fittedStroke.polylineIndices.toList()
+        val bezierFitResult = BezierFitter.fitWithFixedAnchors(this, polylineIndicesList)
+        if (bezierFitResult == null) {
             return false
         }
 
@@ -526,49 +527,7 @@ class Stroke(
         bezierControlPoints1.addAll(bezierFitResult.controlPoints1)
         bezierControlPoints2.addAll(bezierFitResult.controlPoints2)
         bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
-        polylineIndices.addAll(polylineFitResult.fittedStroke.polylineIndices)
-
-        //
-        // Step 1: Move polyline anchors to match the bezier curve
-        //
-        // 1.1 Temporarily enable bezier rendering and regenerate to get the interpolated bezier curve
-        renderAsBezier = true
-        BezierUtils.regenerateBezierCurve(this) // This replaces unsmoothedPoints with interpolated Bezier curve
-        val bezierCurvePoints = unsmoothedPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) }.toMutableList()
-        renderAsBezier = false
-
-        // 1.2 Restore original unsmoothedPoints
-        unsmoothedPoints.clear()
-        unsmoothedPoints.addAll(originalPoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
-
-        // 1.3 For each polyline anchor, find closest point on the Bezier curve and move it
-        polylineIndices.forEach { polylineIndex ->
-            if (polylineIndex >= 0 && polylineIndex < unsmoothedPoints.size && bezierCurvePoints.isNotEmpty()) {
-                val originalPos = unsmoothedPoints[polylineIndex].point
-
-                // Find the closest point on the Bezier curve to this polyline anchor
-                var closestBezierPoint: PointF? = null
-                var minDist = Float.MAX_VALUE
-
-                bezierCurvePoints.forEach { bezierPathPoint ->
-                    val d = GeometryUtils.distance(originalPos, bezierPathPoint.point)
-                    if (d < minDist) {
-                        minDist = d
-                        closestBezierPoint = bezierPathPoint.point
-                    }
-                }
-
-                closestBezierPoint?.let { bezierPos ->
-                    // Calculate movement delta
-                    val dx = bezierPos.x - originalPos.x
-                    val dy = bezierPos.y - originalPos.y
-
-                    // Calculate polyline editing weights and apply the weighted movement
-                    val weights = PolylineUtils.calculateWeightsForAnchorPoint(this, polylineIndex)
-                    PolylineUtils.movePolylineAnchorWithWeights(this, weights, dx, dy)
-                }
-            }
-        }
+        polylineIndices.addAll(polylineIndicesList)
 
         return true
     }
