@@ -429,7 +429,7 @@ class DrawingView @JvmOverloads constructor(
 
         if (shapeFitResult != null) {
             // Pass null for polylineFitResult since polyline data already exists in the stroke
-            // (it was computed in postprocessStrokeAfterDrawing)
+            // (it was computed in postProcessAfterDrawing)
             shapeDetectionListener?.onShapeDetected(shapeFitResult, null)
         } else {
             shapeDetectionListener?.onNoShapeDetected()

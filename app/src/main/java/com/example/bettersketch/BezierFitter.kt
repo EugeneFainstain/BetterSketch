@@ -22,6 +22,9 @@ class BezierFitter {
         private const val MAX_ITERATIONS = 4      // Max iterations for Newton-Raphson
         private const val EPSILON = 1.0e-6f       // Convergence threshold
 
+        // Toggle this to switch between error metrics
+        private const val USE_AREA_BASED_ERROR = false //true
+
         /**
          * Sample a cubic Bezier curve into a polyline with the specified number of points.
          */
@@ -162,6 +165,38 @@ class BezierFitter {
             }
 
             return result
+        }
+
+        /**
+         * Calculate distance-based error between original curve and Bezier approximation.
+         * Uses chord-length parameterization for proper correspondence between points.
+         */
+        private fun calculateDistanceBasedError(
+            segmentPoints: List<PointF>,
+            p0: PointF,
+            c1: PointF,
+            c2: PointF,
+            p3: PointF
+        ): Float {
+            if (segmentPoints.size < 2) return 0f
+
+            // Calculate chord-length parameterization
+            val chordLengths = FloatArray(segmentPoints.size)
+            chordLengths[0] = 0f
+            for (i in 1 until segmentPoints.size) {
+                chordLengths[i] = chordLengths[i - 1] + distance(segmentPoints[i - 1], segmentPoints[i])
+            }
+            val totalLength = chordLengths.last()
+            if (totalLength < EPSILON) return 0f
+
+            var totalError = 0f
+            for (i in segmentPoints.indices) {
+                val t = chordLengths[i] / totalLength
+                val bezierPoint = BezierUtils.evaluateCubicBezier(p0, c1, c2, p3, t)
+                val dist = distance(segmentPoints[i], bezierPoint)
+                totalError += dist * dist  // Squared distance for smoother gradient
+            }
+            return totalError
         }
 
         /**
@@ -346,7 +381,12 @@ class BezierFitter {
                 return Pair(c1, c2)
             }
 
-            val segLength = distance(p0, p3)
+            // Calculate arc length along the original curve - in case the anchor points weren't placed by the
+            // polyline fitting algorithm...
+            var segLength = 0f
+            for (i in 1 until segmentPoints.size) {
+                segLength += distance(segmentPoints[i - 1], segmentPoints[i])
+            }
 
             // Initialize with tangent-based guess (or start from zero)
             val initialDist = segLength / 3.0f
@@ -376,8 +416,11 @@ class BezierFitter {
                 val c1 = PointF(p0.x + dx1, p0.y + dy1)
                 val c2 = PointF(p3.x + dx2, p3.y + dy2)
 
-                // Calculate area-based error
-                val currentError = calculateAreaBasedError(segmentPoints, p0, c1, c2, p3)
+                // Calculate error using selected method
+                val currentError = if (USE_AREA_BASED_ERROR)
+                                       calculateAreaBasedError(segmentPoints, p0, c1, c2, p3)
+                                   else
+                                       calculateDistanceBasedError(segmentPoints, p0, c1, c2, p3)
 
                 // Track best solution
                 val improvement = bestError - currentError
@@ -431,16 +474,23 @@ class BezierFitter {
                 prevError = currentError
 
                 // Calculate gradients numerically using finite differences
-                val errorPlusDx1 = calculateAreaBasedError(segmentPoints, p0, PointF(p0.x + dx1 + finiteDiffStep, p0.y + dy1), c2, p3)
+                var errorPlusDx1 =0f; var errorPlusDy1 = 0f; var errorPlusDx2 = 0f; var errorPlusDy2 = 0f
+
+                if( USE_AREA_BASED_ERROR )
+                {   errorPlusDx1 = calculateAreaBasedError(segmentPoints, p0, PointF(p0.x + dx1 + finiteDiffStep, p0.y + dy1), c2, p3)
+                    errorPlusDy1 = calculateAreaBasedError(segmentPoints, p0, PointF(p0.x + dx1, p0.y + dy1 + finiteDiffStep), c2, p3)
+                    errorPlusDx2 = calculateAreaBasedError(segmentPoints, p0, c1, PointF(p3.x + dx2 + finiteDiffStep, p3.y + dy2), p3)
+                    errorPlusDy2 = calculateAreaBasedError(segmentPoints, p0, c1, PointF(p3.x + dx2, p3.y + dy2 + finiteDiffStep), p3)
+                } else {
+                    errorPlusDx1 = calculateDistanceBasedError(segmentPoints, p0, PointF(p0.x + dx1 + finiteDiffStep, p0.y + dy1), c2, p3)
+                    errorPlusDy1 = calculateDistanceBasedError(segmentPoints, p0, PointF(p0.x + dx1, p0.y + dy1 + finiteDiffStep), c2, p3)
+                    errorPlusDx2 = calculateDistanceBasedError(segmentPoints, p0, c1, PointF(p3.x + dx2 + finiteDiffStep, p3.y + dy2), p3)
+                    errorPlusDy2 = calculateDistanceBasedError(segmentPoints, p0, c1, PointF(p3.x + dx2, p3.y + dy2 + finiteDiffStep), p3)
+                }
+
                 val gradDx1 = (errorPlusDx1 - currentError) / finiteDiffStep
-
-                val errorPlusDy1 = calculateAreaBasedError(segmentPoints, p0, PointF(p0.x + dx1, p0.y + dy1 + finiteDiffStep), c2, p3)
                 val gradDy1 = (errorPlusDy1 - currentError) / finiteDiffStep
-
-                val errorPlusDx2 = calculateAreaBasedError(segmentPoints, p0, c1, PointF(p3.x + dx2 + finiteDiffStep, p3.y + dy2), p3)
                 val gradDx2 = (errorPlusDx2 - currentError) / finiteDiffStep
-
-                val errorPlusDy2 = calculateAreaBasedError(segmentPoints, p0, c1, PointF(p3.x + dx2, p3.y + dy2 + finiteDiffStep), p3)
                 val gradDy2 = (errorPlusDy2 - currentError) / finiteDiffStep
 
                 // Normalize gradient for stable step size
