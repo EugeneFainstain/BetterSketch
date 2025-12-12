@@ -95,9 +95,8 @@ object BezierUtils {
             }
         }
 
-        // Update bezierAnchorIndices to reflect where anchors map to in the interpolated points
-        stroke.bezierAnchorIndices.clear()
-        stroke.bezierAnchorIndices.addAll(stroke.bezierAnchorPointsForDrawingIndices)
+        // DON'T update bezierAnchorIndices here - it should stay as the original indices
+        // from postProcessAfterDrawing which reference the upsampled unsmoothedPoints
 
         // Generate points with anchors pinned
         val interpolatedPoints = mutableListOf<PointF>()
