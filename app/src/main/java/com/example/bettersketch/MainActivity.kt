@@ -241,7 +241,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             if (stroke?.renderAsBezier == true) {
                 btnBezier.text = "Restore"
             } else {
-                btnBezier.text = "Bezier(${stroke?.bezierAnchorPoints?.size})"
+                btnBezier.text = "Bezier(${stroke?.bezierAnchorIndices?.size})"
             }
             btnBezier.visibility = View.VISIBLE
         } else {

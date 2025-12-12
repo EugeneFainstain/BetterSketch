@@ -16,7 +16,7 @@ object StrokeUtils {
      * Handles both Bezier and Polyline modes automatically.
      * 
      * @param stroke The stroke to modify
-     * @param pointIndex For Bezier mode: index into bezierAnchorPoints. For Polyline mode: index into unsmoothedPoints
+     * @param pointIndex For Bezier mode: index into unsmoothedPoints. For Polyline mode: also index into unsmoothedPoints
      * @param snapshotUnsmoothedPoints Snapshot of unsmoothedPoints for undo (used in polyline mode)
      * @param isBezierAnchor True if this is a Bezier anchor, false for polyline anchor
      * @return True if the anchor was removed, false if removal was not allowed
@@ -27,7 +27,7 @@ object StrokeUtils {
         snapshotUnsmoothedPoints: MutableList<PathPoint>? = null,
         isBezierAnchor: Boolean = false
     ): Boolean {
-        return if (isBezierAnchor && stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()) {
+        return if (isBezierAnchor && stroke.renderAsBezier && stroke.bezierAnchorIndices.isNotEmpty()) {
             BezierUtils.removeBezierAnchorPointAtIndex(stroke, pointIndex)
         } else {
             PolylineUtils.removePolylineAnchorPointAtIndex(stroke, pointIndex, snapshotUnsmoothedPoints)
@@ -149,13 +149,7 @@ object StrokeUtils {
             s.interpolatedPolylinePoints.clear()
             s.interpolatedPolylinePoints.addAll(recalculatedInterpolatedPolylinePoints)
 
-            // Transform bezier data
-            s.bezierAnchorPoints.forEach { point ->
-                val p = floatArrayOf(point.x, point.y)
-                matrix.mapPoints(p)
-                point.set(p[0], p[1])
-            }
-
+            // Transform bezier control points (anchors are in unsmoothedPoints, already transformed above)
             s.bezierControlPoints1.forEach { point ->
                 val p = floatArrayOf(point.x, point.y)
                 matrix.mapPoints(p)
@@ -187,7 +181,6 @@ object StrokeUtils {
         stroke.shapeParameterPoints.clear()
 
         // Clear bezier data
-        stroke.bezierAnchorPoints.clear()
         stroke.bezierControlPoints1.clear()
         stroke.bezierControlPoints2.clear()
         stroke.bezierAnchorIndices.clear()
@@ -263,13 +256,14 @@ object StrokeUtils {
             stroke.forEachStroke { s ->
                 if (!s.isGroup) {
                     // Check if in bezier mode
-                    if (s.renderAsBezier && s.bezierAnchorPoints.isNotEmpty()) {
-                        // Search through bezier anchor points directly
-                        s.bezierAnchorPoints.forEachIndexed { anchorIndex, anchorPoint ->
+                    if (s.renderAsBezier && s.bezierAnchorIndices.isNotEmpty()) {
+                        // Search through bezier anchor points via indices
+                        s.bezierAnchorIndices.forEachIndexed { anchorIndex, pointIndex ->
+                            val anchorPoint = s.unsmoothedPoints.getOrNull(pointIndex)?.point ?: return@forEachIndexed
                             val d = distance(anchorPoint, tapPoint)
                             if (d < closestDist) {
                                 closestDist = d
-                                closestPointIndex = anchorIndex  // This is the index in bezierAnchorPoints
+                                closestPointIndex = anchorIndex  // This is the index in bezierAnchorIndices
                                 closestStroke = s
                             }
                         }

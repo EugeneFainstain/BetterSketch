@@ -104,7 +104,7 @@ class DrawingView @JvmOverloads constructor(
 
     data class ControlPointToEdit(
         val stroke: Stroke,
-        val controlIndex: Int,      // Index into bezierAnchorPoints (and for both control arrays)
+        val controlIndex: Int,      // Index into bezierAnchorIndices (and for both control arrays)
         val arrayIdx: Int           // 1 for controlPoints1, 2 for controlPoints2
     )
 
@@ -205,7 +205,7 @@ class DrawingView @JvmOverloads constructor(
         if (index == -1) return
 
         // Check if we're in bezier mode
-        if (stroke.renderAsBezier && stroke.bezierAnchorPoints.isNotEmpty()) {
+        if (stroke.renderAsBezier && stroke.bezierAnchorIndices.isNotEmpty()) {
             // Bezier mode: add a new bezier anchor
             BezierUtils.addBezierAnchorPoint(stroke, index)
         } else {
@@ -506,11 +506,12 @@ class DrawingView @JvmOverloads constructor(
 
         // Determine if we're in bezier mode or polyline mode
         val inBezierMode =
-            primaryStroke.renderAsBezier && primaryStroke.bezierAnchorPoints.isNotEmpty()
+            primaryStroke.renderAsBezier && primaryStroke.bezierAnchorIndices.isNotEmpty()
 
         if (inBezierMode) {
-            // Bezier mode: primaryIndex is an index into bezierAnchorPoints
-            val primaryAnchor = primaryStroke.bezierAnchorPoints[primaryIndex]
+            // Bezier mode: primaryIndex is an index into bezierAnchorIndices
+            // Get the actual point index from bezierAnchorIndices
+            val pointIndex = primaryStroke.bezierAnchorIndices.getOrNull(primaryIndex) ?: return false
 
             // Save snapshot for undo
             val snapshot = primaryStroke.unsmoothedPoints.map {
@@ -518,8 +519,6 @@ class DrawingView @JvmOverloads constructor(
             }.toMutableList()
 
             // For bezier anchors, we don't use weightsForPolylineEditing - we move the anchor directly
-            // Create a weight list that's all zeros except at the anchor location
-            // (We'll handle bezier anchor movement differently in moveEditingPoint)
             anchorPointsToEdit.add(AnchorPointToEdit(primaryStroke, primaryIndex, snapshot, emptyList(), true))
         } else {
             // Polyline/normal mode: primaryIndex is an index into unsmoothedPoints
@@ -842,7 +841,7 @@ class DrawingView @JvmOverloads constructor(
                         }
 
                         // Draw bezier handles (control points and connecting lines)
-                        if (stroke.bezierAnchorPoints.isNotEmpty() &&
+                        if (stroke.bezierAnchorIndices.isNotEmpty() &&
                             stroke.bezierControlPoints1.isNotEmpty() &&
                             stroke.bezierControlPoints2.isNotEmpty()
                         ) {
@@ -864,8 +863,10 @@ class DrawingView @JvmOverloads constructor(
                             val controlSize =
                                 haloPaintToUse.strokeWidth / 3f // Smaller than anchors
 
-                            for (anchorIndex in 0 until stroke.bezierAnchorPoints.size) {
-                                val anchor = stroke.bezierAnchorPoints[anchorIndex]
+                            for (anchorIndex in 0 until stroke.bezierAnchorIndices.size) {
+                                // Get anchor point from unsmoothedPoints via index
+                                val pointIdx = stroke.bezierAnchorIndices[anchorIndex]
+                                val anchor = stroke.unsmoothedPoints.getOrNull(pointIdx)?.point ?: continue
 
                                 // Transform anchor to screen space
                                 val anchorScreen = floatArrayOf(anchor.x, anchor.y)

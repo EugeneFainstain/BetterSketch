@@ -27,7 +27,6 @@ class Stroke(
     val distancesForWeights: MutableList<Float> = mutableListOf() // Distances along path at stroke finalization, used for weight calculation during editing
 
     // Bezier curve data
-    val bezierAnchorPoints: MutableList<PointF> = mutableListOf()      // Optimal computed anchors
     val bezierControlPoints1: MutableList<PointF> = mutableListOf()    // "Before" control points (one per anchor, outgoing from anchor)
     val bezierControlPoints2: MutableList<PointF> = mutableListOf()    // "After" control points (one per anchor, incoming to anchor)
     val bezierAnchorIndices: MutableList<Int> = mutableListOf()        // Indices of Bezier anchors
@@ -44,7 +43,7 @@ class Stroke(
     var needsToRegenerate: Boolean = false // Flag to regenerate unsmoothedPoints from analytical
 
     fun hasBezierData(): Boolean {
-        return bezierAnchorPoints.isNotEmpty() &&
+        return bezierAnchorIndices.isNotEmpty() &&
                 bezierControlPoints1.isNotEmpty() &&
                 bezierControlPoints2.isNotEmpty()
     }
@@ -112,13 +111,7 @@ class Stroke(
     }
 
     fun getAssociatedBezierAnchorPointsOnSmoothedCurve(): List<PointF> {
-        // When in bezier mode, return the actual bezier anchor points directly
-        // (not indices, as they may not correspond after interpolation)
-        if (renderAsBezier && bezierAnchorPoints.isNotEmpty()) {
-            return bezierAnchorPoints.map { PointF(it.x, it.y) }
-        }
-
-        // When NOT in bezier mode, use indices to show where anchors would be
+        // Use indices to get anchor points from pointsForDrawing
         if (bezierAnchorIndices.isEmpty() || pointsForDrawing.isEmpty()) {
             return emptyList()
         }
@@ -285,10 +278,7 @@ class Stroke(
         this.distancesForWeights.clear()
         this.distancesForWeights.addAll(other.distancesForWeights)
 
-// Copy bezier data
-        this.bezierAnchorPoints.clear()
-        this.bezierAnchorPoints.addAll(other.bezierAnchorPoints.map { PointF(it.x, it.y) })
-
+        // Copy bezier data
         this.bezierControlPoints1.clear()
         this.bezierControlPoints1.addAll(other.bezierControlPoints1.map { PointF(it.x, it.y) })
 
@@ -556,7 +546,6 @@ class Stroke(
         }
 
         // Both fits succeeded - store the data
-        bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
         bezierControlPoints1.addAll(bezierFitResult.controlPoints1)
         bezierControlPoints2.addAll(bezierFitResult.controlPoints2)
         bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
