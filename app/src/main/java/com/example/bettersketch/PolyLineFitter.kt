@@ -20,6 +20,9 @@ class PolyLineFitter {
             listOf(0.01f, 0.015f, 0.02f, 0.025f, 0.03f, 0.04f, 0.05f, 0.075f, 0.1f)
         private const val QUALITY_THRESHOLD = 0.95f // 95% good
 
+        // Toggle between simple averaging and optimized search for breakpoint selection
+        private const val USE_OPTIMIZED_BREAKPOINT_SEARCH = true
+
         fun fit(stroke: Stroke): FitResult? {
             val points = stroke.unsmoothedPoints.map { it.point }
             if (points.size < 3) return null
@@ -44,7 +47,8 @@ class PolyLineFitter {
                     continue
                 }
 
-                // Step 3: Average corresponding breakpoints
+                // Step 3: Average corresponding breakpoints. Note that we may end up with less
+                //         points than we started.
                 val averagedIndices = averageBreakpoints(
                     forwardBreakpoints,
                     backwardBreakpoints,
@@ -146,24 +150,78 @@ class PolyLineFitter {
             require(forward.size == backward.size) { "Forward and backward must have same length" }
 
             val backwardReversed = backward.reversed()
-            val averagedIndices = mutableListOf<Int>()
+            val resultIndices = mutableListOf<Int>()
             val n = points.size
 
+            resultIndices.add(0) // First point must be an anchor
+
             for (i in forward.indices) {
-                // Average indices for segment definition
                 val backwardIdx = n - 1 - backwardReversed[i]
+
+                // Step 1: Calculate the arithmetically averaged index
                 val avgIdx = (forward[i] + backwardIdx) / 2
-                averagedIndices.add(avgIdx)
+
+                if (!USE_OPTIMIZED_BREAKPOINT_SEARCH) {
+                    // Simple averaging approach
+                    resultIndices.add(avgIdx)
+                } else {
+                    // Optimized search approach
+                    // First and last breakpoints must stay at endpoints
+                    if ( (i == 0) or (i == forward.size - 1)) {
+                        continue // already added or will be added at the end
+                    }
+
+                    // Step 3: The window size is twice the distance between the candidates, around the middle
+                    val windowSize = forward[i] - backwardIdx
+                    val searchMin = avgIdx - windowSize
+                    val searchMax = avgIdx + windowSize
+
+                    var bestIdx = avgIdx
+                    var maxSecondDerivative = 0f
+
+                    for (candidateIdx in searchMin..searchMax) {
+                        // Calculate second derivative magnitude at this point
+                        val secondDeriv = calculateSecondDerivative(points, candidateIdx)
+                        if (secondDeriv > maxSecondDerivative) {
+                            maxSecondDerivative = secondDeriv
+                            bestIdx = candidateIdx
+                        }
+                    }
+
+                    resultIndices.add(bestIdx)
+                }
             }
 
-            return averagedIndices.distinct()
+            resultIndices.add(points.size-1) // Last point must be an anchor
+
+            return resultIndices.sorted().distinct() // This will through out duplicates, if any, and sort - important!
+        }
+
+        /**
+         * Calculate the magnitude of the second derivative at a point.
+         * Uses central differences: f''(x) ≈ f(x+1) - 2*f(x) + f(x-1)
+         */
+        private fun calculateSecondDerivative(points: List<PointF>, index: Int): Float {
+            if (index <= 0 || index >= points.size - 1) return 0f
+
+            val prev = points[index - 1]
+            val curr = points[index]
+            val next = points[index + 1]
+
+            // Second derivative using central difference
+            // d²x = x(i+1) - 2*x(i) + x(i-1)
+            // d²y = y(i+1) - 2*y(i) + y(i-1)
+            val d2x = next.x - 2 * curr.x + prev.x
+            val d2y = next.y - 2 * curr.y + prev.y
+
+            // Return the magnitude of the second derivative vector
+            return sqrt(d2x * d2x + d2y * d2y)
         }
 
         /**
          * Represents a line in 2D: ax + by + c = 0
          */
         private data class Line(val a: Float, val b: Float, val c: Float)
-
 
         /**
          * Fit a line to equidistantly sampled points using parametric form.
@@ -268,66 +326,6 @@ class PolyLineFitter {
             }
 
             return lines
-        }
-
-        /**
-         * Calculate intersection points of adjacent fitted lines.
-         * Uses projections for the first and last points.
-         */
-        private fun calculateIntersections(
-            lines: List<Line>,
-            originalPoints: List<PointF>,
-            breakpointIndices: List<Int>
-        ): List<PointF> {
-            if (lines.isEmpty()) return emptyList()
-
-            val intersections = mutableListOf<PointF>()
-
-            // First point: project first original point onto first line
-            val firstPoint = originalPoints[breakpointIndices.first()]
-            intersections.add(projectPointOntoLine(firstPoint, lines.first()))
-
-            // Intermediate points: intersections of adjacent lines
-            for (i in 0 until lines.size - 1) {
-                val intersection = intersectLines(lines[i], lines[i + 1])
-                if (intersection != null) {
-                    intersections.add(intersection)
-                } else {
-                    // Lines are parallel, project breakpoint onto one of the lines
-                    val breakpointIdx = breakpointIndices[i + 1]
-                    intersections.add(projectPointOntoLine(originalPoints[breakpointIdx], lines[i]))
-                }
-            }
-
-            // Last point: project last original point onto last line
-            val lastPoint = originalPoints[breakpointIndices.last()]
-            intersections.add(projectPointOntoLine(lastPoint, lines.last()))
-
-            return intersections
-        }
-
-        /**
-         * Project a point onto a line
-         */
-        private fun projectPointOntoLine(point: PointF, line: Line): PointF {
-            val denom = line.a * line.a + line.b * line.b
-            if (denom < 1e-6f) return point
-
-            val t = -(line.a * point.x + line.b * point.y + line.c) / denom
-            return PointF(point.x + t * line.a, point.y + t * line.b)
-        }
-
-        /**
-         * Find intersection of two lines
-         * Returns null if lines are parallel
-         */
-        private fun intersectLines(line1: Line, line2: Line): PointF? {
-            val det = line1.a * line2.b - line2.a * line1.b
-            if (abs(det) < 1e-6f) return null // Lines are parallel
-
-            val x = (line1.b * line2.c - line2.b * line1.c) / det
-            val y = (line2.a * line1.c - line1.a * line2.c) / det
-            return PointF(x, y)
         }
 
         /**
