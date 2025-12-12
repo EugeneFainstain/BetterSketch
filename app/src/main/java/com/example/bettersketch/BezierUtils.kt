@@ -33,7 +33,7 @@ object BezierUtils {
     fun regenerateBezierCurve(stroke: Stroke) {
         if (!stroke.hasBezierData() || !stroke.renderAsBezier) return
 
-        val pointCount = stroke.originalPoints.size * 4 // Quadruple the number of points to make Bezier look smoother
+        val pointCount = stroke.originalPoints.size // Use same count as original (already upsampled)
         if (pointCount < 2) return
 
         // Interpolate points along the bezier curve
@@ -84,19 +84,6 @@ object BezierUtils {
             val idealPointCount = (targetPointCount - 1) * ratio
             pointsPerSegment[segIndex] = idealPointCount.toInt().coerceAtLeast(1)
         }
-
-        // Update bezierAnchorPointsForDrawingIndices - track where each anchor appears in pointsForDrawing
-        stroke.bezierAnchorPointsForDrawingIndices.clear()
-        var cumulativePoints = 0
-        for (i in stroke.bezierAnchorPoints.indices) {
-            stroke.bezierAnchorPointsForDrawingIndices.add(cumulativePoints)
-            if (i < numSegments) {
-                cumulativePoints += pointsPerSegment[i]
-            }
-        }
-
-        // DON'T update bezierAnchorIndices here - it should stay as the original indices
-        // from postProcessAfterDrawing which reference the upsampled unsmoothedPoints
 
         // Generate points with anchors pinned
         val interpolatedPoints = mutableListOf<PointF>()
@@ -173,16 +160,16 @@ object BezierUtils {
         // pointIndex is an index into pointsForDrawing (the smoothed/regenerated curve)
 
         if (stroke.bezierAnchorPoints.size < 2 || pointIndex >= stroke.pointsForDrawing.size) return
-        if (stroke.bezierAnchorPointsForDrawingIndices.size != stroke.bezierAnchorPoints.size) return
+        if (stroke.bezierAnchorIndices.size != stroke.bezierAnchorPoints.size) return
 
         // Get the EXACT point where we want to add the anchor
         val targetPoint = stroke.pointsForDrawing[pointIndex].point
 
         // Find which bezier segment this point belongs to
         var segmentIndex = -1
-        for (i in 0 until stroke.bezierAnchorPointsForDrawingIndices.size - 1) {
-            val startIdx = stroke.bezierAnchorPointsForDrawingIndices[i]
-            val endIdx = stroke.bezierAnchorPointsForDrawingIndices[i + 1]
+        for (i in 0 until stroke.bezierAnchorIndices.size - 1) {
+            val startIdx = stroke.bezierAnchorIndices[i]
+            val endIdx = stroke.bezierAnchorIndices[i + 1]
 
             if (pointIndex >= startIdx && pointIndex <= endIdx) {
                 segmentIndex = i
@@ -202,8 +189,8 @@ object BezierUtils {
         val p3 = stroke.bezierAnchorPoints[segmentIndex + 1]
 
         // Calculate t parameter within the segment based on position
-        val startIdx = stroke.bezierAnchorPointsForDrawingIndices[segmentIndex]
-        val endIdx = stroke.bezierAnchorPointsForDrawingIndices[segmentIndex + 1]
+        val startIdx = stroke.bezierAnchorIndices[segmentIndex]
+        val endIdx = stroke.bezierAnchorIndices[segmentIndex + 1]
         val segmentLength = endIdx - startIdx
         val t = if (segmentLength > 0) {
             ((pointIndex - startIdx).toFloat() / segmentLength).coerceIn(0f, 1f)
@@ -225,11 +212,6 @@ object BezierUtils {
 
         // Insert the new anchor at segmentIndex + 1
         stroke.bezierAnchorPoints.add(segmentIndex + 1, newAnchor)
-
-        // Insert the pointsForDrawing index (will be updated on next regeneration)
-        stroke.bezierAnchorPointsForDrawingIndices.add(segmentIndex + 1, pointIndex)
-
-        // Update legacy bezierAnchorIndices for compatibility
         stroke.bezierAnchorIndices.add(segmentIndex + 1, pointIndex)
 
         // Update control points - add the new ones from De Casteljau split
@@ -243,7 +225,6 @@ object BezierUtils {
         stroke.isModified = true
 
         // Regenerate the curve from the modified bezier data
-        // This will update bezierAnchorPointsForDrawingIndices with correct values
         regenerateBezierCurve(stroke)
         stroke.applySmoothing()
     }

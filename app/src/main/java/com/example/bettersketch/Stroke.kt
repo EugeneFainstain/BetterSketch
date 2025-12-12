@@ -30,9 +30,8 @@ class Stroke(
     val bezierAnchorPoints: MutableList<PointF> = mutableListOf()      // Optimal computed anchors
     val bezierControlPoints1: MutableList<PointF> = mutableListOf()    // "Before" control points (one per anchor, outgoing from anchor)
     val bezierControlPoints2: MutableList<PointF> = mutableListOf()    // "After" control points (one per anchor, incoming to anchor)
-    val bezierAnchorIndices: MutableList<Int> = mutableListOf()        // Closest unsmoothedPoints indices to anchors
-    val bezierAnchorPointsForDrawingIndices: MutableList<Int> = mutableListOf()  // Index of each anchor in pointsForDrawing
-    var renderAsBezier: Boolean = false                                 // Toggle for bezier rendering
+    val bezierAnchorIndices: MutableList<Int> = mutableListOf()        // Indices of Bezier anchors
+    var renderAsBezier: Boolean = false                                // Toggle for bezier rendering
 
     var totalDistance: Float = 0f
     var isModified: Boolean = false
@@ -299,9 +298,6 @@ class Stroke(
         this.bezierAnchorIndices.clear()
         this.bezierAnchorIndices.addAll(other.bezierAnchorIndices)
 
-        this.bezierAnchorPointsForDrawingIndices.clear()
-        this.bezierAnchorPointsForDrawingIndices.addAll(other.bezierAnchorPointsForDrawingIndices)
-
         this.totalDistance = other.totalDistance
 
         if (forDuplication) {
@@ -520,7 +516,7 @@ class Stroke(
         // Step 1: Resample the stroke uniformly with 4x the original point count
         // This improves fitting accuracy by providing uniform sampling
         val originalPointCount = originalPoints.size
-        val upsampledPointCount = originalPointCount * 4
+        val upsampledPointCount = originalPointCount * 4 // Quadruple the number of points
 
         // Generate uniformly sampled points from originalPoints
         val upsampledStroke = generateUniformSampled(upsampledPointCount, originalPoints)
