@@ -23,6 +23,239 @@ class BezierFitter {
         private const val EPSILON = 1.0e-6f       // Convergence threshold
 
         /**
+         * Sample a cubic Bezier curve into a polyline with the specified number of points.
+         */
+        private fun sampleBezierToPolyline(p0: PointF, c1: PointF, c2: PointF, p3: PointF, numPoints: Int): List<PointF> {
+            if (numPoints < 2) return listOf(p0, p3)
+            return (0 until numPoints).map { i ->
+                val t = i.toFloat() / (numPoints - 1)
+                BezierUtils.evaluateCubicBezier(p0, c1, c2, p3, t)
+            }
+        }
+
+        /**
+         * Find intersection between two line segments (p1-p2) and (p3-p4).
+         * Returns the intersection point and the parameter t along the first segment, or null if no intersection.
+         */
+        private fun lineSegmentIntersection(p1: PointF, p2: PointF, p3: PointF, p4: PointF): Pair<PointF, Float>? {
+            val d1x = p2.x - p1.x
+            val d1y = p2.y - p1.y
+            val d2x = p4.x - p3.x
+            val d2y = p4.y - p3.y
+
+            val cross = d1x * d2y - d1y * d2x
+            if (abs(cross) < EPSILON) return null  // Parallel or collinear
+
+            val dx = p3.x - p1.x
+            val dy = p3.y - p1.y
+
+            val t1 = (dx * d2y - dy * d2x) / cross
+            val t2 = (dx * d1y - dy * d1x) / cross
+
+            // Check if intersection is within both segments (excluding endpoints to avoid duplicates)
+            if (t1 > EPSILON && t1 < 1f - EPSILON && t2 > EPSILON && t2 < 1f - EPSILON) {
+                val ix = p1.x + t1 * d1x
+                val iy = p1.y + t1 * d1y
+                return Pair(PointF(ix, iy), t1)
+            }
+            return null
+        }
+
+        /**
+         * Data class representing an intersection point with its position on both curves.
+         */
+        private data class IntersectionPoint(
+            val point: PointF,
+            val originalCurveIndex: Int,      // Index in original curve (segment start)
+            val originalCurveT: Float,        // Parameter within that segment
+            val bezierCurveIndex: Int,        // Index in bezier polyline (segment start)
+            val bezierCurveT: Float           // Parameter within that segment
+        )
+
+        /**
+         * Find all intersections between two polylines.
+         * Returns intersection points sorted by position on the original curve.
+         */
+        private fun findPolylineIntersections(
+            originalCurve: List<PointF>,
+            bezierCurve: List<PointF>
+        ): List<IntersectionPoint> {
+            val intersections = mutableListOf<IntersectionPoint>()
+
+            for (i in 0 until originalCurve.size - 1) {
+                val o1 = originalCurve[i]
+                val o2 = originalCurve[i + 1]
+
+                for (j in 0 until bezierCurve.size - 1) {
+                    val b1 = bezierCurve[j]
+                    val b2 = bezierCurve[j + 1]
+
+                    val intersection = lineSegmentIntersection(o1, o2, b1, b2)
+                    if (intersection != null) {
+                        val (point, tOriginal) = intersection
+                        // Calculate t for bezier segment
+                        val dx = b2.x - b1.x
+                        val dy = b2.y - b1.y
+                        val tBezier = if (abs(dx) > abs(dy)) {
+                            (point.x - b1.x) / dx
+                        } else {
+                            (point.y - b1.y) / dy
+                        }
+                        intersections.add(IntersectionPoint(point, i, tOriginal, j, tBezier))
+                    }
+                }
+            }
+
+            // Sort by position on original curve
+            return intersections.sortedWith(compareBy({ it.originalCurveIndex }, { it.originalCurveT }))
+        }
+
+        /**
+         * Calculate signed area of a polygon using the Shoelace formula (Gauss's area formula).
+         * The area will be positive for counter-clockwise polygons and negative for clockwise.
+         */
+        private fun calculateSignedPolygonArea(points: List<PointF>): Float {
+            if (points.size < 3) return 0f
+
+            var area = 0f
+            for (i in points.indices) {
+                val j = (i + 1) % points.size
+                // Using the cross product formulation: sum of (x_i * y_{i+1} - x_{i+1} * y_i)
+                area += points[i].x * points[j].y
+                area -= points[j].x * points[i].y
+            }
+            return area / 2f
+        }
+
+        /**
+         * Extract points from a polyline between two indices (inclusive of start, exclusive of end),
+         * with optional fractional positions at the boundaries.
+         */
+        private fun extractPolylineSegment(
+            polyline: List<PointF>,
+            startIndex: Int,
+            startT: Float,
+            endIndex: Int,
+            endT: Float
+        ): List<PointF> {
+            val result = mutableListOf<PointF>()
+
+            // Add interpolated start point
+            if (startIndex < polyline.size - 1) {
+                val p1 = polyline[startIndex]
+                val p2 = polyline[startIndex + 1]
+                result.add(PointF(p1.x + startT * (p2.x - p1.x), p1.y + startT * (p2.y - p1.y)))
+            }
+
+            // Add intermediate points
+            for (i in (startIndex + 1)..endIndex) {
+                if (i < polyline.size) {
+                    result.add(polyline[i])
+                }
+            }
+
+            // Add interpolated end point
+            if (endIndex < polyline.size - 1) {
+                val p1 = polyline[endIndex]
+                val p2 = polyline[endIndex + 1]
+                result.add(PointF(p1.x + endT * (p2.x - p1.x), p1.y + endT * (p2.y - p1.y)))
+            }
+
+            return result
+        }
+
+        /**
+         * Calculate the area-based error between the original curve segment and a Bezier approximation.
+         * This finds intersections between the curves and sums the absolute areas of all closed loops.
+         */
+        private fun calculateAreaBasedError(
+            segmentPoints: List<PointF>,
+            p0: PointF,
+            c1: PointF,
+            c2: PointF,
+            p3: PointF
+        ): Float {
+            if (segmentPoints.size < 2) return 0f
+
+            // Sample Bezier curve with the same number of points as the original
+            val bezierPolyline = sampleBezierToPolyline(p0, c1, c2, p3, segmentPoints.size)
+
+            // Find all intersections (excluding endpoints which are already common)
+            val intersections = findPolylineIntersections(segmentPoints, bezierPolyline)
+
+            // Create list of "boundary points" including start, intersections, and end
+            data class BoundaryPoint(
+                val point: PointF,
+                val originalIndex: Int,
+                val originalT: Float,
+                val bezierIndex: Int,
+                val bezierT: Float
+            )
+
+            val boundaries = mutableListOf<BoundaryPoint>()
+
+            // Add start point (common to both curves)
+            boundaries.add(BoundaryPoint(segmentPoints.first(), 0, 0f, 0, 0f))
+
+            // Add intersection points
+            for (intersection in intersections) {
+                boundaries.add(BoundaryPoint(
+                    intersection.point,
+                    intersection.originalCurveIndex,
+                    intersection.originalCurveT,
+                    intersection.bezierCurveIndex,
+                    intersection.bezierCurveT
+                ))
+            }
+
+            // Add end point (common to both curves)
+            boundaries.add(BoundaryPoint(
+                segmentPoints.last(),
+                segmentPoints.size - 2,
+                1f,
+                bezierPolyline.size - 2,
+                1f
+            ))
+
+            // Calculate total area from all loops
+            var totalArea = 0f
+
+            for (i in 0 until boundaries.size - 1) {
+                val start = boundaries[i]
+                val end = boundaries[i + 1]
+
+                // Extract original curve segment (forward direction)
+                val originalSegment = extractPolylineSegment(
+                    segmentPoints,
+                    start.originalIndex,
+                    start.originalT,
+                    end.originalIndex,
+                    end.originalT
+                )
+
+                // Extract bezier curve segment (will be reversed to close the loop)
+                val bezierSegment = extractPolylineSegment(
+                    bezierPolyline,
+                    start.bezierIndex,
+                    start.bezierT,
+                    end.bezierIndex,
+                    end.bezierT
+                )
+
+                // Form closed polygon: original forward + bezier reversed
+                val closedPolygon = mutableListOf<PointF>()
+                closedPolygon.addAll(originalSegment)
+                closedPolygon.addAll(bezierSegment.reversed().drop(1))  // drop(1) to avoid duplicate endpoint
+
+                // Calculate and accumulate absolute area
+                val loopArea = calculateSignedPolygonArea(closedPolygon)
+                totalArea += abs(loopArea)
+            }
+
+            return totalArea
+        }
+
+        /**
          * Fit cubic Bezier curves with fixed anchor points at specified indices.
          * The anchor positions are taken from unsmoothedPoints at the given indices,
          * and optimal control points are computed for each segment.
@@ -91,13 +324,11 @@ class BezierFitter {
 
         /**
          * Fit optimal control points for a single segment with fixed endpoints.
-         * Uses gradient descent to jointly optimize tangent angles and control point distances.
+         * Uses gradient descent to optimize control point positions directly.
          *
          * The 4 degrees of freedom are:
-         * - theta1: angle of outgoing tangent at p0
-         * - theta2: angle of incoming tangent at p3
-         * - alpha1: distance from p0 to control point c1
-         * - alpha2: distance from p3 to control point c2
+         * - dx1, dy1: offset from p0 to control point c1
+         * - dx2, dy2: offset from p3 to control point c2
          */
         private fun fitSegmentControlPoints(
             segmentPoints: List<PointF>,
@@ -115,122 +346,135 @@ class BezierFitter {
                 return Pair(c1, c2)
             }
 
-            // Chord-length parameterization for t values
-            val u = chordLengthParameterize(segmentPoints)
-
-            // Initialize parameters
-            var theta1 = atan2(initialTHat1.y, initialTHat1.x)
-            var theta2 = atan2(initialTHat2.y, initialTHat2.x)
             val segLength = distance(p0, p3)
-            var alpha1 = segLength / 3.0f
-            var alpha2 = segLength / 3.0f
+
+            // Initialize with tangent-based guess (or start from zero)
+            val initialDist = segLength / 3.0f
+            var dx1 = initialTHat1.x * initialDist
+            var dy1 = initialTHat1.y * initialDist
+            var dx2 = initialTHat2.x * initialDist
+            var dy2 = initialTHat2.y * initialDist
 
             // Gradient descent parameters
-            val maxIterations = 50
-            var learningRate = segLength * 0.1f
-            val minLearningRate = segLength * 0.001f
-            val convergenceThreshold = 1e-6f
+            val maxIterations = 100  // Reduced - if not converged by now, won't help much
+            val initialLearningRate = segLength * 0.1f
+            var learningRate = initialLearningRate
+            val minLearningRate = segLength * 1e-4f  // Less aggressive minimum
+            val convergenceThreshold = segLength * 0.01f  // More practical threshold
+            val finiteDiffStep = segLength * 0.001f  // Slightly larger for stability
 
             var prevError = Float.MAX_VALUE
+            var bestError = Float.MAX_VALUE
+            var bestDx1 = dx1
+            var bestDy1 = dy1
+            var bestDx2 = dx2
+            var bestDy2 = dy2
+            var stagnationCount = 0  // Track iterations without significant improvement
 
             for (iter in 0 until maxIterations) {
-                // Current tangent directions
-                val t1x = cos(theta1)
-                val t1y = sin(theta1)
-                val t2x = cos(theta2)
-                val t2y = sin(theta2)
-
                 // Current control points
-                val c1x = p0.x + t1x * alpha1
-                val c1y = p0.y + t1y * alpha1
-                val c2x = p3.x + t2x * alpha2
-                val c2y = p3.y + t2y * alpha2
+                val c1 = PointF(p0.x + dx1, p0.y + dy1)
+                val c2 = PointF(p3.x + dx2, p3.y + dy2)
 
-                // Calculate error and gradients
-                var totalError = 0f
-                var dTheta1 = 0f
-                var dTheta2 = 0f
-                var dAlpha1 = 0f
-                var dAlpha2 = 0f
+                // Calculate area-based error
+                val currentError = calculateAreaBasedError(segmentPoints, p0, c1, c2, p3)
 
-                for (i in segmentPoints.indices) {
-                    val t = u[i]
-                    val px = segmentPoints[i].x
-                    val py = segmentPoints[i].y
+                // Track best solution
+                val improvement = bestError - currentError
+                if (currentError < bestError) {
+                    bestError = currentError
+                    bestDx1 = dx1
+                    bestDy1 = dy1
+                    bestDx2 = dx2
+                    bestDy2 = dy2
 
-                    // Bezier basis functions
-                    val mt = 1f - t
-                    val mt2 = mt * mt
-                    val mt3 = mt2 * mt
-                    val t2 = t * t
-                    val t3 = t2 * t
-                    val b0 = mt3
-                    val b1 = 3f * mt2 * t
-                    val b2 = 3f * mt * t2
-                    val b3 = t3
-
-                    // Bezier point
-                    val bx = b0 * p0.x + b1 * c1x + b2 * c2x + b3 * p3.x
-                    val by = b0 * p0.y + b1 * c1y + b2 * c2y + b3 * p3.y
-
-                    // Error
-                    val ex = bx - px
-                    val ey = by - py
-                    totalError += ex * ex + ey * ey
-
-                    // Partial derivatives of control points w.r.t. parameters
-                    // c1 = p0 + alpha1 * (cos(theta1), sin(theta1))
-                    // dc1/dtheta1 = alpha1 * (-sin(theta1), cos(theta1))
-                    // dc1/dalpha1 = (cos(theta1), sin(theta1))
-                    val dc1x_dtheta1 = -alpha1 * t1y
-                    val dc1y_dtheta1 = alpha1 * t1x
-                    val dc1x_dalpha1 = t1x
-                    val dc1y_dalpha1 = t1y
-
-                    // c2 = p3 + alpha2 * (cos(theta2), sin(theta2))
-                    val dc2x_dtheta2 = -alpha2 * t2y
-                    val dc2y_dtheta2 = alpha2 * t2x
-                    val dc2x_dalpha2 = t2x
-                    val dc2y_dalpha2 = t2y
-
-                    // Chain rule: dError/dparam = 2 * (bx - px) * dbx/dparam + 2 * (by - py) * dby/dparam
-                    // dbx/dtheta1 = b1 * dc1x/dtheta1
-                    dTheta1 += 2f * (ex * b1 * dc1x_dtheta1 + ey * b1 * dc1y_dtheta1)
-                    dTheta2 += 2f * (ex * b2 * dc2x_dtheta2 + ey * b2 * dc2y_dtheta2)
-                    dAlpha1 += 2f * (ex * b1 * dc1x_dalpha1 + ey * b1 * dc1y_dalpha1)
-                    dAlpha2 += 2f * (ex * b2 * dc2x_dalpha2 + ey * b2 * dc2y_dalpha2)
+                    // Reset stagnation if we made significant improvement (> 1% of current error)
+                    if (improvement > currentError * 0.01f) {
+                        stagnationCount = 0
+                        // Boost learning rate when making good progress (but don't exceed initial)
+                        learningRate = minOf(learningRate * 1.2f, initialLearningRate)
+                    } else {
+                        stagnationCount++
+                    }
+                } else {
+                    stagnationCount++
                 }
 
-                // Check convergence
-                if (abs(prevError - totalError) < convergenceThreshold * segLength * segLength) {
+                // Check for stagnation (no significant progress for many iterations)
+                if (stagnationCount > 20) {
+                    //android.util.Log.d("BezierFit", "Stagnated at iter=$iter lr=${"%.4f".format(learningRate)} err=${"%.1f".format(bestError)}")
                     break
                 }
 
-                // Adaptive learning rate
-                if (totalError > prevError) {
-                    learningRate *= 0.5f
-                    if (learningRate < minLearningRate) break
+                // Check convergence based on relative improvement
+                val relativeChange = abs(prevError - currentError) / maxOf(currentError, 1f)
+                if (relativeChange < 1e-5f && currentError < prevError) {
+                    //android.util.Log.d("BezierFit", "Converged at iter=$iter lr=${"%.4f".format(learningRate)} err=${"%.1f".format(currentError)}")
+                    break
                 }
-                prevError = totalError
 
-                // Normalize gradients for stability
-                val gradNorm = sqrt(dTheta1 * dTheta1 + dTheta2 * dTheta2 + dAlpha1 * dAlpha1 + dAlpha2 * dAlpha2)
+                // Adaptive learning rate - reduce if error increased
+                if (currentError > prevError) {
+                    learningRate *= 0.5f
+                    if (learningRate < minLearningRate) {
+                        //android.util.Log.d("BezierFit", "Learning rate exhausted at iter=$iter lr=${"%.4f".format(learningRate)} err=${"%.1f".format(bestError)}")
+                        break
+                    }
+                    // Revert to best known solution
+                    dx1 = bestDx1
+                    dy1 = bestDy1
+                    dx2 = bestDx2
+                    dy2 = bestDy2
+                    //android.util.Log.d("BezierFit", "Continued at iter=$iter lr=${"%.4f".format(learningRate)} err=${"%.1f".format(bestError)}")
+                    continue
+                }
+                prevError = currentError
+
+                // Calculate gradients numerically using finite differences
+                val errorPlusDx1 = calculateAreaBasedError(segmentPoints, p0, PointF(p0.x + dx1 + finiteDiffStep, p0.y + dy1), c2, p3)
+                val gradDx1 = (errorPlusDx1 - currentError) / finiteDiffStep
+
+                val errorPlusDy1 = calculateAreaBasedError(segmentPoints, p0, PointF(p0.x + dx1, p0.y + dy1 + finiteDiffStep), c2, p3)
+                val gradDy1 = (errorPlusDy1 - currentError) / finiteDiffStep
+
+                val errorPlusDx2 = calculateAreaBasedError(segmentPoints, p0, c1, PointF(p3.x + dx2 + finiteDiffStep, p3.y + dy2), p3)
+                val gradDx2 = (errorPlusDx2 - currentError) / finiteDiffStep
+
+                val errorPlusDy2 = calculateAreaBasedError(segmentPoints, p0, c1, PointF(p3.x + dx2, p3.y + dy2 + finiteDiffStep), p3)
+                val gradDy2 = (errorPlusDy2 - currentError) / finiteDiffStep
+
+                // Normalize gradient for stable step size
+                val gradNorm = sqrt(gradDx1 * gradDx1 + gradDy1 * gradDy1 + gradDx2 * gradDx2 + gradDy2 * gradDy2)
                 if (gradNorm > EPSILON) {
-                    // Update parameters with gradient descent
-                    theta1 -= learningRate * dTheta1 / (gradNorm + EPSILON) * 0.1f  // Smaller step for angles
-                    theta2 -= learningRate * dTheta2 / (gradNorm + EPSILON) * 0.1f
-                    alpha1 -= learningRate * dAlpha1 / (gradNorm + EPSILON)
-                    alpha2 -= learningRate * dAlpha2 / (gradNorm + EPSILON)
+                    dx1 -= learningRate * gradDx1 / gradNorm
+                    dy1 -= learningRate * gradDy1 / gradNorm
+                    dx2 -= learningRate * gradDx2 / gradNorm
+                    dy2 -= learningRate * gradDy2 / gradNorm
+                }
 
-                    // Clamp alpha values to reasonable range
-                    alpha1 = alpha1.coerceIn(segLength * 0.01f, segLength * 2f)
-                    alpha2 = alpha2.coerceIn(segLength * 0.01f, segLength * 2f)
+                // Clamp control point distances to reasonable range (tighter bound)
+                val maxDist = segLength * 1.5f
+                val dist1 = sqrt(dx1 * dx1 + dy1 * dy1)
+                if (dist1 > maxDist) {
+                    val scale = maxDist / dist1
+                    dx1 *= scale
+                    dy1 *= scale
+                }
+                val dist2 = sqrt(dx2 * dx2 + dy2 * dy2)
+                if (dist2 > maxDist) {
+                    val scale = maxDist / dist2
+                    dx2 *= scale
+                    dy2 *= scale
+                }
+
+                if (iter % 20 == 0) {
+                    //android.util.Log.d("BezierFit", "iter=$iter err=${"%.1f".format(currentError)} lr=${"%.4f".format(learningRate)} gradNorm=${"%.1f".format(gradNorm)}")
                 }
             }
 
-            // Final control points
-            val c1 = PointF(p0.x + cos(theta1) * alpha1, p0.y + sin(theta1) * alpha1)
-            val c2 = PointF(p3.x + cos(theta2) * alpha2, p3.y + sin(theta2) * alpha2)
+            // Use best solution found
+            val c1 = PointF(p0.x + bestDx1, p0.y + bestDy1)
+            val c2 = PointF(p3.x + bestDx2, p3.y + bestDy2)
 
             return Pair(c1, c2)
         }
