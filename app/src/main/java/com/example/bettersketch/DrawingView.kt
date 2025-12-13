@@ -1541,12 +1541,13 @@ class DrawingView @JvmOverloads constructor(
 
         // Draw Voronoi regions by checking each pixel's closest anchor
         // For performance, we sample at a lower resolution and draw rectangles
-        val sampleStep = 8 // Sample every 8 pixels for performance
+        val sampleStep = 11 //16 //if (isAnchorPointDragging()) 8 else 4 // Sample every 8 pixels for performance
+        val squareSize = 8 //15 //12
         val paint = Paint().apply { style = Paint.Style.FILL }
 
         for (y in 0 until height step sampleStep) {
             for (x in 0 until width step sampleStep) {
-                val testPoint = PointF(x.toFloat(), y.toFloat())
+                val testPoint = PointF(x.toFloat() + squareSize/2, y.toFloat() + squareSize/2)
 
                 // Find closest anchor point
                 var closestIdx = 0
@@ -1565,14 +1566,14 @@ class DrawingView @JvmOverloads constructor(
                     Color.argb(25, 255, 255, 255) // 10% opacity white
                 } else {
                     var c = VORONOI_COLORS[(anchorIndices[closestIdx]*3) % VORONOI_COLORS.size] * 50
-                    Color.argb(25, c.red, c.green, c.blue) // Assign opacity
+                    Color.argb(25*3, c.red, c.green, c.blue) // Assign opacity
                 }
 
                 canvas.drawRect(
                     x.toFloat(),
                     y.toFloat(),
-                    (x + sampleStep).toFloat(),
-                    (y + sampleStep).toFloat(),
+                    (x + squareSize).toFloat(),
+                    (y + squareSize).toFloat(),
                     paint
                 )
             }
