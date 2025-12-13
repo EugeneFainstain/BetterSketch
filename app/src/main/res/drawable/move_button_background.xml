@@ -11,13 +11,25 @@
         </layer-list>
     </item>
 
+    <!-- Selected state - toggled ON (persistent) -->
+    <item android:state_selected="true">
+        <layer-list>
+            <item android:top="0dp" android:left="0dp" android:right="0dp" android:bottom="0dp">
+                <shape android:shape="oval">
+                    <solid android:color="#0088DD"/>
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
     <!-- Pressed state - flattened and washed out -->
     <item android:state_pressed="true">
         <layer-list>
             <!-- Main surface (flat and washed out when pressed) -->
             <item android:top="0dp" android:left="0dp" android:right="0dp" android:bottom="0dp">
                 <shape android:shape="oval">
-                    <solid android:color="#88CCFF"/>
+                    <!--     <solid android:color="#88CCFF"/>  -->
+                    <solid android:color="#0088DD"/>
                 </shape>
             </item>
         </layer-list>

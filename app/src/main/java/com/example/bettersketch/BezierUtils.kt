@@ -65,11 +65,11 @@ object BezierUtils {
 
         for (segIndex in 0 until numSegments) {
             val p0 = stroke.bezierAnchorPoints[segIndex]
+            val p3 = stroke.bezierAnchorPoints[segIndex + 1]
             val p1 = stroke.bezierControlPoints1[segIndex]
             val p2 = stroke.bezierControlPoints2[segIndex + 1]
-            val p3 = stroke.bezierAnchorPoints[segIndex + 1]
-
-            val length = estimateBezierArcLength(p0, p1, p2, p3)
+            val length = if (stroke.noBezierHandles) estimateBezierArcLength(p0, p1 = p0, p2 = p3, p3) else
+                                                     estimateBezierArcLength(p0, p1 = p1, p2 = p2, p3)
             segmentLengths.add(length)
             totalLength += length
         }
@@ -90,16 +90,17 @@ object BezierUtils {
 
         for (segIndex in 0 until numSegments) {
             val p0 = stroke.bezierAnchorPoints[segIndex]
+            val p3 = stroke.bezierAnchorPoints[segIndex + 1]
             val p1 = stroke.bezierControlPoints1[segIndex]
             val p2 = stroke.bezierControlPoints2[segIndex + 1]
-            val p3 = stroke.bezierAnchorPoints[segIndex + 1]
 
             val numPointsInSegment = pointsPerSegment[segIndex]
 
             // Add points for this segment (excluding the end anchor)
             for (i in 0 until numPointsInSegment) {
                 val t = i.toFloat() / numPointsInSegment
-                val point = evaluateCubicBezier(p0, p1, p2, p3, t)
+                val point = if (stroke.noBezierHandles) evaluateCubicBezier(p0, p1 = p0, p2 = p3, p3, t) else
+                                                        evaluateCubicBezier(p0, p1 = p1, p2 = p2, p3, t)
                 interpolatedPoints.add(point)
             }
         }

@@ -133,7 +133,6 @@ class DrawingView @JvmOverloads constructor(
     private var addAnchorPointGestureInProgress = false
     private var isFingerOverRemoveButton = false
 
-
     init {
         haloOffset = TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP,
@@ -457,6 +456,20 @@ class DrawingView @JvmOverloads constructor(
             it.toggleBezierRepresentation()
             setState(currentState) // Refresh UI and Canvas
         }
+    }
+
+    fun toggleNoBezierHandles() {
+        // Recompute bezier curves for all highlighted strokes that render as bezier
+        getHighlightedStrokes.forEach { stroke ->
+            stroke.forEachStroke { s ->
+                if (s.renderAsBezier && s.hasBezierData()) {
+                    s.noBezierHandles = !s.noBezierHandles
+                    BezierUtils.regenerateBezierCurve(s )
+                    s.applySmoothing()
+                }
+            }
+        }
+        setState(currentState) // Refresh UI and Canvas
     }
 
     private fun setStrokeHighlighted(stroke: Stroke?) {

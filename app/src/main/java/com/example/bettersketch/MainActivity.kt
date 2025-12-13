@@ -26,6 +26,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
     private lateinit var btnSelection: ImageButton
     private lateinit var btnRemoveAnchorPoint: ImageButton
     private lateinit var btnAddAnchorPoint: ImageButton
+    private lateinit var btnNoBezierHandles: ImageButton
     private lateinit var gestureHelper: ButtonAugmentedGestureHelper
     
     // Gesture tags
@@ -72,6 +73,7 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         btnSelection = findViewById(R.id.btnSelection)
         btnRemoveAnchorPoint = findViewById(R.id.btnRemoveAnchorPoint)
         btnAddAnchorPoint = findViewById(R.id.btnAddAnchorPoint)
+        btnNoBezierHandles = findViewById(R.id.btnNoBezierHandles)
 
         setupSliderListeners()
         
@@ -113,6 +115,11 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
 
         btnBezier.setOnClickListener {
             drawingView.toggleCurrentStrokeBezier()
+        }
+
+        btnNoBezierHandles.setOnClickListener {
+            drawingView.toggleNoBezierHandles()
+            updateNoBezierHandlesButtonState()
         }
 
         drawingView.post { updateUi() }
@@ -247,6 +254,22 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
         } else {
             btnBezier.visibility = View.GONE
         }
+
+        updateNoBezierHandlesButtonState()
+    }
+
+    private fun updateNoBezierHandlesButtonState() {
+        val stroke = drawingView.singleHighlightedStroke
+        val shouldShow = stroke?.renderAsBezier == true && stroke.hasBezierData()
+
+        if( shouldShow )
+        {
+            btnNoBezierHandles.visibility = View.VISIBLE
+            btnNoBezierHandles.isSelected = stroke!!.noBezierHandles
+            btnNoBezierHandles.alpha = 1.0f //if (stroke!!.noBezierHandles) 1.0f else 0.5f
+        }
+        else
+            btnNoBezierHandles.visibility = View.GONE
     }
 
     override fun onNoShapeDetected() {
@@ -311,6 +334,8 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             btnRemoveAnchorPoint.visibility = View.GONE
             btnAddAnchorPoint.visibility = View.GONE
         }
+
+        updateNoBezierHandlesButtonState()
 
         btnSelection.visibility = View.VISIBLE
         btnSelection.isEnabled = drawingView.strokes.isNotEmpty() // As long as there are some strokes to select...

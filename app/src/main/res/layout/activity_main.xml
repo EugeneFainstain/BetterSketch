@@ -123,6 +123,22 @@
             tools:visibility="visible" />
 
         <ImageButton
+                android:id="@+id/btnNoBezierHandles"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="top|start"
+                android:layout_marginStart="34dp"
+                android:layout_marginTop="134dp"
+                android:background="@drawable/move_button_background"
+                android:contentDescription="Toggle Bezier Handles"
+                android:src="@drawable/outline_no_bezier_handles"
+                android:scaleType="fitCenter"
+                android:padding="10dp"
+                android:elevation="3dp"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+        <ImageButton
             android:id="@+id/btnUndoStrokeEdit"
             android:layout_width="64dp"
             android:layout_height="64dp"

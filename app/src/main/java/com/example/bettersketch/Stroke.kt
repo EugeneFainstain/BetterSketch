@@ -32,6 +32,7 @@ class Stroke(
     val bezierControlPoints2: MutableList<PointF> = mutableListOf()    // "After" control points (one per anchor, incoming to anchor)
     val bezierAnchorIndices: MutableList<Int> = mutableListOf()        // Indices of Bezier anchors
     var renderAsBezier: Boolean = false                                // Toggle for bezier rendering
+    var noBezierHandles: Boolean = false                               // Toggle Bezier/Linear interpolation
 
     var totalDistance: Float = 0f
     var isModified: Boolean = false
