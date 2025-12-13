@@ -160,16 +160,16 @@ object BezierUtils {
         // pointIndex is an index into pointsForDrawing (the smoothed/regenerated curve)
 
         if (stroke.bezierAnchorPoints.size < 2 || pointIndex >= stroke.pointsForDrawing.size) return
-        if (stroke.bezierAnchorIndices.size != stroke.bezierAnchorPoints.size) return
+        if (stroke.anchorIndices.size != stroke.bezierAnchorPoints.size) return
 
         // Get the EXACT point where we want to add the anchor
         val targetPoint = stroke.pointsForDrawing[pointIndex].point
 
         // Find which bezier segment this point belongs to
         var segmentIndex = -1
-        for (i in 0 until stroke.bezierAnchorIndices.size - 1) {
-            val startIdx = stroke.bezierAnchorIndices[i]
-            val endIdx = stroke.bezierAnchorIndices[i + 1]
+        for (i in 0 until stroke.anchorIndices.size - 1) {
+            val startIdx = stroke.anchorIndices[i]
+            val endIdx = stroke.anchorIndices[i + 1]
 
             if (pointIndex >= startIdx && pointIndex <= endIdx) {
                 segmentIndex = i
@@ -189,8 +189,8 @@ object BezierUtils {
         val p3 = stroke.bezierAnchorPoints[segmentIndex + 1]
 
         // Calculate t parameter within the segment based on position
-        val startIdx = stroke.bezierAnchorIndices[segmentIndex]
-        val endIdx = stroke.bezierAnchorIndices[segmentIndex + 1]
+        val startIdx = stroke.anchorIndices[segmentIndex]
+        val endIdx = stroke.anchorIndices[segmentIndex + 1]
         val segmentLength = endIdx - startIdx
         val t = if (segmentLength > 0) {
             ((pointIndex - startIdx).toFloat() / segmentLength).coerceIn(0f, 1f)
@@ -212,7 +212,7 @@ object BezierUtils {
 
         // Insert the new anchor at segmentIndex + 1
         stroke.bezierAnchorPoints.add(segmentIndex + 1, newAnchor)
-        stroke.bezierAnchorIndices.add(segmentIndex + 1, pointIndex)
+        stroke.anchorIndices.add(segmentIndex + 1, pointIndex)
 
         // Update control points - add the new ones from De Casteljau split
         stroke.bezierControlPoints1.add(segmentIndex + 1, PointF(p123.x, p123.y))
@@ -245,8 +245,8 @@ object BezierUtils {
             if (anchorIndex < stroke.bezierControlPoints2.size) {
                 stroke.bezierControlPoints2.removeAt(anchorIndex)
             }
-            if (anchorIndex < stroke.bezierAnchorIndices.size) {
-                stroke.bezierAnchorIndices.removeAt(anchorIndex)
+            if (anchorIndex < stroke.anchorIndices.size) {
+                stroke.anchorIndices.removeAt(anchorIndex)
             }
             return
         }
@@ -294,7 +294,7 @@ object BezierUtils {
 
         // NOW remove the anchor and its associated control points
         stroke.bezierAnchorPoints.removeAt(anchorIndex)
-        stroke.bezierAnchorIndices.removeAt(anchorIndex)
+        stroke.anchorIndices.removeAt(anchorIndex)
         stroke.bezierControlPoints1.removeAt(anchorIndex)
         stroke.bezierControlPoints2.removeAt(anchorIndex)
     }

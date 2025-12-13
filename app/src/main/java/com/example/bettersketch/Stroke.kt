@@ -23,14 +23,13 @@ class Stroke(
     val unsmoothedPoints: MutableList<PathPoint> = mutableListOf() // Unsmoothed points for editing
     val shapeParameterPoints: MutableList<PathPoint> = mutableListOf() // Shape parameter points (for SQUARE, CIRCLE, POLYNOMIAL)
     val interpolatedPolylinePoints: MutableList<PathPoint> = mutableListOf() // Interpolated polyline points (same count as originalPoints)
-    val polylineIndices: MutableList<Int> = mutableListOf() // Indices of the original points that correspond to the polyline vertices
+    val anchorIndices: MutableList<Int> = mutableListOf() // Indices of anchor points (shared between polyline and bezier)
     val distancesForWeights: MutableList<Float> = mutableListOf() // Distances along path at stroke finalization, used for weight calculation during editing
 
     // Bezier curve data
     val bezierAnchorPoints: MutableList<PointF> = mutableListOf()      // Optimal computed anchors
     val bezierControlPoints1: MutableList<PointF> = mutableListOf()    // "Before" control points (one per anchor, outgoing from anchor)
     val bezierControlPoints2: MutableList<PointF> = mutableListOf()    // "After" control points (one per anchor, incoming to anchor)
-    val bezierAnchorIndices: MutableList<Int> = mutableListOf()        // Indices of Bezier anchors
     var renderAsBezier: Boolean = false                                // Toggle for bezier rendering
 
     var totalDistance: Float = 0f
@@ -102,11 +101,11 @@ class Stroke(
     }
 
     fun getAssociatedPolylinePointsOnSmoothedCurve(): List<PointF> {
-        if (polylineIndices.isEmpty() || pointsForDrawing.isEmpty()) {
+        if (anchorIndices.isEmpty() || pointsForDrawing.isEmpty()) {
             return emptyList()
         }
 
-        return polylineIndices.mapNotNull { index ->
+        return anchorIndices.mapNotNull { index ->
             pointsForDrawing.getOrNull(index)?.point
         }
     }
@@ -119,11 +118,11 @@ class Stroke(
         }
 
         // When NOT in bezier mode, use indices to show where anchors would be
-        if (bezierAnchorIndices.isEmpty() || pointsForDrawing.isEmpty()) {
+        if (anchorIndices.isEmpty() || pointsForDrawing.isEmpty()) {
             return emptyList()
         }
 
-        return bezierAnchorIndices.mapNotNull { index ->
+        return anchorIndices.mapNotNull { index ->
             pointsForDrawing.getOrNull(index)?.point
         }
     }
@@ -198,9 +197,8 @@ class Stroke(
         this.totalDistance = newTotalDistance // Update totalDistance based on smoothed points
     }
 
-
     fun togglePolylineRepresentation() {
-        if (polylineIndices.isEmpty()) {
+        if (anchorIndices.isEmpty()) {
             // Cannot toggle if there's no polyline data
             return
         }
@@ -211,6 +209,7 @@ class Stroke(
         PolylineUtils.regenerateInterpolatedPolylinePoints(this)
         applySmoothing()
     }
+
     fun forEachStroke(action: (Stroke) -> Unit) {
         if (isGroup) {
             childStrokes.forEach { it.forEachStroke(action) }
@@ -279,8 +278,8 @@ class Stroke(
         this.interpolatedPolylinePoints.clear()
         this.interpolatedPolylinePoints.addAll(other.interpolatedPolylinePoints.map { PathPoint(PointF(it.point.x, it.point.y), it.distance) })
 
-        this.polylineIndices.clear()
-        this.polylineIndices.addAll(other.polylineIndices)
+        this.anchorIndices.clear()
+        this.anchorIndices.addAll(other.anchorIndices)
 
         this.distancesForWeights.clear()
         this.distancesForWeights.addAll(other.distancesForWeights)
@@ -294,9 +293,6 @@ class Stroke(
 
         this.bezierControlPoints2.clear()
         this.bezierControlPoints2.addAll(other.bezierControlPoints2.map { PointF(it.x, it.y) })
-
-        this.bezierAnchorIndices.clear()
-        this.bezierAnchorIndices.addAll(other.bezierAnchorIndices)
 
         this.totalDistance = other.totalDistance
 
@@ -549,7 +545,7 @@ class Stroke(
         }
 
         // Step 3: Use polyline anchor indices to fit bezier with fixed anchors
-        val polylineIndicesList = polylineFitResult.fittedStroke.polylineIndices.toList()
+        val polylineIndicesList = polylineFitResult.fittedStroke.anchorIndices.toList()
         val bezierFitResult = BezierFitter.fitWithFixedAnchors(this, polylineIndicesList)
         if (bezierFitResult == null) {
             return false
@@ -559,8 +555,7 @@ class Stroke(
         bezierAnchorPoints.addAll(bezierFitResult.anchorPoints)
         bezierControlPoints1.addAll(bezierFitResult.controlPoints1)
         bezierControlPoints2.addAll(bezierFitResult.controlPoints2)
-        bezierAnchorIndices.addAll(bezierFitResult.anchorIndices)
-        polylineIndices.addAll(polylineIndicesList)
+        anchorIndices.addAll(bezierFitResult.anchorIndices)
 
         return true
     }

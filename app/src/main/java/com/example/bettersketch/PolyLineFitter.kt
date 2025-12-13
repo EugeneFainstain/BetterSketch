@@ -367,7 +367,7 @@ class PolyLineFitter {
             stroke.renderAsPolyline = true  // Start in polyline rendering mode
 
             // Store the vertex indices
-            stroke.polylineIndices.addAll(indices)
+            stroke.anchorIndices.addAll(indices)
 
             // We need to populate unsmoothedPoints first before we can regenerate
             // Create a temporary interpolation with the correct number of points

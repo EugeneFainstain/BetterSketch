@@ -187,7 +187,7 @@ class DrawingView @JvmOverloads constructor(
     }
 
     fun currentStrokeHasPolylineData(): Boolean {
-        return singleHighlightedStroke?.polylineIndices?.isNotEmpty() ?: false
+        return singleHighlightedStroke?.anchorIndices?.isNotEmpty() ?: false
     }
 
     // Data class to hold the result of finding closest point across multiple strokes
@@ -530,12 +530,12 @@ class DrawingView @JvmOverloads constructor(
 
             highlightedStrokes.forEach { stroke ->
                 stroke.forEachStroke { s ->
-                    if (!s.isGroup && s.polylineIndices.isNotEmpty()) {
+                    if (!s.isGroup && s.anchorIndices.isNotEmpty()) {
                         // Find the closest ANCHOR point on this stroke to the primary point
                         var closestAnchorIdx = -1
                         var closestDist = Float.MAX_VALUE
 
-                        s.polylineIndices.forEach { anchorIndex ->
+                        s.anchorIndices.forEach { anchorIndex ->
                             if (anchorIndex >= 0 && anchorIndex < s.unsmoothedPoints.size) {
                                 val anchorPoint = s.unsmoothedPoints[anchorIndex].point
                                 val d = distance(anchorPoint, primaryPoint)
@@ -802,7 +802,7 @@ class DrawingView @JvmOverloads constructor(
 
                         // Draw circles for associated polyline points
                         if (!stroke.renderAsBezier)
-                            if (stroke.polylineIndices.isNotEmpty()) {
+                            if (stroke.anchorIndices.isNotEmpty()) {
                                 val associatedPoints =
                                     stroke.getAssociatedPolylinePointsOnSmoothedCurve()
                                 val vertexPaint = Paint().apply {
@@ -819,10 +819,10 @@ class DrawingView @JvmOverloads constructor(
                             }
 
                         // Draw red squares for bezier anchor points
-                        if (stroke.bezierAnchorIndices.isNotEmpty()) {
+                        if (stroke.anchorIndices.isNotEmpty()) {
                             val bezierAnchorPoints =
                                 stroke.getAssociatedBezierAnchorPointsOnSmoothedCurve()
-                            val bezierPaint = Paint().apply {
+                                val bezierPaint = Paint().apply {
                                 style = Paint.Style.FILL
                                 color = Color.RED
                             }

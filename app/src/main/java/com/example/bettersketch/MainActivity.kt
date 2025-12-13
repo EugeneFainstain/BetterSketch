@@ -216,11 +216,11 @@ class MainActivity : AppCompatActivity(), DrawingViewListener, ShapeDetectionLis
             !isCurrentStrokeGroup             &&
             strokeHasPolylineData             &&
             drawingView.singleHighlightedStroke != null &&
-            drawingView.singleHighlightedStroke?.polylineIndices != null) {
+            drawingView.singleHighlightedStroke?.anchorIndices != null) {
             if(drawingView.singleHighlightedStroke?.renderAsPolyline ?: false)
                 btnPolyline.text = "Restore"
             else
-                btnPolyline.text = "PolyLine(${drawingView.singleHighlightedStroke?.polylineIndices?.size})"
+                btnPolyline.text = "PolyLine(${drawingView.singleHighlightedStroke?.anchorIndices?.size})"
             btnPolyline.visibility = View.VISIBLE
         } else {
             btnPolyline.visibility = View.GONE

@@ -132,32 +132,32 @@ object PolylineUtils {
 
     /**
      * Add a polyline anchor point at the specified index.
-     * 
+     *
      * @param stroke The stroke to modify
      * @param index Index in unsmoothedPoints where the anchor should be added
      */
     fun addPolylineAnchorPoint(stroke: Stroke, index: Int) {
-        // Initialize polylineIndices if empty (first anchor being added)
-        if (stroke.polylineIndices.isEmpty()) {
+        // Initialize anchorIndices if empty (first anchor being added)
+        if (stroke.anchorIndices.isEmpty()) {
             // Add first and last points as anchors
-            stroke.polylineIndices.add(0)
-            stroke.polylineIndices.add(stroke.unsmoothedPoints.size - 1)
+            stroke.anchorIndices.add(0)
+            stroke.anchorIndices.add(stroke.unsmoothedPoints.size - 1)
         }
 
-        // Find where to insert the new anchor in the sorted polylineIndices list
-        var insertPosition = stroke.polylineIndices.size
-        for (i in stroke.polylineIndices.indices) {
-            if (index < stroke.polylineIndices[i]) {
+        // Find where to insert the new anchor in the sorted anchorIndices list
+        var insertPosition = stroke.anchorIndices.size
+        for (i in stroke.anchorIndices.indices) {
+            if (index < stroke.anchorIndices[i]) {
                 insertPosition = i
                 break
-            } else if (index == stroke.polylineIndices[i]) {
+            } else if (index == stroke.anchorIndices[i]) {
                 // Already an anchor at this position, don't add
                 return
             }
         }
 
         // Insert the new anchor
-        stroke.polylineIndices.add(insertPosition, index)
+        stroke.anchorIndices.add(insertPosition, index)
         stroke.isModified = true
 
         // Regenerate the stroke
@@ -167,7 +167,7 @@ object PolylineUtils {
 
     /**
      * Remove a polyline anchor point at the specified index.
-     * 
+     *
      * @param stroke The stroke to modify
      * @param pointIndex Index into unsmoothedPoints
      * @param snapshotUnsmoothedPoints Snapshot of unsmoothedPoints for restoration
@@ -178,14 +178,14 @@ object PolylineUtils {
         pointIndex: Int,
         snapshotUnsmoothedPoints: MutableList<PathPoint>?
     ): Boolean {
-        if (stroke.polylineIndices.isEmpty()) return false
+        if (stroke.anchorIndices.isEmpty()) return false
 
-        // Find which polyline index corresponds to the editing point
-        val polylineIndexToRemove = stroke.polylineIndices.indexOfFirst { it == pointIndex }
-        if (polylineIndexToRemove == -1) return false
+        // Find which anchor index corresponds to the editing point
+        val anchorIndexToRemove = stroke.anchorIndices.indexOfFirst { it == pointIndex }
+        if (anchorIndexToRemove == -1) return false
 
         // Don't allow removing if it would leave fewer than 2 vertices
-        if (stroke.polylineIndices.size <= 2) return false
+        if (stroke.anchorIndices.size <= 2) return false
 
         // Restore unsmoothedPoints to the snapshot if provided
         if (snapshotUnsmoothedPoints != null) {
@@ -205,8 +205,8 @@ object PolylineUtils {
             stroke.totalDistance = newTotalDistance
         }
 
-        // Remove the polyline index
-        stroke.polylineIndices.removeAt(polylineIndexToRemove)
+        // Remove the anchor index
+        stroke.anchorIndices.removeAt(anchorIndexToRemove)
         stroke.isModified = true
 
         // Regenerate the stroke
@@ -222,7 +222,7 @@ object PolylineUtils {
      */
     fun calculateWeightsForAnchorPoint(stroke: Stroke, pointIndex: Int): List<Float> {
         // Calculate weight function for this specific anchor point
-        if (stroke.polylineIndices.isNotEmpty() && stroke.polylineIndices.size >= 2 &&
+        if (stroke.anchorIndices.isNotEmpty() && stroke.anchorIndices.size >= 2 &&
             stroke.distancesForWeights.isNotEmpty()) {
 
             // Find which polyline anchor this corresponds to
@@ -232,32 +232,32 @@ object PolylineUtils {
                 return List(stroke.unsmoothedPoints.size) { 0f }
             }
 
-            var closestPolylineIdxInArray = 0
+            var closestAnchorIdxInArray = 0
             var minDistToAnchor = Float.MAX_VALUE
 
-            for (i in stroke.polylineIndices.indices) {
-                val anchorIndexInOriginal = stroke.polylineIndices[i]
+            for (i in stroke.anchorIndices.indices) {
+                val anchorIndexInOriginal = stroke.anchorIndices[i]
                 if (anchorIndexInOriginal >= 0 && anchorIndexInOriginal < stroke.distancesForWeights.size) {
                     val anchorDistance = stroke.distancesForWeights[anchorIndexInOriginal]
                     val distDiff = abs(anchorDistance - closestDrawingDistance)
                     if (distDiff < minDistToAnchor) {
                         minDistToAnchor = distDiff
-                        closestPolylineIdxInArray = i
+                        closestAnchorIdxInArray = i
                     }
                 }
             }
 
-            if (closestPolylineIdxInArray >= 0 && closestPolylineIdxInArray < stroke.polylineIndices.size) {
-                val leftPolylineArrayIdx = if (closestPolylineIdxInArray > 0) closestPolylineIdxInArray - 1 else 0
-                val rightPolylineArrayIdx = if (closestPolylineIdxInArray < stroke.polylineIndices.size - 1) {
-                    closestPolylineIdxInArray + 1
+            if (closestAnchorIdxInArray >= 0 && closestAnchorIdxInArray < stroke.anchorIndices.size) {
+                val leftAnchorArrayIdx = if (closestAnchorIdxInArray > 0) closestAnchorIdxInArray - 1 else 0
+                val rightAnchorArrayIdx = if (closestAnchorIdxInArray < stroke.anchorIndices.size - 1) {
+                    closestAnchorIdxInArray + 1
                 } else {
-                    stroke.polylineIndices.size - 1
+                    stroke.anchorIndices.size - 1
                 }
 
-                val leftOriginalIdx = stroke.polylineIndices[leftPolylineArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
-                val middleOriginalIdx = stroke.polylineIndices[closestPolylineIdxInArray].coerceIn(0, stroke.distancesForWeights.size - 1)
-                val rightOriginalIdx = stroke.polylineIndices[rightPolylineArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
+                val leftOriginalIdx = stroke.anchorIndices[leftAnchorArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
+                val middleOriginalIdx = stroke.anchorIndices[closestAnchorIdxInArray].coerceIn(0, stroke.distancesForWeights.size - 1)
+                val rightOriginalIdx = stroke.anchorIndices[rightAnchorArrayIdx].coerceIn(0, stroke.distancesForWeights.size - 1)
 
                 val leftDist = stroke.distancesForWeights[leftOriginalIdx]
                 val middleDist = stroke.distancesForWeights[middleOriginalIdx]
@@ -342,13 +342,13 @@ object PolylineUtils {
     fun regenerateInterpolatedPolylinePoints(stroke: Stroke) {
         // Try to regenerate interpolatedPolylinePoints, or skip if conditions aren't met
         // Early exit conditions - if any fail, skip to applySmoothing
-        if (stroke.polylineIndices.isEmpty() || stroke.unsmoothedPoints.isEmpty()) return
+        if (stroke.anchorIndices.isEmpty() || stroke.unsmoothedPoints.isEmpty()) return
 
         val pointCount = stroke.originalPoints.size
         if (pointCount < 2) return
 
-        // Extract vertices from unsmoothedPoints using polylineIndices
-        val vertices = stroke.polylineIndices.mapNotNull { index ->
+        // Extract vertices from unsmoothedPoints using anchorIndices
+        val vertices = stroke.anchorIndices.mapNotNull { index ->
             if (index >= 0 && index < stroke.unsmoothedPoints.size) {
                 stroke.unsmoothedPoints[index].point
             } else {
@@ -359,7 +359,7 @@ object PolylineUtils {
         if (vertices.isEmpty()) return
 
         // Interpolate along the polyline vertices with vertices placed at their specific indices
-        val interpolatedPoints = interpolateAlongPolyLineWithIndices(vertices, stroke.polylineIndices, pointCount)
+        val interpolatedPoints = interpolateAlongPolyLineWithIndices(vertices, stroke.anchorIndices, pointCount)
 
         // Update interpolatedPolylinePoints
         val (pathPoints, newTotalDistance) = Stroke.calculatePathPointsWithDistances(interpolatedPoints)

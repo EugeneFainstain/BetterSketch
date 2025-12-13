@@ -183,14 +183,13 @@ object StrokeUtils {
         stroke.renderAsPolyline = false
         stroke.renderAsBezier = false
         stroke.needsToRegenerate = false
-        stroke.polylineIndices.clear()
+        stroke.anchorIndices.clear()
         stroke.shapeParameterPoints.clear()
 
         // Clear bezier data
         stroke.bezierAnchorPoints.clear()
         stroke.bezierControlPoints1.clear()
         stroke.bezierControlPoints2.clear()
-        stroke.bezierAnchorIndices.clear()
 
         // Restore from originalPoints
         stroke.unsmoothedPoints.clear()
@@ -273,9 +272,9 @@ object StrokeUtils {
                                 closestStroke = s
                             }
                         }
-                    } else if (s.polylineIndices.isNotEmpty()) {
+                    } else if (s.anchorIndices.isNotEmpty()) {
                         // Search through polyline anchor points (indices into unsmoothedPoints)
-                        s.polylineIndices.forEach { anchorIndex ->
+                        s.anchorIndices.forEach { anchorIndex ->
                             if (anchorIndex >= 0 && anchorIndex < s.unsmoothedPoints.size) {
                                 val anchorPoint = s.unsmoothedPoints[anchorIndex].point
                                 val d = distance(anchorPoint, tapPoint)
