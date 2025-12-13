@@ -406,6 +406,12 @@ class DrawingView @JvmOverloads constructor(
             // Only add the stroke if postprocessing succeeded
             // If it failed, we gracefully abandon this stroke
             if (postprocessSucceeded) {
+                // Since renderAsBezier is true by default, regenerate the curve using bezier data
+                if (newStroke.renderAsBezier && newStroke.hasBezierData()) {
+                    BezierUtils.regenerateBezierCurve(newStroke)
+                    newStroke.applySmoothing()
+                }
+
                 strokes.add(newStroke)
                 detectShape(newStroke)
             }
@@ -1086,12 +1092,20 @@ class DrawingView @JvmOverloads constructor(
         if (shouldEditControlPoint) {
             val primaryAnchor = anchorPointsToEdit.firstOrNull()
             if (primaryAnchor != null && primaryAnchor.isBezierAnchor) {
-                // We're in bezier mode - find closest control point for second finger
-                if (event.pointerCount >= 2) {
-                    val secondFingerWorldPoint = toWorldCoordinates(event.getX(1), event.getY(1))
-                    secondFingerControlEdit = BezierUtils.findClosestControlPoint(primaryAnchor.stroke, primaryAnchor.pointIndex, secondFingerWorldPoint)
-                    if (secondFingerControlEdit != null) {
+                if (BezierUtils.USE_SCALE_ROTATE_CONTROL_EDIT) {
+                    // Alternative mode: record initial two-finger state for scale/rotate
+                    if (event.pointerCount >= 2) {
                         isSecondFingerEditing = true
+                        // Don't need secondFingerControlEdit in this mode
+                    }
+                } else {
+                    // Original mode: find closest control point for second finger
+                    if (event.pointerCount >= 2) {
+                        val secondFingerWorldPoint = toWorldCoordinates(event.getX(1), event.getY(1))
+                        secondFingerControlEdit = BezierUtils.findClosestControlPoint(primaryAnchor.stroke, primaryAnchor.pointIndex, secondFingerWorldPoint)
+                        if (secondFingerControlEdit != null) {
+                            isSecondFingerEditing = true
+                        }
                     }
                 }
                 // Don't set twoFingerGestureOccured - this prevents canvas transformation
@@ -1351,8 +1365,24 @@ class DrawingView @JvmOverloads constructor(
 
         // Handle second finger for bezier control point editing
         // If second finger is editing a control point, handle it specially
-        if (currentState == State.STROKE_EDITING && isSecondFingerEditing && secondFingerControlEdit != null) {
-            if (event.pointerCount >= 2) {
+        if (currentState == State.STROKE_EDITING && isSecondFingerEditing) {
+            if (BezierUtils.USE_SCALE_ROTATE_CONTROL_EDIT) {
+                // Alternative mode: use scale and rotate to transform control points
+                // Anchor moves according to midpoint delta
+                val moveDelta = floatArrayOf(dx0, dy0)
+                invertedGlobal.mapVectors(moveDelta )
+
+                // Use the scale and rotate values passed from CustomGestureDetector
+                BezierUtils.moveBezierAnchorWithScaleRotate(
+                    anchorPointsToEdit.firstOrNull(),
+                    moveDelta[0], moveDelta[1],
+                    scale * 1.0f, rotate * 2f // Amplify the effect by 2x... Can't do this for the scale yet...
+                )
+
+                redrawHistory()
+                return true
+            } else if (secondFingerControlEdit != null) {
+                // Original mode: per-finger deltas
                 // Transform per-finger deltas to world coordinates
                 val finger0Delta = floatArrayOf(dx0, dy0)
                 val finger1Delta = floatArrayOf(dx1, dy1)

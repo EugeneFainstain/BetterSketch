@@ -5,6 +5,11 @@ import com.example.bettersketch.GeometryUtils.distance
 
 object BezierUtils {
 
+    // Switch between editing modes:
+    // false = original mode (finger 1 moves anchor, finger 2 moves specific control point)
+    // true = alternative mode (scale/rotate control points based on two-finger gesture)
+    const val USE_SCALE_ROTATE_CONTROL_EDIT = true //false
+
     /**
      * Evaluate a cubic Bezier curve at parameter t.
      * @param p0 Start anchor point
@@ -415,6 +420,75 @@ object BezierUtils {
 
         stroke.isModified = true
         // Regenerate the curve from the modified bezier data
+        regenerateBezierCurve(stroke)
+        stroke.applySmoothing()
+    }
+
+    /**
+     * Alternative two-finger bezier editing using scale and rotation.
+     * Instead of moving a specific control point, this rotates and scales BOTH control points
+     * around the anchor based on the two-finger gesture parameters.
+     * The anchor is moved according to the midpoint between the two fingers.
+     *
+     * @param anchorEdit The anchor point being edited
+     * @param anchorDx Delta X for anchor movement
+     * @param anchorDy Delta Y for anchor movement
+     * @param scale Scale factor from the two-finger gesture
+     * @param rotate Rotation angle (in degrees) from the two-finger gesture
+     */
+    fun moveBezierAnchorWithScaleRotate(
+        anchorEdit: DrawingView.AnchorPointToEdit?,
+        anchorDx: Float,
+        anchorDy: Float,
+        scale: Float,
+        rotate: Float
+    ) {
+        if (anchorEdit == null) return
+        if (!anchorEdit.isBezierAnchor) return
+
+        val stroke = anchorEdit.stroke
+        val anchorIndex = anchorEdit.pointIndex
+
+        // Guard against invalid indices
+        if (anchorIndex < 0 || anchorIndex >= stroke.bezierAnchorPoints.size) return
+        if (anchorIndex >= stroke.bezierControlPoints1.size) return
+        if (anchorIndex >= stroke.bezierControlPoints2.size) return
+
+        val anchorPoint = stroke.bezierAnchorPoints[anchorIndex]
+        val control1 = stroke.bezierControlPoints1[anchorIndex]
+        val control2 = stroke.bezierControlPoints2[anchorIndex]
+
+        // Step 1: Calculate original vectors from anchor to control points BEFORE anchor movement
+        val originalControl1Dx = control1.x - anchorPoint.x
+        val originalControl1Dy = control1.y - anchorPoint.y
+        val originalControl2Dx = control2.x - anchorPoint.x
+        val originalControl2Dy = control2.y - anchorPoint.y
+
+        // Step 2: Move the anchor point
+        anchorPoint.offset(anchorDx, anchorDy)
+
+        // Step 3: Apply scale and rotation to both control points
+        val rotateRad = Math.toRadians(rotate.toDouble()).toFloat()
+        val cosR = kotlin.math.cos(rotateRad)
+        val sinR = kotlin.math.sin(rotateRad)
+
+        // Transform control1: scale then rotate
+        val scaledControl1Dx = originalControl1Dx * scale
+        val scaledControl1Dy = originalControl1Dy * scale
+        val newControl1Dx = scaledControl1Dx * cosR - scaledControl1Dy * sinR
+        val newControl1Dy = scaledControl1Dx * sinR + scaledControl1Dy * cosR
+
+        // Transform control2: scale then rotate
+        val scaledControl2Dx = originalControl2Dx * scale
+        val scaledControl2Dy = originalControl2Dy * scale
+        val newControl2Dx = scaledControl2Dx * cosR - scaledControl2Dy * sinR
+        val newControl2Dy = scaledControl2Dx * sinR + scaledControl2Dy * cosR
+
+        // Step 4: Set new control point positions relative to moved anchor
+        control1.set(anchorPoint.x + newControl1Dx, anchorPoint.y + newControl1Dy)
+        control2.set(anchorPoint.x + newControl2Dx, anchorPoint.y + newControl2Dy)
+
+        stroke.isModified = true
         regenerateBezierCurve(stroke)
         stroke.applySmoothing()
     }

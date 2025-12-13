@@ -21,7 +21,7 @@ class BezierFitter {
         private const val EPSILON = 1.0e-6f       // Convergence threshold
 
         // Toggle this to switch between error metrics
-        private const val USE_AREA_BASED_ERROR = false //true
+        private const val USE_AREA_BASED_ERROR = true //false //true
 
         /**
          * Fit cubic Bezier curves with fixed anchor points at specified indices.
