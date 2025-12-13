@@ -15,9 +15,23 @@ import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import androidx.core.graphics.blue
 import androidx.core.graphics.createBitmap
+import androidx.core.graphics.green
+import androidx.core.graphics.red
 import com.example.bettersketch.GeometryUtils.distance
 import kotlin.math.*
+
+// Voronoi diagram colors for editing mode background (10% opacity each)
+private val VORONOI_COLORS = arrayOf(
+    Color.argb(255, 5, 0, 0),     // Red
+    Color.argb(255, 5, 2, 1),     // Orange
+    Color.argb(255, 5, 5, 0),     // Yellow
+    Color.argb(255, 0, 5, 0),     // Green
+    Color.argb(255, 0, 5, 5),     // Cyan
+    Color.argb(255, 0, 0, 5),     // Blue
+    Color.argb(255, 5, 0, 5),     // Magenta
+)
 
 interface DrawingViewListener {
     fun onStateChanged()
@@ -242,7 +256,9 @@ class DrawingView @JvmOverloads constructor(
         }
 
         if (isEditing()) {
-            canvas.drawColor(Color.argb(25, 255, 165, 0)) // 10% opacity orange
+            //canvas.drawColor(Color.argb(25, 255, 165, 0)) // 10% opacity orange
+            // Draw Voronoi diagram as background for highlighted strokes
+            drawVoronoiBackground(canvas)
         }
 
         // 1. Draw halos and markers first (if in editing mode)
@@ -1480,6 +1496,87 @@ class DrawingView @JvmOverloads constructor(
 
     private fun isPointInCircle(point: PointF, circleCenter: PointF, circleRadius: Float): Boolean {
         return distance(point, circleCenter) < circleRadius
+    }
+
+    /**
+     * Draw a Voronoi diagram background based on bezier anchor points of highlighted strokes.
+     * Colors alternate between 10% blue and 10% yellow based on anchor index.
+     */
+    private fun drawVoronoiBackground(canvas: Canvas) {
+        // Collect all bezier anchor points from highlighted strokes
+        val anchorPoints = mutableListOf<PointF>()
+        val anchorIndices = mutableListOf<Int>() // Track original index for coloring
+
+        var globalIndex = 0
+        getHighlightedStrokes.forEach { stroke ->
+            stroke.forEachStroke { s ->
+                if (s.bezierAnchorPoints.isNotEmpty()) {
+                    s.bezierAnchorPoints.forEach { anchor ->
+                        anchorPoints.add(PointF(anchor.x, anchor.y))
+                        anchorIndices.add(globalIndex)
+                        globalIndex++
+                    }
+                }
+            }
+        }
+
+        if (anchorPoints.size < 2) {
+            // Not enough points for Voronoi, just fill with orange
+            canvas.drawColor(Color.argb(25, 255, 165, 0))
+            return
+        }
+
+        // Check if first and last anchor would have the same color
+        val firstColorIdx = anchorIndices.first() % VORONOI_COLORS.size
+        val lastColorIdx = anchorIndices.last() % VORONOI_COLORS.size
+        val lastAnchorIdx = anchorIndices.size - 1
+        val useWhiteForLast = (firstColorIdx == lastColorIdx) && anchorPoints.size > 1
+
+        // Transform anchor points to screen coordinates
+        val screenAnchors = anchorPoints.map { pt ->
+            val transformed = floatArrayOf(pt.x, pt.y)
+            globalTransform.mapPoints(transformed)
+            PointF(transformed[0], transformed[1])
+        }
+
+        // Draw Voronoi regions by checking each pixel's closest anchor
+        // For performance, we sample at a lower resolution and draw rectangles
+        val sampleStep = 8 // Sample every 8 pixels for performance
+        val paint = Paint().apply { style = Paint.Style.FILL }
+
+        for (y in 0 until height step sampleStep) {
+            for (x in 0 until width step sampleStep) {
+                val testPoint = PointF(x.toFloat(), y.toFloat())
+
+                // Find closest anchor point
+                var closestIdx = 0
+                var closestDist = Float.MAX_VALUE
+
+                for (i in screenAnchors.indices) {
+                    val d = distance(testPoint, screenAnchors[i])
+                    if (d < closestDist) {
+                        closestDist = d
+                        closestIdx = i
+                    }
+                }
+
+                // Color based on anchor index (alternating), with white for last if collision
+                paint.color = if (useWhiteForLast && closestIdx == lastAnchorIdx) {
+                    Color.argb(25, 255, 255, 255) // 10% opacity white
+                } else {
+                    var c = VORONOI_COLORS[(anchorIndices[closestIdx]*3) % VORONOI_COLORS.size] * 50
+                    Color.argb(25, c.red, c.green, c.blue) // Assign opacity
+                }
+
+                canvas.drawRect(
+                    x.toFloat(),
+                    y.toFloat(),
+                    (x + sampleStep).toFloat(),
+                    (y + sampleStep).toFloat(),
+                    paint
+                )
+            }
+        }
     }
 
     override fun onThreeFingerDrag(
