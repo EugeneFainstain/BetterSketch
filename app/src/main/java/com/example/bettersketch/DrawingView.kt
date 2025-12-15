@@ -966,21 +966,32 @@ class DrawingView @JvmOverloads constructor(
                             color = Color.GREEN
                         }
 
-                        // Check if this stroke has any anchor points being edited
-                        anchorPointsToEdit.forEach { anchor ->
-                            if (anchor.stroke == stroke && anchor.pointIndex < stroke.pointsForDrawing.size) {
-                                // Draw green circle on the SMOOTHED position of this anchor point
-                                val pointToHighlight =
-                                    stroke.pointsForDrawing[anchor.pointIndex].point
-                                val transformedPoint =
-                                    floatArrayOf(pointToHighlight.x, pointToHighlight.y)
-                                globalTransform.mapPoints(transformedPoint)
-                                canvas.drawCircle(
-                                    transformedPoint[0],
-                                    transformedPoint[1],
-                                    radius,
-                                    endpointPaint
-                                )
+                        if (isAnchorPointDragging()) {
+                            if (stroke.renderAsBezier && stroke.hasBezierData()) {
+                                // Bezier mode: check if any bezier anchors are being edited
+                                anchorPointsToEdit.forEach { anchor ->
+                                    if (anchor.stroke == stroke && anchor.isBezierAnchor) {
+                                        // Draw green circle on the bezier anchor point
+                                        val bezierAnchorIndex = anchor.pointIndex
+                                        if (bezierAnchorIndex >= 0 && bezierAnchorIndex < stroke.bezierAnchorPoints.size) {
+                                            val anchorPoint = stroke.bezierAnchorPoints[bezierAnchorIndex]
+                                            val transformedPoint = floatArrayOf(anchorPoint.x, anchorPoint.y)
+                                            globalTransform.mapPoints(transformedPoint)
+                                            canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Polyline mode: check if any polyline anchors are being edited
+                                anchorPointsToEdit.forEach { anchor ->
+                                    if (anchor.stroke == stroke && !anchor.isBezierAnchor && anchor.pointIndex < stroke.pointsForDrawing.size) {
+                                        // Draw green circle on the SMOOTHED position of this anchor point
+                                        val pointToHighlight = stroke.pointsForDrawing[anchor.pointIndex].point
+                                        val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
+                                        globalTransform.mapPoints(transformedPoint)
+                                        canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
+                                    }
+                                }
                             }
                         }
                     }
