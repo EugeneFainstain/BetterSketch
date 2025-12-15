@@ -853,13 +853,13 @@ class DrawingView @JvmOverloads constructor(
                                 }
                             }
 
-                        // Draw red squares for bezier anchor points
+                        // Draw blue squares for bezier anchor points
                         if (stroke.bezierAnchorIndices.isNotEmpty()) {
                             val bezierAnchorPoints =
                                 stroke.getAssociatedBezierAnchorPointsOnSmoothedCurve()
                             val bezierPaint = Paint().apply {
                                 style = Paint.Style.FILL
-                                color = Color.RED
+                                color = Color.BLUE
                             }
                             val size = haloPaintToUse.strokeWidth / 2f
 
@@ -957,27 +957,32 @@ class DrawingView @JvmOverloads constructor(
                         }
                     }
 
-                    // Draw green circles for all anchor points being edited
+                    // Draw green squares/circles for all anchor points being edited
                     // Check independently of drawEndpoints and gesture flags
                     if (!twoFingerGestureOccured && !threeFingerGestureOccured) { // Do not draw highlighted endpoint during a 2- or 3- finger gesture
                         val radius = haloPaintToUse.strokeWidth / 2f
-                        val endpointPaint = Paint().apply {
+                        val anchorPointPaint = Paint().apply {
                             style = Paint.Style.FILL
                             color = Color.GREEN
                         }
-
                         if (isAnchorPointDragging()) {
                             if (stroke.renderAsBezier && stroke.hasBezierData()) {
                                 // Bezier mode: check if any bezier anchors are being edited
                                 anchorPointsToEdit.forEach { anchor ->
                                     if (anchor.stroke == stroke && anchor.isBezierAnchor) {
-                                        // Draw green circle on the bezier anchor point
+                                        // Draw green square on the bezier anchor point
                                         val bezierAnchorIndex = anchor.pointIndex
                                         if (bezierAnchorIndex >= 0 && bezierAnchorIndex < stroke.bezierAnchorPoints.size) {
                                             val anchorPoint = stroke.bezierAnchorPoints[bezierAnchorIndex]
                                             val transformedPoint = floatArrayOf(anchorPoint.x, anchorPoint.y)
                                             globalTransform.mapPoints(transformedPoint)
-                                            canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
+
+                                            val size = radius
+                                            val left = transformedPoint[0] - size
+                                            val top = transformedPoint[1] - size
+                                            val right = transformedPoint[0] + size
+                                            val bottom = transformedPoint[1] + size
+                                            canvas.drawRect(left, top, right, bottom, anchorPointPaint)
                                         }
                                     }
                                 }
@@ -989,7 +994,7 @@ class DrawingView @JvmOverloads constructor(
                                         val pointToHighlight = stroke.pointsForDrawing[anchor.pointIndex].point
                                         val transformedPoint = floatArrayOf(pointToHighlight.x, pointToHighlight.y)
                                         globalTransform.mapPoints(transformedPoint)
-                                        canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, endpointPaint)
+                                        canvas.drawCircle(transformedPoint[0], transformedPoint[1], radius, anchorPointPaint)
                                     }
                                 }
                             }
