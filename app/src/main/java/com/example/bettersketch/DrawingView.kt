@@ -876,10 +876,11 @@ class DrawingView @JvmOverloads constructor(
                             }
                         }
 
-                        // Draw bezier handles (control points and connecting lines)
+                        // Draw anchor controls - only for the anchors being dragged (edited)
                         if (stroke.bezierAnchorPoints.isNotEmpty() &&
                             stroke.bezierControlPoints1.isNotEmpty() &&
-                            stroke.bezierControlPoints2.isNotEmpty()
+                            stroke.bezierControlPoints2.isNotEmpty() &&
+                            anchorPointsToEdit.isNotEmpty() // == isAnchorPointDragging()
                         ) {
 
                             // Paint for handle lines
@@ -899,7 +900,7 @@ class DrawingView @JvmOverloads constructor(
                             val controlSize =
                                 haloPaintToUse.strokeWidth / 3f // Smaller than anchors
 
-                            for (anchorIndex in 0 until stroke.bezierAnchorPoints.size) {
+                            for (anchorIndex in anchorPointsToEdit.map { it.pointIndex }) {
                                 val anchor = stroke.bezierAnchorPoints[anchorIndex]
 
                                 // Transform anchor to screen space
