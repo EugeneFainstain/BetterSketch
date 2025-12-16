@@ -6,6 +6,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.PI
 
 object BezierUtils {
 
@@ -309,32 +310,32 @@ object BezierUtils {
         stroke.bezierControlPoints2.removeAt(anchorIndex)
     }
 
-    // State for tracking initial drag configuration
+    // State for tracking anchor drag - now includes accumulated rotation
     private var dragInitialState: AnchorDragState? = null
 
     /**
-     * Data class to hold the initial state when starting an anchor drag.
-     * Records vectors from anchor to neighbors and from anchor to control points.
+     * Data class to hold the state during an anchor drag.
+     * Uses accumulated rotation to avoid atan2 discontinuities.
      */
     data class AnchorDragState(
         val anchorIndex: Int,
-        // Vector from anchor to previous neighbor (null for first anchor)
-        val toPrevNeighborAngle: Float?,
-        val toPrevNeighborLength: Float?,
-        // Vector from anchor to next neighbor (null for last anchor)
-        val toNextNeighborAngle: Float?,
-        val toNextNeighborLength: Float?,
-        // Control point 1 (outgoing) - relative to anchor
+        // Initial lengths to neighbors (for scaling)
+        val initialToPrevLength: Float?,
+        val initialToNextLength: Float?,
+        // Initial control point polar coordinates (relative to anchor)
         val control1Angle: Float,
         val control1Length: Float,
-        // Control point 2 (incoming) - relative to anchor
         val control2Angle: Float,
-        val control2Length: Float
+        val control2Length: Float,
+        // Previous frame's angles to neighbors (for delta computation)
+        var prevToPrevAngle: Float?,
+        var prevToNextAngle: Float?,
+        // Accumulated rotation (continuously updated, no clamping)
+        var accumulatedRotation: Float
     )
 
     /**
      * Begin dragging an anchor - records initial state for proportional control point adjustment.
-     * Call this when the anchor drag starts.
      */
     fun beginAnchorDrag(stroke: Stroke, anchorIndex: Int) {
         if (anchorIndex < 0 || anchorIndex >= stroke.bezierAnchorPoints.size) {
@@ -345,9 +346,9 @@ object BezierUtils {
         val anchor = stroke.bezierAnchorPoints[anchorIndex]
         val numAnchors = stroke.bezierAnchorPoints.size
 
-        // Calculate vector to previous neighbor
-        var toPrevAngle: Float? = null
+        // Calculate initial length and angle to previous neighbor
         var toPrevLength: Float? = null
+        var toPrevAngle: Float? = null
         if (anchorIndex > 0) {
             val prevNeighbor = stroke.bezierAnchorPoints[anchorIndex - 1]
             val dx = prevNeighbor.x - anchor.x
@@ -356,9 +357,9 @@ object BezierUtils {
             toPrevLength = sqrt(dx * dx + dy * dy)
         }
 
-        // Calculate vector to next neighbor
-        var toNextAngle: Float? = null
+        // Calculate initial length and angle to next neighbor
         var toNextLength: Float? = null
+        var toNextAngle: Float? = null
         if (anchorIndex < numAnchors - 1) {
             val nextNeighbor = stroke.bezierAnchorPoints[anchorIndex + 1]
             val dx = nextNeighbor.x - anchor.x
@@ -383,51 +384,41 @@ object BezierUtils {
 
         dragInitialState = AnchorDragState(
             anchorIndex = anchorIndex,
-            toPrevNeighborAngle = toPrevAngle,
-            toPrevNeighborLength = toPrevLength,
-            toNextNeighborAngle = toNextAngle,
-            toNextNeighborLength = toNextLength,
+            initialToPrevLength = toPrevLength,
+            initialToNextLength = toNextLength,
             control1Angle = c1Angle,
             control1Length = c1Length,
             control2Angle = c2Angle,
-            control2Length = c2Length
+            control2Length = c2Length,
+            prevToPrevAngle = toPrevAngle,
+            prevToNextAngle = toNextAngle,
+            accumulatedRotation = 0f
         )
     }
 
     /**
-     * End the anchor drag - clears the initial state.
+     * End the anchor drag - clears the state.
      */
     fun endAnchorDrag() {
         dragInitialState = null
     }
 
     /**
-     * Move a bezier anchor point and adjust its control points based on neighboring anchor relationships.
-     * 
-     * Control points are adjusted as follows:
-     * - Control point 1 (outgoing, towards next anchor): scaled by the ratio of new/old distance to next neighbor,
-     *   rotated by the angle change of the vector to next neighbor
-     * - Control point 2 (incoming, from previous anchor): scaled by the ratio of new/old distance to prev neighbor,
-     *   rotated by the angle change of the vector to prev neighbor
-     * - For edge anchors: the outer control point uses the same scale/rotate factor as the inner one
-     * 
-     * @param stroke The stroke being edited
-     * @param anchorIndex Index into bezierAnchorPoints
-     * @param dx Delta X movement
-     * @param dy Delta Y movement
+     * Move a bezier anchor point and adjust its control points.
+     * Uses frame-by-frame delta rotation accumulation to avoid discontinuities.
      */
     fun moveBezierAnchor(stroke: Stroke, anchorIndex: Int, dx: Float, dy: Float) {
         if (anchorIndex < 0 || anchorIndex >= stroke.bezierAnchorPoints.size) return
 
-        val initialState = dragInitialState
+        val state = dragInitialState
         val numAnchors = stroke.bezierAnchorPoints.size
 
         // Move the anchor point itself
         stroke.bezierAnchorPoints[anchorIndex].offset(dx, dy)
         val newAnchor = stroke.bezierAnchorPoints[anchorIndex]
 
-        // If no initial state recorded, just move control points with anchor (fallback behavior)
-        if (initialState == null || initialState.anchorIndex != anchorIndex) {
+        // If no state recorded, just move control points with anchor (fallback)
+        if (state == null || state.anchorIndex != anchorIndex) {
             if (anchorIndex < stroke.bezierControlPoints1.size) {
                 stroke.bezierControlPoints1[anchorIndex].offset(dx, dy)
             }
@@ -437,7 +428,7 @@ object BezierUtils {
             return
         }
 
-        // Calculate current vectors to neighbors
+        // Calculate current angles and lengths to neighbors
         var currentToPrevAngle: Float? = null
         var currentToPrevLength: Float? = null
         if (anchorIndex > 0) {
@@ -458,66 +449,82 @@ object BezierUtils {
             currentToNextLength = sqrt(dxN * dxN + dyN * dyN)
         }
 
-        // Calculate scale and rotation factors for each direction
-        // Scale = new_length / old_length
-        // Rotation = new_angle - old_angle
+        // Compute frame-by-frame delta rotations and accumulate
+        var deltaPrev = 0f
+        var deltaNext = 0f
+        var hasPrev = false
+        var hasNext = false
+
+        if (currentToPrevAngle != null && state.prevToPrevAngle != null) {
+            deltaPrev = smallestAngleDelta(state.prevToPrevAngle!!, currentToPrevAngle)
+            hasPrev = true
+        }
+        if (currentToNextAngle != null && state.prevToNextAngle != null) {
+            deltaNext = smallestAngleDelta(state.prevToNextAngle!!, currentToNextAngle)
+            hasNext = true
+        }
+
+        // Average the deltas for this frame
+        val frameDelta = when {
+            hasPrev && hasNext -> (deltaPrev + deltaNext) / 2f
+            hasPrev -> deltaPrev
+            hasNext -> deltaNext
+            else -> 0f
+        }
+
+        // Accumulate rotation
+        state.accumulatedRotation += frameDelta
+
+        // Update previous angles for next frame
+        state.prevToPrevAngle = currentToPrevAngle
+        state.prevToNextAngle = currentToNextAngle
+
+        // Calculate scale factors
+        val isFirstAnchor = (anchorIndex == 0)
+        val isLastAnchor = (anchorIndex == numAnchors - 1)
 
         var prevScale = 1f
-        var prevRotation = 0f
-        if (initialState.toPrevNeighborLength != null && initialState.toPrevNeighborLength > 0.001f &&
-            currentToPrevLength != null && initialState.toPrevNeighborAngle != null && currentToPrevAngle != null) {
-            prevScale = currentToPrevLength / initialState.toPrevNeighborLength
-            prevRotation = currentToPrevAngle - initialState.toPrevNeighborAngle
+        if (state.initialToPrevLength != null && state.initialToPrevLength > 0.001f && currentToPrevLength != null) {
+            prevScale = currentToPrevLength / state.initialToPrevLength
         }
 
         var nextScale = 1f
-        var nextRotation = 0f
-        if (initialState.toNextNeighborLength != null && initialState.toNextNeighborLength > 0.001f &&
-            currentToNextLength != null && initialState.toNextNeighborAngle != null && currentToNextAngle != null) {
-            nextScale = currentToNextLength / initialState.toNextNeighborLength
-            nextRotation = currentToNextAngle - initialState.toNextNeighborAngle
+        if (state.initialToNextLength != null && state.initialToNextLength > 0.001f && currentToNextLength != null) {
+            nextScale = currentToNextLength / state.initialToNextLength
         }
 
-        // For edge anchors, use the inner control point's factor
-        val c1Scale = if (anchorIndex == 0) nextScale else nextScale
-        val c1Rotation = if (anchorIndex == 0) nextRotation else nextRotation
+        val c1Scale = if (isLastAnchor) prevScale else nextScale
+        val c2Scale = if (isFirstAnchor) nextScale else prevScale
 
-        val c2Scale = if (anchorIndex == numAnchors - 1) prevScale else prevScale
-        val c2Rotation = if (anchorIndex == numAnchors - 1) prevRotation else prevRotation
-
-        // Apply transformations to control points
-
-        // Control point 1 (outgoing)
-        val control1 = stroke.bezierControlPoints1.getOrNull(anchorIndex)
-        if (control1 != null) {
-            val originalAngle = initialState.control1Angle
-            val originalLength = initialState.control1Length
-
-            val newAngle = originalAngle + c1Rotation
-            val newLength = originalLength * c1Scale
-
-            val newDx = cos(newAngle) * newLength
-            val newDy = sin(newAngle) * newLength
-
-            control1.set(newAnchor.x + newDx, newAnchor.y + newDy)
+        // Apply transformation to control points using accumulated rotation
+        if (anchorIndex < stroke.bezierControlPoints1.size) {
+            val newC1Angle = state.control1Angle + state.accumulatedRotation
+            val newC1Length = state.control1Length * c1Scale
+            stroke.bezierControlPoints1[anchorIndex].set(
+                newAnchor.x + cos(newC1Angle) * newC1Length,
+                newAnchor.y + sin(newC1Angle) * newC1Length
+            )
         }
 
-        // Control point 2 (incoming)
-        val control2 = stroke.bezierControlPoints2.getOrNull(anchorIndex)
-        if (control2 != null) {
-            val originalAngle = initialState.control2Angle
-            val originalLength = initialState.control2Length
-
-            val newAngle = originalAngle + c2Rotation
-            val newLength = originalLength * c2Scale
-
-            val newDx = cos(newAngle) * newLength
-            val newDy = sin(newAngle) * newLength
-
-            control2.set(newAnchor.x + newDx, newAnchor.y + newDy)
+        if (anchorIndex < stroke.bezierControlPoints2.size) {
+            val newC2Angle = state.control2Angle + state.accumulatedRotation
+            val newC2Length = state.control2Length * c2Scale
+            stroke.bezierControlPoints2[anchorIndex].set(
+                newAnchor.x + cos(newC2Angle) * newC2Length,
+                newAnchor.y + sin(newC2Angle) * newC2Length
+            )
         }
+    }
 
-        stroke.isModified = true
+    /**
+     * Compute the smallest signed angle delta from angle1 to angle2.
+     * Result is in range (-π, π], representing the shortest rotation.
+     */
+    private fun smallestAngleDelta(from: Float, to: Float): Float {
+        var delta = to - from
+        while (delta > PI) delta -= (2 * PI).toFloat()
+        while (delta <= -PI) delta += (2 * PI).toFloat()
+        return delta
     }
 
     /**
