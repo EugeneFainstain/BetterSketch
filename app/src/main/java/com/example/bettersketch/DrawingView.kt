@@ -552,6 +552,9 @@ class DrawingView @JvmOverloads constructor(
                 PathPoint(PointF(it.point.x, it.point.y), it.distance)
             }.toMutableList()
 
+            // Begin anchor drag tracking for proportional control point adjustment
+            BezierUtils.beginAnchorDrag(primaryStroke, primaryIndex)
+
             // For bezier anchors, we don't use weightsForPolylineEditing - we move the anchor directly
             // Create a weight list that's all zeros except at the anchor location
             // (We'll handle bezier anchor movement differently in moveEditingPoint)
@@ -877,7 +880,8 @@ class DrawingView @JvmOverloads constructor(
                         }
 
                         // Draw anchor controls - only for the anchors being dragged (edited)
-                        if (stroke.bezierAnchorPoints.isNotEmpty() &&
+                        if (stroke.renderAsBezier &&
+                            stroke.bezierAnchorPoints.isNotEmpty() &&
                             stroke.bezierControlPoints1.isNotEmpty() &&
                             stroke.bezierControlPoints2.isNotEmpty() &&
                             anchorPointsToEdit.isNotEmpty() // == isAnchorPointDragging()
@@ -1170,6 +1174,9 @@ class DrawingView @JvmOverloads constructor(
         // Clear second finger editing state
         secondFingerControlEdit = null
         isSecondFingerEditing = false
+
+        // End anchor drag tracking
+        BezierUtils.endAnchorDrag()
 
         run {
             // Check if we're adding an anchor point
