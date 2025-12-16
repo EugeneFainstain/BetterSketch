@@ -331,7 +331,10 @@ object BezierUtils {
         var prevToPrevAngle: Float?,
         var prevToNextAngle: Float?,
         // Accumulated rotation (continuously updated, no clamping)
-        var accumulatedRotation: Float
+        var accumulatedRotation: Float,
+        // Initial lengths of neighbor's inner control points (for scaling neighbors)
+        val initialNeighborControl1Length: Float?,  // prev neighbor's outgoing control
+        val initialNeighborControl2Length: Float?   // next neighbor's incoming control
     )
 
     /**
@@ -382,6 +385,31 @@ object BezierUtils {
         val c2Angle = atan2(c2dy, c2dx)
         val c2Length = sqrt(c2dx * c2dx + c2dy * c2dy)
 
+        // Calculate initial lengths of neighbor's inner control points
+        var neighborControl1Length: Float? = null
+        if (anchorIndex > 0) {
+            val prevNeighborIdx = anchorIndex - 1
+            val prevNeighbor = stroke.bezierAnchorPoints[prevNeighborIdx]
+            val prevControl1 = stroke.bezierControlPoints1.getOrNull(prevNeighborIdx)
+            if (prevControl1 != null) {
+                val dx = prevControl1.x - prevNeighbor.x
+                val dy = prevControl1.y - prevNeighbor.y
+                neighborControl1Length = sqrt(dx * dx + dy * dy)
+            }
+        }
+
+        var neighborControl2Length: Float? = null
+        if (anchorIndex < numAnchors - 1) {
+            val nextNeighborIdx = anchorIndex + 1
+            val nextNeighbor = stroke.bezierAnchorPoints[nextNeighborIdx]
+            val nextControl2 = stroke.bezierControlPoints2.getOrNull(nextNeighborIdx)
+            if (nextControl2 != null) {
+                val dx = nextControl2.x - nextNeighbor.x
+                val dy = nextControl2.y - nextNeighbor.y
+                neighborControl2Length = sqrt(dx * dx + dy * dy)
+            }
+        }
+
         dragInitialState = AnchorDragState(
             anchorIndex = anchorIndex,
             initialToPrevLength = toPrevLength,
@@ -392,7 +420,9 @@ object BezierUtils {
             control2Length = c2Length,
             prevToPrevAngle = toPrevAngle,
             prevToNextAngle = toNextAngle,
-            accumulatedRotation = 0f
+            accumulatedRotation = 0f,
+            initialNeighborControl1Length = neighborControl1Length,
+            initialNeighborControl2Length = neighborControl2Length
         )
     }
 
@@ -406,6 +436,7 @@ object BezierUtils {
     /**
      * Move a bezier anchor point and adjust its control points.
      * Uses frame-by-frame delta rotation accumulation to avoid discontinuities.
+     * Also scales the inner control points of neighboring anchors by the same factor.
      */
     fun moveBezierAnchor(stroke: Stroke, anchorIndex: Int, dx: Float, dy: Float) {
         if (anchorIndex < 0 || anchorIndex >= stroke.bezierAnchorPoints.size) return
@@ -493,10 +524,11 @@ object BezierUtils {
             nextScale = currentToNextLength / state.initialToNextLength
         }
 
+        // Scale for dragged anchor's control points (edge anchors use inner scale for outer)
         val c1Scale = if (isLastAnchor) prevScale else nextScale
         val c2Scale = if (isFirstAnchor) nextScale else prevScale
 
-        // Apply transformation to control points using accumulated rotation
+        // Apply transformation to control point 1 (outgoing, towards next)
         if (anchorIndex < stroke.bezierControlPoints1.size) {
             val newC1Angle = state.control1Angle + state.accumulatedRotation
             val newC1Length = state.control1Length * c1Scale
@@ -506,6 +538,7 @@ object BezierUtils {
             )
         }
 
+        // Apply transformation to control point 2 (incoming, from prev)
         if (anchorIndex < stroke.bezierControlPoints2.size) {
             val newC2Angle = state.control2Angle + state.accumulatedRotation
             val newC2Length = state.control2Length * c2Scale
@@ -513,6 +546,60 @@ object BezierUtils {
                 newAnchor.x + cos(newC2Angle) * newC2Length,
                 newAnchor.y + sin(newC2Angle) * newC2Length
             )
+        }
+
+        // Scale the inner control points of neighboring anchors by the same factor
+        // Previous neighbor's outgoing control (controlPoints1[anchorIndex-1]) scales by c2Scale (prevScale)
+        if (anchorIndex > 0) {
+            val prevNeighborIdx = anchorIndex - 1
+            if (prevNeighborIdx < stroke.bezierControlPoints1.size) {
+                val prevNeighbor = stroke.bezierAnchorPoints[prevNeighborIdx]
+                val prevControl1 = stroke.bezierControlPoints1[prevNeighborIdx]
+
+                // Get current length and angle of neighbor's control point
+                val ctrlDx = prevControl1.x - prevNeighbor.x
+                val ctrlDy = prevControl1.y - prevNeighbor.y
+                val currentLength = sqrt(ctrlDx * ctrlDx + ctrlDy * ctrlDy)
+
+                // Scale by the same factor as c2Scale (which is prevScale for non-edge anchors)
+                // But we need the initial length ratio, so we track the cumulative scale
+                if (state.initialNeighborControl1Length != null && state.initialNeighborControl1Length > 0.001f) {
+                    val newLength = state.initialNeighborControl1Length * c2Scale
+                    if (currentLength > 0.001f) {
+                        val scaleFactor = newLength / currentLength
+                        prevControl1.set(
+                            prevNeighbor.x + ctrlDx * scaleFactor,
+                            prevNeighbor.y + ctrlDy * scaleFactor
+                        )
+                    }
+                }
+            }
+        }
+
+        // Next neighbor's incoming control (controlPoints2[anchorIndex+1]) scales by c1Scale (nextScale)
+        if (anchorIndex < numAnchors - 1) {
+            val nextNeighborIdx = anchorIndex + 1
+            if (nextNeighborIdx < stroke.bezierControlPoints2.size) {
+                val nextNeighbor = stroke.bezierAnchorPoints[nextNeighborIdx]
+                val nextControl2 = stroke.bezierControlPoints2[nextNeighborIdx]
+
+                // Get current length and angle of neighbor's control point
+                val ctrlDx = nextControl2.x - nextNeighbor.x
+                val ctrlDy = nextControl2.y - nextNeighbor.y
+                val currentLength = sqrt(ctrlDx * ctrlDx + ctrlDy * ctrlDy)
+
+                // Scale by the same factor as c1Scale (which is nextScale for non-edge anchors)
+                if (state.initialNeighborControl2Length != null && state.initialNeighborControl2Length > 0.001f) {
+                    val newLength = state.initialNeighborControl2Length * c1Scale
+                    if (currentLength > 0.001f) {
+                        val scaleFactor = newLength / currentLength
+                        nextControl2.set(
+                            nextNeighbor.x + ctrlDx * scaleFactor,
+                            nextNeighbor.y + ctrlDy * scaleFactor
+                        )
+                    }
+                }
+            }
         }
     }
 
