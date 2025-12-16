@@ -1163,6 +1163,14 @@ class DrawingView @JvmOverloads constructor(
     }
 
     override fun onSomeFingerUp(event: MotionEvent): Boolean {
+
+        // Finger went up - but not the last finger...
+        if( isAnchorPointDragging() )
+            anchorPointsToEdit.forEach {
+                if( it.stroke.renderAsBezier && it.isBezierAnchor )
+                    BezierUtils.beginAnchorDrag( it.stroke,it.pointIndex ) // Update state
+            }
+
         return true
     }
 
